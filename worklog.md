@@ -305,3 +305,27 @@ Stage Summary:
   (полезность, без воды), компакция — только при сборке промптов
 - Артефакты: engine.ts, node-inspector.tsx, decision-modal.tsx, docs/{adr,cr,fr}/**,
   scripts/test-tacg-llm-auto.ts, docs/README.md (v0.5)
+
+---
+Task ID: 8
+Agent: Super Z (main agent)
+Task: Консультация в чате: разбор структурных лимитов графа, механики «понимания задачи», предложения по BYOK
+
+Work Log:
+- Восстановлен контекст: изучены engine.ts (sanitizePlan, insertDecision, resolveDecision,
+  emitCertainty, maybeAdapt), llm.ts (singleton z-ai-web-dev-sdk), demo.ts (стартовые certainty),
+  src/lib/tacg/types.ts (certaintyLabel), run-toolbar.tsx (метр)
+- Подтверждено: BYOK/provider-абстракции в коде нет — единственный путь LLM = z-ai-web-dev-sdk
+- Пользователю в чат выдано: (1) разбор каждого структурного лимита с привязкой к строкам кода
+  и последствиями (тихая усечка плана на 12 узлов, потеря зависимостей при капе 5, деградация
+  развилки при <2 вариантов, лимит «2 развилки» — только промпт, кодом не enforced);
+  (2) механика certainty: самооценка LLM 0..1 (планировщик/супервайзер/certaintyAfter), монотонность
+  max() на решениях, пороги шкалы 0.35/0.7 в certaintyLabel; (3) предложение BYOK: LLM-роутер
+  с адаптерами (zai / openai-compatible / anthropic / gemini), per-role конфиг, ключи в
+  data/llm-config.json (не в runs.json!), provenance в RunSnapshot.llm, usage/cost-токены в
+  инспекторе и отчёте, модалка настроек с проверкой ключа, fallback-цепочка
+- Реализация BYOK не выполнялась — пользователь просил предложения («предложи доработки»)
+
+Stage Summary:
+- Ответ в чате; артефактов кода не производилось; BYOK-MVP согласован как кандидат на
+  следующую итерацию (B1+B3+B4+B6: роутер openai-compatible + хранение ключей + provenance + UI)
