@@ -141,3 +141,25 @@ Stage Summary:
 - Артефакты: mini-services/tacg-agent/{types,demo,engine,index}.ts, src/lib/tacg/{types,fold}.ts,
   src/store/tacg-store.ts, src/components/tacg/{graph-canvas,decision-modal,run-toolbar,node-inspector,
   event-log,status-badge,history-panel}.tsx, src/app/page.tsx, scripts/test-tacg-decision.ts
+
+---
+Task ID: 4
+Agent: Super Z (main agent)
+Task: Создать /docs (PRD, ADR, FR, CR — кратко, от старта сессии) и запушить репозиторий в github.com/danku13/TACG
+
+Work Log:
+- Восстановлён контекст сессии из worklog (Task 1: прототип TACG; Task 2: React Flow + модалка ≥50vw + полноширинная вёрстка; Task 3: развилки решений авто/ручной + мгновенная визуализация)
+- Аудит репозитория перед пушем: 151 tracked-файл, .git 7.6M, .log/.next/node_modules не трекаются, .env безопасен (локальный sqlite-путь), db/custom.db 24KB
+- Создан /docs:
+  - PRD.md — проблема, продукт, цели/не-цели, пользователи, 6 ключевых сценариев, функциональные блоки, метрики, риски
+  - ADR.md — 8 решений: ADR-001 SDK-обёртка с repair-JSON, ADR-002 mini-service socket.io :3003, ADR-003 event-sourcing fold, ADR-004 React Flow v12, ADR-005 модалка инспектора ≥50vw, ADR-006 модель развилок (branchOf + discarded), ADR-007 режимы авто/ручной с переключением на ходу, ADR-008 demo/llm двойной режим; сводка стека
+  - FR.md — FR-1..7 (запуск/режимы, живой граф, инспектор, развилки, воспроизведение, история, нефункциональные) со статусами ✅
+  - CR.md — CR-001 (прототип) → CR-002 (вёрстка/RF/модалка) → CR-003 (ветвления решений), мотивация→изменения→результат + сводка объёма
+  - README.md — индекс документации
+- Git: добавлен remote origin (PAT в URL для последующих пушей), fetch, merge origin/main (unrelated histories — заглушка README), коммит docs (c6fd628), push main; докоммичен обновлённый runs.json (f7ad958); рабочее дерево чистое
+- Пуш верифицирован: remote main = f7ad958, ls-remote подтверждает
+
+Stage Summary:
+- Документация сессии сохранена в /docs (PRD/ADR/FR/CR + индекс README)
+- Весь проект TACG Playground отправлен в github.com/danku13/TACG (main, история с сохранением исходного remote-коммита)
+- PAT встроен в remote URL (origin) — последующие пуши работают напрямую
