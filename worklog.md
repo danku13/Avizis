@@ -228,3 +228,43 @@ Stage Summary:
 - Артефакты: mini-services/tacg-agent/{types,demo,engine,index}.ts, src/lib/tacg/{types,fold}.ts,
   src/components/tacg/{decision-modal,run-toolbar,graph-canvas,node-inspector,history-panel}.tsx,
   scripts/test-tacg-clarity.ts, скриншоты scripts/tacg-clarity-*.png
+
+---
+Task ID: 6
+Agent: Super Z (main agent)
+Task: Исправить обрезку «…» в «Причина добавления» / «Вход» / «Выход» инспектора; реструктурировать /docs под агентную разработку (папка на тип документа + индекс + отдельные файлы)
+
+Work Log:
+- Диагностика через agent-browser + разбор runs.json: обрезка оказалась на 3 уровнях —
+  (1) buildInput в engine.ts усекал выходы зависимостей до 260 симв. с «…» (49 узлов
+  в сохранённых прогонах с обрезанным «Входом»); (2) LLM-поля reason/rationale/question
+  жёстко резались 240/320/300 симв.; (3) вёрстка: max-h-52 (Вход) и max-h-[38vh] (Выход)
+  прятали хвост текста во внутренней прокрутке
+- engine.ts: buildInput хранит полные выходы зависимостей; обрезка промптов вынесена
+  в llmExecute (предохранитель 12000) и супервайзер (2000, было 300); лимиты полей
+  reason/description/question/rationale/reasoning 240–400 → 800 (планировщик и
+  супервайзер); сводка узлов для супервайзера 110 → 400
+- node-inspector.tsx: сняты капы высоты с pre Вход/Выход — полное отображение,
+  прокрутка на уровне колонки модалки
+- Движок перезапущен (double-fork, bun --hot, :3003); тесты: test-tacg-decision —
+  все сценарии; test-tacg-clarity — 17/17; E2E: свежий прогон «Напиши пост» →
+  инспектор wfin: Вход 505 симв. и Выход 395 симв. целиком (max-height:none,
+  scrollHeight==clientHeight, endsEllipsis=false), 0 многоточий в новых прогонах;
+  консоль 0/0; bun run lint чист; скриншоты scripts/tacg-inspector-*.png
+- Реструктуризация /docs: плоские PRD/ADR/FR/CR.md (git rm) → docs/{prd,adr,fr,cr}/,
+  в каждой папке index.md (таблица id/тема/статус + правила ведения), каждый документ —
+  отдельный файл: prd/PRD.md (v0.4); adr/ADR-001…010 (+tech-stack.md, у ADR-005 блок
+  «Обновление»); fr/FR-100…800 по блокам (+ новый FR-309 «полные тексты»); cr/CR-001…005
+  (+ новый CR-005 с диагностикой и результатом); корневой docs/README.md — карта
+  документации, порядок чтения, конвенции именования/нумерации/статусов для агентов
+- Корневой README.md переписан из заглушки: описание стенда, ссылки на docs/, стек, запуск
+- Проверка структуры: 30 md-файлов в 4 папках, скрипт проверки относительных ссылок — 0 битых
+
+Stage Summary:
+- «Причина добавления», «Вход», «Выход» выводятся полностью: без обрезки данных (движок),
+  без капов высоты (вёрстка); обрезка осталась только в компактных строках журнала событий
+- /docs реструктурирован для агентной разработки: 4 типовые папки с индексами, 26 файлов
+  документов + 4 индекса, конвенции в docs/README.md; новые артефакты: FR-309, CR-005,
+  ADR-005-обновление, PRD v0.4
+- Артефакты: mini-services/tacg-agent/engine.ts, src/components/tacg/node-inspector.tsx,
+  docs/**, README.md, scripts/tacg-inspector-{before,fulltext}.png
