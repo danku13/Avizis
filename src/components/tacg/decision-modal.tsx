@@ -1,13 +1,15 @@
 // TACG — модалка выбора на развилке: варианты с обоснованием и превью шагов.
+// Поддерживает single (один вариант) и mixed (смешанное решение из нескольких) режимы.
 // Авто-режим — агент решает сам (опции заблокированы), ручной — ожидает выбор пользователя.
 // Открывается автоматически при предложении развилки; закрытие скрывает окно, но не отменяет ожидание.
 'use client'
 
 import { useState } from 'react'
-import { Bot, GitFork, Hand, Loader2, MousePointerClick } from 'lucide-react'
+import { Bot, GitFork, Hand, Layers, Loader2, MousePointerClick } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { foldEvents, findOfferedDecision } from '@/lib/tacg/fold'
+import { DECISION_DOMAIN_LABELS, selectionMode } from '@/lib/tacg/types'
 import { getSocket } from '@/lib/tacg/socket'
 import { useTacgStore } from '@/store/tacg-store'
 import { toast } from 'sonner'
@@ -17,8 +19,10 @@ const OPTION_STYLES: Record<string, { chip: string; stripe: string; ring: string
   a: { chip: 'bg-sky-500/25 text-sky-300', stripe: 'bg-sky-400/80', ring: 'ring-sky-400/70 border-sky-400/60' },
   b: { chip: 'bg-fuchsia-500/25 text-fuchsia-300', stripe: 'bg-fuchsia-400/80', ring: 'ring-fuchsia-400/70 border-fuchsia-400/60' },
   c: { chip: 'bg-orange-500/25 text-orange-300', stripe: 'bg-orange-400/80', ring: 'ring-orange-400/70 border-orange-400/60' },
+  d: { chip: 'bg-teal-500/25 text-teal-300', stripe: 'bg-teal-400/80', ring: 'ring-teal-400/70 border-teal-400/60' },
 }
-const optStyle = (id: string) => OPTION_STYLES[id] ?? { chip: 'bg-zinc-500/25 text-zinc-300', stripe: 'bg-zinc-400/80', ring: 'ring-zinc-400/70 border-zinc-500/60' }
+const optStyle = (id: string) =>
+  OPTION_STYLES[id] ?? { chip: 'bg-zinc-500/25 text-zinc-300', stripe: 'bg-zinc-400/80', ring: 'ring-zinc-400/70 border-zinc-500/60' }
 
 export function DecisionModal() {
   const events = useTacgStore((s) => s.events)
@@ -35,10 +39,24 @@ export function DecisionModal() {
   const offered = isLive ? findOfferedDecision(view.nodes) : undefined
 
   // выбор привязан к id предложения: при новой развилке сбрасывается автоматически
-  const [selection, setSelection] = useState<{ offeredId: string; optionId: string } | null>(null)
-  const selected = selection && offered && selection.offeredId === offered.id ? selection.optionId : null
-  const setSelected = (optionId: string | null) => {
-    setSelection(offered && optionId ? { offeredId: offered.id, optionId } : null)
+  const [selection, setSelection] = useState<{ offeredId: string; optionIds: string[] } | null>(null)
+  const selectedIds =
+    selection && offered && selection.offeredId === offered.id ? selection.optionIds : []
+  const dec = offered?.decision
+  const mixed = selectionMode(dec) === 'mixed'
+
+  const toggleOption = (optionId: string) => {
+    if (!offered) return
+    if (mixed) {
+      const next = selectedIds.includes(optionId)
+        ? selectedIds.filter((id) => id !== optionId)
+        : [...selectedIds, optionId]
+      setSelection(next.length ? { offeredId: offered.id, optionIds: next } : null)
+    } else {
+      // single: клик по выбранному снимает выбор, по другому — переключает
+      const next = selectedIds[0] === optionId ? [] : [optionId]
+      setSelection(next.length ? { offeredId: offered.id, optionIds: next } : null)
+    }
   }
 
   const open = !!offered && decisionDismissed !== offered.id
@@ -50,10 +68,14 @@ export function DecisionModal() {
   }
 
   const accept = () => {
-    if (!offered || !selected || !currentRunId || !manual) return
-    getSocket().emit('decision:resolve', { runId: currentRunId, nodeId: offered.id, optionId: selected })
+    if (!offered || !selectedIds.length || !currentRunId || !manual) return
+    getSocket().emit('decision:resolve', { runId: currentRunId, nodeId: offered.id, optionIds: selectedIds })
     // модалка закроется сама по событию decision:resolved (узел уйдёт из состояния offered)
-    toast.info('Вариант отправлен — ветка активируется')
+    toast.info(
+      selectedIds.length > 1
+        ? `Смешанное решение (${selectedIds.length} варианта) отправлено — ветки активируются`
+        : 'Вариант отправлен — ветка активируется'
+    )
   }
 
   const switchMode = (m: 'auto' | 'manual') => {
@@ -67,7 +89,9 @@ export function DecisionModal() {
   }
 
   if (!offered) return null
-  const dec = offered.decision!
+  const decision = offered.decision!
+  const certaintyNow = view.certainty
+  const certaintyAfter = decision.certaintyAfter
 
   return (
     <Dialog open={open} onOpenChange={close}>
@@ -75,7 +99,7 @@ export function DecisionModal() {
         className="flex h-[86dvh] max-h-[86dvh] w-[calc(100vw-1.5rem)] flex-col gap-0 overflow-hidden border-zinc-800 bg-zinc-950/95 p-0 backdrop-blur-md sm:max-w-none sm:w-[55vw] lg:w-[58vw] xl:w-[64vw]"
       >
         <DialogDescription className="sr-only">
-          Развилка графа вычислений: варианты агента с обоснованием, выбор активирует одну из веток
+          Развилка графа вычислений: варианты агента с обоснованием, выбор активирует одну или несколько веток
         </DialogDescription>
 
         {/* ─── Шапка ─── */}
@@ -87,37 +111,45 @@ export function DecisionModal() {
               </span>
               {offered.title}
             </DialogTitle>
-            <span className="mt-0.5 flex items-center gap-1.5 rounded-md border border-fuchsia-500/40 bg-fuchsia-500/10 px-2 py-0.5 text-xs font-medium text-fuchsia-300">
-              <span className="size-1.5 animate-pulse rounded-full bg-fuchsia-400" />
-              развилка · {manual ? 'ждёт вашего выбора' : 'агент выбирает сам'}
-            </span>
+            <div className="mt-0.5 flex shrink-0 flex-wrap items-center gap-1.5">
+              {decision.domain && (
+                <span className="rounded-md border border-violet-500/40 bg-violet-500/10 px-2 py-0.5 text-xs font-medium text-violet-300">
+                  {DECISION_DOMAIN_LABELS[decision.domain]}
+                </span>
+              )}
+              <span className="flex items-center gap-1.5 rounded-md border border-fuchsia-500/40 bg-fuchsia-500/10 px-2 py-0.5 text-xs font-medium text-fuchsia-300">
+                {mixed ? <Layers className="size-3" /> : <span className="size-1.5 animate-pulse rounded-full bg-fuchsia-400" />}
+                {mixed ? 'смешанный выбор' : 'один вариант'}
+              </span>
+            </div>
           </div>
-          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-zinc-300">{dec.question}</p>
+          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-zinc-300">{decision.question}</p>
         </DialogHeader>
 
         {/* ─── Варианты ─── */}
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
           {manual ? (
             <p className="text-xs text-muted-foreground">
-              Агент предлагает {dec.options.length} варианта. Выбор определяет дальнейшие шаги — нереализованные
-              ветки погаснут на графе сразу после решения.
+              {mixed
+                ? `Агент предлагает ${decision.options.length} варианта — можно выбрать несколько (смешанное решение). Выбранные ветки реализуются вместе, остальные погаснут.`
+                : `Агент предлагает ${decision.options.length} варианта. Выбор определяет дальнейшие шаги — нереализованные ветки погаснут на графе сразу после решения.`}
             </p>
           ) : (
             <div className="flex items-center gap-2 rounded-lg border border-fuchsia-500/30 bg-fuchsia-500/10 p-3 text-xs text-fuchsia-200">
               <Loader2 className="size-4 shrink-0 animate-spin" />
-              Режим «авто»: агент взвешивает варианты и примет решение самостоятельно. Обоснование появится в
-              инспекторе узла и в журнале.
+              Режим «авто»: агент взвешивает варианты{mixed ? ' (может собрать смешанное решение)' : ''} и примет решение
+              самостоятельно. Обоснование появится в инспекторе узла и в журнале.
             </div>
           )}
 
-          {dec.options.map((o) => {
+          {decision.options.map((o) => {
             const st = optStyle(o.id)
-            const isSel = selected === o.id
+            const isSel = selectedIds.includes(o.id)
             return (
               <button
                 key={o.id}
                 type="button"
-                onClick={() => manual && setSelected(o.id)}
+                onClick={() => manual && toggleOption(o.id)}
                 disabled={!manual}
                 aria-pressed={isSel}
                 className={cn(
@@ -142,7 +174,7 @@ export function DecisionModal() {
                   </div>
                   {isSel && (
                     <span className="shrink-0 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-300">
-                      выбран
+                      {mixed ? 'в составе' : 'выбран'}
                     </span>
                   )}
                 </div>
@@ -165,8 +197,9 @@ export function DecisionModal() {
 
           <p className="flex items-center gap-1.5 pt-1 text-[11px] text-zinc-600">
             <MousePointerClick className="size-3" />
-            Esc скрывает окно — ожидание выбора не отменяется. Вернуться можно кликом по развилке на графе или
-            баннером в панели управления.
+            {mixed ? 'Кликайте по нескольким карточкам, чтобы собрать смешанное решение. ' : ''}
+            Esc скрывает окно — ожидание выбора не отменяется. Вернуться можно кликом по развилке на графе или баннером в
+            панели управления.
           </p>
         </div>
 
@@ -199,13 +232,26 @@ export function DecisionModal() {
             </button>
           </div>
 
+          {certaintyNow != null && (
+            <span className="hidden items-center gap-1.5 text-xs text-zinc-500 sm:flex" title="Оценка агентом «понимания задачи»">
+              понимание: {Math.round(certaintyNow * 100)}%
+              {certaintyAfter != null && (
+                <span className="text-emerald-400/80">→ ~{Math.round(Math.max(certaintyNow, certaintyAfter) * 100)}%</span>
+              )}
+            </span>
+          )}
+
           <div className="ml-auto flex items-center gap-2">
             {!manual && <span className="text-xs text-zinc-500">переключите в «Вручную», чтобы выбрать самому</span>}
-            <Button size="sm" onClick={accept} disabled={!manual || !selected}>
+            <Button size="sm" onClick={accept} disabled={!manual || !selectedIds.length}>
               <GitFork className="mr-1.5 size-3.5" />
-              {selected
-                ? `Принять вариант «${dec.options.find((o) => o.id === selected)?.label ?? selected}»`
-                : 'Выберите вариант'}
+              {selectedIds.length > 1
+                ? `Принять смешанное решение (${selectedIds.length})`
+                : selectedIds.length === 1
+                  ? `Принять вариант «${decision.options.find((o) => o.id === selectedIds[0])?.label ?? selectedIds[0]}»`
+                  : mixed
+                    ? 'Выберите один или несколько'
+                    : 'Выберите вариант'}
             </Button>
           </div>
         </footer>

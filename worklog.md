@@ -163,3 +163,68 @@ Stage Summary:
 - Документация сессии сохранена в /docs (PRD/ADR/FR/CR + индекс README)
 - Весь проект TACG Playground отправлен в github.com/danku13/TACG (main, история с сохранением исходного remote-коммита)
 - PAT встроен в remote URL (origin) — последующие пуши работают напрямую
+
+---
+Task ID: 5
+Agent: Super Z (main agent)
+Task: Уточняющий агент: анализ каждого шага на потребность решений, доменные вопросы (продукт/архитектура/тон/формат), метр «понимания задачи», смешанные решения
+
+Work Log:
+- Типы (зеркало бэк/фронт): DecisionDomain (scope/specialization/product/architecture/tone/format/context/strategy),
+  DecisionState + selection 'single'|'mixed', chosen → string[], domain, certaintyAfter;
+  RunSnapshot.certainty; RunEvent: decision:resolved.optionIds[], новое run:certainty
+- Движок (engine.ts):
+  - resolveDecision(optionIds[]): валидация unknown-id, single-обрезка до 1; активны ВСЕ выбранные
+    ветки, прочие гаснут; вывод «Смешанное решение агента/пользователя: «X» + «Y»»
+  - emitCertainty(): публикация самооценки понимания (старт / после каждого решения max(cur, certaintyAfter) / супервайзер)
+  - insertDecision(): эмерджентная развилка — узел-вопрос + ветки + перепривязка pending-узлов
+    с якоря на хвосты веток (итог ждёт только реализованные)
+  - maybeAdapt: демо-сценарий writing — 3 скриптованные вставки (afterAny, одноразовые);
+    LLM-супервайзер — режим ask (question+options+domain+selection+certaintyAfter), лимиты ≤2 и не при
+    открытой развилке; certainty от супервайзера (Δ>0.05)
+  - autoDecide: демо — DEMO_WRITING_AUTO_PICKS по id развилки (decf:a, decb:[a,b], dect:b);
+    LLM — mixed-промпт {optionIds[], reasoning}, нормализация одиночных/массивов
+  - Планировщик LLM: certainty в ответе + domain/selection/certaintyAfter развилки; sanitizePlan
+    (домены из белого списка, clamp 0..1, опции до 4)
+- Демо (demo.ts): сценарий «Напиши пост» (детект /пост|стать|текст|напиши|write…/): w1 → wfin +
+  3 эмерджентных вопроса: формат (single, a-короткий/b-лонгрид/c-серия), блоки контента
+  (MIXED, 4 варианта: кейс/статистика/история/CTA), тон (single, 3 варианта);
+  certainty 0.2→0.45→0.75→0.95; demoOutput для всех веток + итог, собранный из параметров
+- Socket (index.ts): decision:resolve принимает optionIds[] (совместимость со строкой/optionId)
+- Фронтенд:
+  - fold: run:certainty → RunView.certainty; types: chosenIds()/selectionMode()/certaintyLabel()/
+    DECISION_DOMAIN_LABELS; нормализация старых прогонов (chosen-строка → массив)
+  - decision-modal: multi-select toggle (mixed), бейджи домена и «смешанный выбор», чипы
+    «в составе», кнопка «Принять смешанное решение (N)», подвал «понимание: X% → ~Y%», d-стиль
+  - run-toolbar: метр «Понимание задачи» (Compass, цвет по диапазону, чип «ждёт уточнений: N»,
+    tooltip с hint), отчёт MD: домены, mixed-итоги («a + b»), строка certainty
+  - graph-canvas: «смешанное: A + B» в статус-строке карточки, «ждёт выбора (можно несколько)»,
+    рёбра по массиву chosen
+  - node-inspector: «Домен уточнения: …», бейджи «в составе», «смешанное решение «a + b»»
+  - history-panel: placeholder с подсказкой про текстовый сценарий; page.tsx: v0.4
+- Тесты: test-tacg-decision переведён на массивы — 4/4; НОВЫЙ test-tacg-clarity — 17/17
+  (эмерджентные вопросы, mixed-выбор пользователя и агента, single-guard, certainty-цепочка,
+  итог из параметров); test-tacg-llm — ПРОЙДЕН (планировщик сам строит развилку, супервайзер добавляет узлы)
+- Инфраструктура: движок перезапущен (double-fork), отладочный прогон (debug-auto-writing) —
+  полный цикл 25.4с; найден и исправлен баг теста (certainty 0.95 ждётся ПОСЛЕ summary, а
+  событие приходит раньше — сверка переведена на снапшот)
+- E2E agent-browser (:81): текстовый демо-прогон вручную: модалка формата (single) → лонгрид →
+  модалка блоков (mixed, 4 варианта, «Выберите один или несколько») → выбор A+B → «Принять
+  смешанное решение (2)» → модалка тона (домен «Tone of voice») → финал; метр понимания
+  20%→45%→75%→95% «Узкий вектор» (meter aria-valuenow=95); карточка «смешанное: Кейс клиента +
+  Статистика и цифры»; инспектор (Домен «Объём работ», «в составе» ×2, «смешанное решение «a + b»»);
+  журнал переоценок; мобильная 390×844 без горизонтального скролла; чистая загрузка: консоль 0
+  ошибок / 0 предупреждений; bun run lint чист
+
+Stage Summary:
+- Агент анализирует каждый шаг и вставляет эмерджентные вопросы-развилки (динамические узлы с
+  ветками и причиной) — и в демо-сценарии «Напиши пост», и в LLM-режиме (супервайзер ask)
+- Вопросы доменные: формат/tone/скоуп для текстов; продуктовые/архитектурные — в LLM-промптах
+- Метр «понимания задачи»: certainty 0..1, качественная шкала (Размытый вектор/Вектор сужается/
+  Узкий вектор), чип открытых уточнений, история переоценок в аудите
+- Смешанные решения: mixed-развилки допускают multi-select (пользователь и агент); выбранные
+  ветки реализуются вместе, альтернативы гаснут мгновенно; итог собирается из всех параметров
+- Документация обновлена: CR-004, FR-8, ADR-009/010, PRD (сценарий 7)
+- Артефакты: mini-services/tacg-agent/{types,demo,engine,index}.ts, src/lib/tacg/{types,fold}.ts,
+  src/components/tacg/{decision-modal,run-toolbar,graph-canvas,node-inspector,history-panel}.tsx,
+  scripts/test-tacg-clarity.ts, скриншоты scripts/tacg-clarity-*.png

@@ -8,6 +8,17 @@ export type RunMode = 'demo' | 'llm'
 /** Режим принятия решений на развилках */
 export type DecisionMode = 'auto' | 'manual'
 
+/** Домен уточнения: какая сторона задачи закрывается вопросом на развилке */
+export type DecisionDomain =
+  | 'scope' // расширение/сужение объёма работ
+  | 'specialization' // специализация подхода
+  | 'product' // продуктовые вопросы (цели, ценность, аудитория)
+  | 'architecture' // архитектурные вопросы (разработка)
+  | 'tone' // tone of voice (тексты)
+  | 'format' // формат результата (статья/заметка/пост)
+  | 'context' // уточнение контекста задачи
+  | 'strategy' // стратегия выполнения
+
 /** Вариант на развилке: обоснование + превью дальнейших шагов */
 export interface DecisionOption {
   id: string
@@ -21,14 +32,20 @@ export interface DecisionOption {
 /** Состояние развилки в узле-решении */
 export interface DecisionState {
   question: string
+  /** Домен уточнения (для бейджа и отчёта) */
+  domain?: DecisionDomain
+  /** single — выбрать один вариант; mixed — смешанное решение из нескольких */
+  selection: 'single' | 'mixed'
   options: DecisionOption[]
   status: 'pending' | 'offered' | 'resolved'
-  /** Выбранный вариант (id из options) */
-  chosen?: string
+  /** Выбранные варианты (при mixed — несколько) */
+  chosen?: string[]
   /** Кто принял решение */
   chosenBy?: 'agent' | 'user'
   /** Обоснование выбора (в авто-режиме — рассуждение агента) */
   reasoning?: string
+  /** Оценка «понимания задачи» после закрытия вопроса (0..1) */
+  certaintyAfter?: number
 }
 
 export interface GraphNode {
@@ -97,11 +114,14 @@ export type RunEvent =
       type: 'decision:resolved'
       ts: number
       nodeId: string
-      optionId: string
+      /** Выбранные варианты (при mixed — несколько) */
+      optionIds: string[]
       by: 'agent' | 'user'
       reasoning?: string
     }
   | { type: 'decision:mode'; ts: number; mode: DecisionMode }
+  /** Агент переоценил «понимание задачи» (насколько узкий вектор решения) */
+  | { type: 'run:certainty'; ts: number; certainty: number; note?: string }
 
 export interface RunSnapshot {
   id: string
@@ -113,6 +133,8 @@ export interface RunSnapshot {
   createdAt: number
   finishedAt?: number
   progress: number
+  /** Оценка агентом «понимания задачи» (0..1): насколько узкий вектор решения */
+  certainty?: number
   nodes: GraphNode[]
   version: number
   versions: GraphVersion[]

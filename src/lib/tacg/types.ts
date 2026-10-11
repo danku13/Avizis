@@ -7,6 +7,17 @@ export type RunMode = 'demo' | 'llm'
 /** Режим принятия решений на развилках */
 export type DecisionMode = 'auto' | 'manual'
 
+/** Домен уточнения: какая сторона задачи закрывается вопросом на развилке */
+export type DecisionDomain =
+  | 'scope'
+  | 'specialization'
+  | 'product'
+  | 'architecture'
+  | 'tone'
+  | 'format'
+  | 'context'
+  | 'strategy'
+
 /** Вариант на развилке: обоснование + превью дальнейших шагов */
 export interface DecisionOption {
   id: string
@@ -20,14 +31,20 @@ export interface DecisionOption {
 /** Состояние развилки в узле-решении */
 export interface DecisionState {
   question: string
+  /** Домен уточнения (для бейджа и отчёта) */
+  domain?: DecisionDomain
+  /** single — выбрать один вариант; mixed — смешанное решение из нескольких */
+  selection?: 'single' | 'mixed'
   options: DecisionOption[]
   status: 'pending' | 'offered' | 'resolved'
-  /** Выбранный вариант (id из options) */
-  chosen?: string
+  /** Выбранные варианты (при mixed — несколько); может быть строкой в старых прогонах */
+  chosen?: string[] | string
   /** Кто принял решение */
   chosenBy?: 'agent' | 'user'
   /** Обоснование выбора (в авто-режиме — рассуждение агента) */
   reasoning?: string
+  /** Оценка «понимания задачи» после закрытия вопроса (0..1) */
+  certaintyAfter?: number
 }
 
 export interface GraphNode {
@@ -88,11 +105,14 @@ export type RunEvent =
       type: 'decision:resolved'
       ts: number
       nodeId: string
-      optionId: string
+      /** Выбранные варианты (при mixed — несколько); в старых прогонах — строка */
+      optionIds: string[] | string
       by: 'agent' | 'user'
       reasoning?: string
     }
   | { type: 'decision:mode'; ts: number; mode: DecisionMode }
+  /** Агент переоценил «понимание задачи» (насколько узкий вектор решения) */
+  | { type: 'run:certainty'; ts: number; certainty: number; note?: string }
 
 export interface RunSnapshot {
   id: string
@@ -104,6 +124,8 @@ export interface RunSnapshot {
   createdAt: number
   finishedAt?: number
   progress: number
+  /** Оценка агентом «понимания задачи» (0..1) */
+  certainty?: number
   nodes: GraphNode[]
   version: number
   events: RunEvent[]
@@ -135,6 +157,36 @@ export interface RunView {
   summary?: string
   /** Режим решений на момент свёртки (для playback) */
   decisionMode: DecisionMode
+  /** Оценка «понимания задачи» агентом на момент свёртки (0..1) */
+  certainty?: number
+}
+
+/** Выбранные варианты развилки как массив (совместимость со старыми прогонами: chosen мог быть строкой) */
+export const chosenIds = (dec: DecisionState | undefined): string[] => {
+  if (!dec?.chosen) return []
+  return Array.isArray(dec.chosen) ? dec.chosen : [dec.chosen]
+}
+
+/** Режим выбора развилки (старые прогоны — single) */
+export const selectionMode = (dec: DecisionState | undefined): 'single' | 'mixed' =>
+  dec?.selection === 'mixed' ? 'mixed' : 'single'
+
+/** Человекочитаемая оценка «понимания задачи» */
+export const certaintyLabel = (c: number): { label: string; hint: string } => {
+  if (c < 0.35) return { label: 'Размытый вектор', hint: 'Поле решений широкое: агенту нужны уточнения' }
+  if (c < 0.7) return { label: 'Вектор сужается', hint: 'Направление определено, часть аспектов ещё открыта' }
+  return { label: 'Узкий вектор', hint: 'Требуемая точность достигнута — вектор решения задан жёстко' }
+}
+
+export const DECISION_DOMAIN_LABELS: Record<DecisionDomain, string> = {
+  scope: 'Объём работ',
+  specialization: 'Специализация',
+  product: 'Продуктовый вопрос',
+  architecture: 'Архитектура',
+  tone: 'Tone of voice',
+  format: 'Формат результата',
+  context: 'Контекст задачи',
+  strategy: 'Стратегия',
 }
 
 export interface GraphEdge {

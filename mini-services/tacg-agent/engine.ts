@@ -2,8 +2,21 @@
 // динамическая адаптация → вмешательство пользователя. Реальные вызовы LLM
 // выполняются через z-ai-web-dev-sdk (llm.ts), демо-режим — симуляция.
 import { Server } from 'socket.io'
-import { DecisionMode, DecisionOption, GraphNode, RunEvent, RunMode, RunSnapshot, RunStatus } from './types'
-import { DEMO_ADAPTATIONS, DEMO_AUTO_PICK, DEFAULT_TASK, demoOutput, demoPlan, sleep } from './demo'
+import { DecisionDomain, DecisionMode, DecisionOption, GraphNode, RunEvent, RunMode, RunSnapshot, RunStatus } from './types'
+import {
+  DEMO_ADAPTATIONS,
+  DEMO_AUTO_PICK,
+  DEFAULT_TASK,
+  DEMO_DECISION_INSERTIONS,
+  DEMO_INITIAL_CERTAINTY,
+  DEMO_INITIAL_CERTAINTY_NOTE,
+  DEMO_WRITING_AUTO_PICKS,
+  demoOutput,
+  demoPlan,
+  demoWritingPlan,
+  detectDemoScenario,
+  sleep,
+} from './demo'
 import { chatJson, chatText, getZai } from './llm'
 import { store } from './store'
 
@@ -16,9 +29,9 @@ export class StoppedError extends Error {
   }
 }
 
-/** Выбор на развилке: вариант + кто выбрал + обоснование агента */
+/** Выбор на развилке: варианты (при смешанном решении — несколько) + кто выбрал + обоснование */
 interface DecisionChoice {
-  optionId: string
+  optionIds: string[]
   by: 'agent' | 'user'
   reasoning?: string
 }
@@ -30,19 +43,27 @@ interface Runtime {
   loopActive: boolean
   dynamicAdded: number
   demoAdaptDone: Set<number>
+  /** Демо-сценарий текущего запуска (data | writing) */
+  scenario: 'data' | 'writing'
+  /** Выполненные вставки эмерджентных развилок демо-сценария «Напиши пост» */
+  demoInsertionsDone: Set<number>
+  /** Сколько эмерджентных развилок добавлено супервайзером (LLM-режим) */
+  emergentAdded: number
   /** Текущий режим решений (зеркало snapshot.decisionMode) */
   decisionMode: DecisionMode
   /** Ожидаемое решение пользователя на развилке (null — ожидания нет) */
   pendingDecision: { nodeId: string; resolve: (choice: DecisionChoice | null) => void } | null
 }
 
-const PLANNER_SYS = `Ты — модуль планирования ИИ-агента. Твоя задача — разбить запрос пользователя на вычислительный граф из шагов. Отвечай ТОЛЬКО валидным JSON без markdown-обёрток и пояснений.`
+const PLANNER_SYS = `Ты — модуль планирования ИИ-агента. Твоя задача — разбить запрос пользователя на вычислительный граф из шагов и оценить, насколько ты понимаешь задачу. Отвечай ТОЛЬКО валидным JSON без markdown-обёрток и пояснений.`
 
 const EXECUTOR_SYS = `Ты — исполнительный модуль ИИ-агента внутри вычислительного графа. Выполни запрошенный шаг. Отвечай по-русски, лаконично и по делу (до 120 слов), без markdown-заголовков.`
 
-const SUPERVISOR_SYS = `Ты — супервайзер вычислительного графа ИИ-агента. После завершения очередного узла ты решаешь, нужно ли ДОПОЛНИТЬ план новым шагом. Отвечай ТОЛЬКО валидным JSON.`
+const SUPERVISOR_SYS = `Ты — супервайзер вычислительного графа ИИ-агента. После каждого шага ты анализируешь входящие данные и решаешь: дополнить ли план новым шагом, задать ли уточняющий вопрос-развилку (если неоднозначность влияет на итог) или ничего не менять. Также ты оцениваешь, насколько узкий вектор решения сложился. Отвечай ТОЛЬКО валидным JSON.`
 
-const DECIDER_SYS = `Ты — модуль принятия решений ИИ-агента на развилке вычислительного графа. Взвесь варианты с учётом задачи и контекста, выбери один. Отвечай ТОЛЬКО валидным JSON без markdown-обёрток.`
+const DECIDER_SYS = `Ты — модуль принятия решений ИИ-агента на развилке вычислительного графа. Взвесь варианты с учётом задачи и контекста. На развилке типа single выбери один вариант; на развилке типа mixed допустимо смешанное решение из нескольких вариантов. Отвечай ТОЛЬКО валидным JSON без markdown-обёрток.`
+
+const DECISION_DOMAINS: DecisionDomain[] = ['scope', 'specialization', 'product', 'architecture', 'tone', 'format', 'context', 'strategy']
 
 export class AgentEngine {
   private runs = new Map<string, Runtime>()
@@ -85,6 +106,7 @@ export class AgentEngine {
   async start(taskInput: string, mode: RunMode, decisionMode: DecisionMode = 'manual'): Promise<RunSnapshot> {
     const task = (taskInput || '').trim().slice(0, 500) || DEFAULT_TASK
     const id = 'run_' + now().toString(36) + Math.random().toString(36).slice(2, 7)
+    const scenario = mode === 'demo' ? detectDemoScenario(task) : 'data'
     const run: RunSnapshot = {
       id,
       task,
@@ -106,6 +128,9 @@ export class AgentEngine {
       loopActive: false,
       dynamicAdded: 0,
       demoAdaptDone: new Set(),
+      scenario,
+      demoInsertionsDone: new Set(),
+      emergentAdded: 0,
       decisionMode,
       pendingDecision: null,
     }
@@ -134,6 +159,9 @@ export class AgentEngine {
     let nodes: GraphNode[]
     if (mode === 'llm') {
       nodes = await this.planWithLLM(task, rt)
+    } else if (scenario === 'writing') {
+      nodes = demoWritingPlan()
+      this.log(rt, 'plan', 'Демо-сценарий «Напиши пост»: размытый запрос — агент будет уточнять вектор по ходу выполнения')
     } else {
       nodes = demoPlan()
     }
@@ -143,6 +171,12 @@ export class AgentEngine {
     run.version = 1
     run.versions.push({ version: 1, createdAt: now(), description: 'Исходный план агента', nodeIds: nodes.map((n) => n.id) })
     this.log(rt, 'plan', `План готов: ${nodes.length} узлов · версия графа v1`)
+
+    // стартовая самооценка «понимания задачи»: насколько узкий вектор решения
+    const initialCertainty = mode === 'llm' ? (rt.snapshot.certainty ?? 0.4) : DEMO_INITIAL_CERTAINTY[scenario]
+    const initialNote = mode === 'llm' ? undefined : DEMO_INITIAL_CERTAINTY_NOTE[scenario]
+    this.emitCertainty(rt, initialCertainty, initialNote)
+
     this.pushStatus(rt, 'running', 0)
     this.log(rt, 'run', 'Выполнение графа началось')
     store.save(run)
@@ -157,12 +191,14 @@ export class AgentEngine {
   private async planWithLLM(task: string, rt: Runtime): Promise<GraphNode[]> {
     const user = `Задача пользователя: «${task}»
 
-Составь план из 4–7 шагов с ОДНОЙ развилкой (узлом-решением): точкой, где выбор одного из вариантов меняет дальнейшие шаги и итоговый результат. Формат ответа — строго один JSON-объект без каких-либо дополнений:
+Сначала ОЦЕНИ: если запрос размыт (не заданы формат, объём, тон, аудитория, скоуп или подход) — начни понимание с низкой оценки certainty и включи развилки-уточнения. Если задача про разработку — уточняй продуктовые и архитектурные вопросы; если про тексты — tone of voice и формат; если про данные/анализ — стратегию проверки.
 
-{"nodes":[
+Составь план из 4–7 шагов с ОДНОЙ-ДВУМЯ развилками (узлами-решениями): точками, где выбор одного или нескольких вариантов меняет дальнейшие шаги и итоговый результат. Формат ответа — строго один JSON-объект без каких-либо дополнений:
+
+{"certainty":0.3,"nodes":[
   {"id":"n1","title":"краткое название шага","description":"что делает шаг, 1-2 предложения","dependsOn":[]},
   {"id":"dec1","title":"Решение: ...","description":"суть развилки","dependsOn":["n1"],
-   "decision":{"question":"вопрос, который решается на развилке","options":[
+   "decision":{"question":"вопрос, который решается на развилке","domain":"format","selection":"single","certaintyAfter":0.6,"options":[
      {"id":"a","label":"название варианта","rationale":"обоснование: плюсы, минусы, цена выбора","steps":[
        {"id":"ba1","title":"шаг ветки A","description":"..."}
      ]},
@@ -175,12 +211,15 @@ export class AgentEngine {
 
 Правила:
 - Названия и описания — на русском языке. Первый узел имеет пустой dependsOn.
-- Развилка одна; вариантов 2–3; шагов в каждой ветке 1–3. Первый шаг ветки выполняется вместо шагов других веток.
+- certainty — число 0..1: твоя оценка понимания задачи ДО уточнений (размытый запрос → 0.2-0.4, конкретный → 0.6-0.8).
+- Развилок не больше двух; вариантов 2–4; шагов в каждой ветке 1–3. Первый шаг ветки выполняется вместо шагов других веток.
+- domain — один из: scope, specialization, product, architecture, tone, format, context, strategy.
+- selection — "single" (выбрать один вариант) или "mixed" (смешанное решение: допустимо выбрать несколько вариантов — например, блоки контента). certaintyAfter — оценка понимания ПОСЛЕ закрытия вопроса.
 - Итоговый узел зависит от хвостов ВСЕХ веток (перечисли их в dependsOn).
 - dependsOn ссылается только на id уже объявленных узлов. Массив nodes обязан быть закрыт перед концом объекта.`
     try {
       const json = await chatJson(PLANNER_SYS, user, 60_000, 2)
-      const nodes = this.sanitizePlan(json)
+      const nodes = this.sanitizePlan(json, rt)
       if (nodes) {
         const decCount = nodes.filter((n) => n.kind === 'decision').length
         this.log(rt, 'plan', `Планировщик LLM построил граф из ${nodes.length} узлов${decCount ? ` · развилок: ${decCount}` : ''}`)
@@ -193,8 +232,13 @@ export class AgentEngine {
     return demoPlan()
   }
 
-  /** Нормализация плана LLM: цепочки + узел-развилка с ветками вариантов */
-  private sanitizePlan(json: any): GraphNode[] | null {
+  /** Нормализация плана LLM: цепочки + узел-развилка с ветками вариантов + certainty */
+  private sanitizePlan(json: any, rt?: Runtime): GraphNode[] | null {
+    // стартовая самооценка «понимания задачи» от планировщика
+    if (rt) {
+      const c = Number(json?.certainty)
+      if (Number.isFinite(c)) rt.snapshot.certainty = Math.min(1, Math.max(0, c))
+    }
     const rawNodes = Array.isArray(json?.nodes) ? json.nodes.slice(0, 12) : null
     if (!rawNodes || rawNodes.length === 0) return null
 
@@ -220,14 +264,19 @@ export class AgentEngine {
     rawNodes.forEach((raw: any, i: number) => {
       const id = cleanId(raw?.id, `n${i + 1}`)
       const decisionRaw = raw?.decision
-      const optionsRaw = Array.isArray(decisionRaw?.options) ? decisionRaw.options.filter((o: any) => o).slice(0, 3) : []
+      const optionsRaw = Array.isArray(decisionRaw?.options) ? decisionRaw.options.filter((o: any) => o).slice(0, 4) : []
       const hasDecision = optionsRaw.length >= 2 && !!decisionRaw?.question
 
       if (hasDecision) {
         const branchIds = new Set<string>()
+        const selection: 'single' | 'mixed' = decisionRaw?.selection === 'mixed' ? 'mixed' : 'single'
+        const domain: DecisionDomain | undefined = DECISION_DOMAINS.includes(decisionRaw?.domain)
+          ? decisionRaw.domain
+          : undefined
+        const certaintyAfter = Number(decisionRaw?.certaintyAfter)
         const options: DecisionOption[] = []
         optionsRaw.forEach((ro: any, j: number) => {
-          const optId = ['a', 'b', 'c'][j]
+          const optId = ['a', 'b', 'c', 'd'][j]
           const stepsRaw = Array.isArray(ro?.steps) ? ro.steps.filter((s: any) => s).slice(0, 3) : []
           options.push({
             id: optId,
@@ -266,6 +315,9 @@ export class AgentEngine {
           runs: 0,
           decision: {
             question: String(decisionRaw.question).slice(0, 300),
+            domain,
+            selection,
+            certaintyAfter: Number.isFinite(certaintyAfter) ? Math.min(1, Math.max(0, certaintyAfter)) : undefined,
             options,
             status: 'pending',
           },
@@ -401,16 +453,14 @@ export class AgentEngine {
   }
 
   private async demoExecute(node: GraphNode, rt: Runtime): Promise<string> {
-    const dec = rt.snapshot.nodes.find(
-      (n) => n.kind === 'decision' && n.decision?.status === 'resolved' && n.decision.chosen
-    )
-    const chosen = dec?.decision
-      ? {
-          id: dec.decision.chosen!,
-          label: dec.decision.options.find((o) => o.id === dec.decision!.chosen)?.label ?? '',
-        }
-      : undefined
-    const base = demoOutput(node, rt.snapshot.task, chosen)
+    // полный набор решений прогона: id развилки → выбранные варианты
+    const picks: Record<string, string[]> = {}
+    for (const n of rt.snapshot.nodes) {
+      if (n.kind === 'decision' && n.decision?.status === 'resolved' && Array.isArray(n.decision.chosen)) {
+        picks[n.id] = [...n.decision.chosen]
+      }
+    }
+    const base = demoOutput(node, rt.snapshot.task, picks)
     const isRerun = (node.runs ?? 0) > 1
     const text = isRerun ? `↻ Пересчёт после вмешательства пользователя.\n\n${base}` : base
     const duration = isRerun ? 1200 : 2300
@@ -438,44 +488,85 @@ ${node.input || `Задача: ${run.task}`}
 
   // ───────────────────── Динамическая адаптация ─────────────────────
 
+  /**
+   * Анализ входящих данных после каждого шага: дополнить план шагом,
+   * вставить эмерджентную развилку-уточнение (анализ показал неоднозначность,
+   * влияющую на итог) или ничего не менять.
+   */
   private async maybeAdapt(rt: Runtime, finished: GraphNode) {
     const run = rt.snapshot
     if (run.mode === 'demo') {
-      const idx = DEMO_ADAPTATIONS.findIndex((a, i) => a.after === finished.id && !rt.demoAdaptDone.has(i))
-      if (idx < 0) return
-      rt.demoAdaptDone.add(idx)
+      if (rt.scenario === 'data') {
+        const idx = DEMO_ADAPTATIONS.findIndex((a, i) => a.after === finished.id && !rt.demoAdaptDone.has(i))
+        if (idx < 0) return
+        rt.demoAdaptDone.add(idx)
+        await sleep(450)
+        const spec = DEMO_ADAPTATIONS[idx]
+        this.insertNode(rt, { ...spec.node, dependsOn: [finished.id] }, spec.reason)
+        return
+      }
+      // сценарий «Напиши пост»: агент анализирует результаты шагов и вставляет развилки-уточнения
+      const insIdx = DEMO_DECISION_INSERTIONS.findIndex(
+        (d, i) => d.afterAny.includes(finished.id) && !rt.demoInsertionsDone.has(i)
+      )
+      if (insIdx < 0) return
+      rt.demoInsertionsDone.add(insIdx)
       await sleep(450)
-      const spec = DEMO_ADAPTATIONS[idx]
-      this.insertNode(rt, { ...spec.node, dependsOn: [finished.id] }, spec.reason)
+      const spec = DEMO_DECISION_INSERTIONS[insIdx]
+      this.insertDecision(rt, finished.id, spec.decision, spec.reason)
       return
     }
 
-    // LLM-режим: супервайзер решает, нужен ли дополнительный шаг
+    // LLM-режим: супервайзер анализирует результаты шагов — новый шаг / вопрос-развилка / ничего
     if (rt.dynamicAdded >= 2) return
     const hasPendingSuccessors = run.nodes.some((n) => n.status === 'pending' && n.dependsOn.includes(finished.id))
     const anyPending = run.nodes.some((n) => n.status === 'pending')
     if (!hasPendingSuccessors && !anyPending) return
-    if (run.nodes.filter((n) => n.dynamic).length >= 2) return
+    if (run.nodes.filter((n) => n.dynamic).length >= 3) return
+    // не вставляем вопрос, если уже есть открытая развилка или лимит эмерджентных вопросов исчерпан
+    const hasOpenDecision = run.nodes.some((n) => n.kind === 'decision' && (n.status === 'pending' || n.status === 'running'))
+    const askAllowed = rt.emergentAdded < 2 && !hasOpenDecision
 
     const graphDesc = run.nodes
       .map((n) => `- ${n.id} «${n.title}» [${n.status}]${n.output ? ': ' + trunc(n.output, 110) : ''}`)
       .join('\n')
+    const openQuestions = run.nodes
+      .filter((n) => n.kind === 'decision')
+      .map((n) => n.decision ? `«${n.title}» (${n.decision.status})` : '')
+      .filter(Boolean)
+      .join(', ')
     const user = `Задача: «${run.task}»
 
 Текущий граф:
 ${graphDesc}
 
+Заданные ранее вопросы-развилки: ${openQuestions || '—'}
+
 Только что завершён узел «${finished.title}»: ${trunc(finished.output || '', 300)}
 
-Вопрос: есть ли ЯВНЫЙ пробел, который стоит закрыть дополнительным шагом перед выполнением следующих узлов? В подавляющем большинстве случаев отвечай no_changes — добавляй узел только при реальном пробеле (например, данные требуют валидации, а её нет в плане).
+Проанализируй входящие данные завершённого шага и реши:
+1) add_node — если есть ЯВНЫЙ пробел, закрываемый обычным шагом (например, данные требуют валидации);
+2) ask — если обнаружена неоднозначность, влияющая на итог (расширение/сужение скоупа, специализация, продуктовые или архитектурные вопросы для разработки, tone of voice или формат для текстов, контекст задачи): предложи вопрос с вариантами и обоснованием;${
+      askAllowed ? '' : ' (сейчас ask недоступен — используй только no_changes/add_node)'
+    }
+3) no_changes — в остальных случаях (в подавляющем большинстве).
+Также верни certainty — текущую оценку понимания задачи (0..1: насколько узкий вектор решения сложился).
 
 Формат ответа:
-{"decision":"no_changes"}
+{"decision":"no_changes","certainty":0.6}
 или
-{"decision":"add_node","node":{"title":"...","description":"...","reason":"почему добавляем"}}`
+{"decision":"add_node","certainty":0.6,"node":{"title":"...","description":"...","reason":"почему добавляем"}}
+или
+{"decision":"ask","certainty":0.5,"question":{"question":"текст вопроса","domain":"scope","selection":"single","certaintyAfter":0.8,"reason":"почему вопрос важен","options":[{"id":"a","label":"название","rationale":"обоснование","steps":[{"title":"шаг ветки","description":"..."}]}]}}
+
+Домены: scope, specialization, product, architecture, tone, format, context, strategy. selection: single (один вариант) или mixed (смешанное решение из нескольких). Вариантов 2–4, шагов в ветке 1–3.`
 
     try {
       const json = await chatJson(SUPERVISOR_SYS, user, 45_000, 0)
+      if (typeof json?.certainty === 'number' && Number.isFinite(json.certainty)) {
+        const c = Math.min(1, Math.max(0, json.certainty))
+        if (Math.abs(c - (run.certainty ?? 0)) > 0.05) this.emitCertainty(rt, c)
+      }
       if (json?.decision === 'add_node' && json.node?.title) {
         const id = `dyn${rt.dynamicAdded + 1}`
         this.insertNode(
@@ -488,6 +579,42 @@ ${graphDesc}
           },
           String(json.node.reason || 'Выявлен пробел в плане').slice(0, 240)
         )
+      } else if (json?.decision === 'ask' && askAllowed) {
+        const q = json.question
+        if (q?.question && Array.isArray(q?.options) && q.options.length >= 2) {
+          const options = q.options
+            .filter((o: any) => o?.label)
+            .slice(0, 4)
+            .map((o: any, j: number) => ({
+              id: ['a', 'b', 'c', 'd'][j],
+              label: String(o.label).slice(0, 60),
+              rationale: String(o.rationale || '').slice(0, 320),
+              steps: (Array.isArray(o.steps) ? o.steps.filter((s: any) => s).slice(0, 3) : []).map((s: any) => ({
+                title: String(s?.title || 'шаг ветки').slice(0, 60),
+                description: String(s?.description || '').slice(0, 240),
+              })),
+            }))
+          if (options.length >= 2) {
+            const certaintyAfter = Number(q.certaintyAfter)
+            this.insertDecision(
+              rt,
+              finished.id,
+              {
+                id: `decq${rt.emergentAdded + 1}`,
+                title: `Вопрос: ${String(q.question).slice(0, 40)}`,
+                description: String(q.reason || 'Выявлена неоднозначность, влияющая на итог').slice(0, 240),
+                question: String(q.question).slice(0, 300),
+                domain: DECISION_DOMAINS.includes(q.domain) ? q.domain : 'context',
+                selection: q.selection === 'mixed' ? 'mixed' : 'single',
+                certaintyAfter: Number.isFinite(certaintyAfter)
+                  ? Math.min(1, Math.max(0, certaintyAfter))
+                  : Math.min(0.95, (run.certainty ?? 0.4) + 0.2),
+                options,
+              },
+              String(q.reason || 'Агент обнаружил неоднозначность, влияющую на итог').slice(0, 240)
+            )
+          }
+        }
       }
     } catch {
       /* супервайзер недоступен → план не меняем */
@@ -525,6 +652,120 @@ ${graphDesc}
     store.save(run)
   }
 
+  /**
+   * Вставка эмерджентной развилки: агент проанализировал результаты шага и
+   * обнаружил неоднозначность, влияющую на итог. Создаёт узел-вопрос с ветками
+   * вариантов; ещё не начатые узлы, ждавшие якорь, переводятся на хвосты веток —
+   * итог корректно дождётся только реализованных веток.
+   */
+  private insertDecision(
+    rt: Runtime,
+    anchorId: string,
+    spec: {
+      id: string
+      title: string
+      description: string
+      question: string
+      domain?: string
+      selection: 'single' | 'mixed'
+      certaintyAfter?: number
+      options: Array<{ id: string; label: string; rationale: string; steps: Array<{ id?: string; title: string; description: string }> }>
+    },
+    reason: string
+  ) {
+    const run = rt.snapshot
+    const domain: DecisionDomain | undefined = DECISION_DOMAINS.includes(spec.domain as DecisionDomain)
+      ? (spec.domain as DecisionDomain)
+      : undefined
+    const version = run.version + 1
+
+    const decNode: GraphNode = {
+      id: spec.id,
+      kind: 'decision',
+      title: spec.title,
+      description: spec.description,
+      status: 'pending',
+      dependsOn: [anchorId],
+      dynamic: true,
+      reason,
+      addedAtVersion: version,
+      runs: 0,
+      decision: {
+        question: spec.question,
+        domain,
+        selection: spec.selection,
+        certaintyAfter: spec.certaintyAfter,
+        options: spec.options.map((o) => ({
+          id: o.id,
+          label: o.label,
+          rationale: o.rationale,
+          nextSteps: o.steps.map((s) => s.title),
+        })),
+        status: 'pending',
+      },
+    }
+    const changed: GraphNode[] = [decNode]
+    const tails: string[] = []
+
+    // ветки вариантов: цепочки от развилки
+    spec.options.forEach((o) => {
+      let prev = spec.id
+      o.steps.forEach((s, k) => {
+        const bid = s.id || `${spec.id}${o.id}${k + 1}`
+        const branchNode: GraphNode = {
+          id: bid,
+          title: s.title,
+          description: s.description,
+          status: 'pending',
+          dependsOn: [prev],
+          dynamic: true,
+          reason,
+          addedAtVersion: version,
+          runs: 0,
+          branchOf: { decisionId: spec.id, optionId: o.id },
+        }
+        run.nodes.push(branchNode)
+        changed.push({ ...branchNode })
+        prev = bid
+      })
+      if (prev === spec.id) return // у варианта нет шагов — ветка «прямое продолжение»
+      tails.push(prev)
+    })
+    run.nodes.push(decNode)
+
+    // перепривязка: ещё не начатые узлы, ждавшие якорь, ждут хвосты ВСЕХ веток
+    // (невыбранные ветки станут discarded — зависимость удовлетворится автоматически)
+    for (const n of run.nodes) {
+      if (n.id !== decNode.id && n.status === 'pending' && n.dependsOn.includes(anchorId)) {
+        n.dependsOn = [...new Set(n.dependsOn.flatMap((d) => (d === anchorId ? (tails.length ? tails : [anchorId]) : [d])))].slice(0, 12)
+        changed.push({ ...n })
+      }
+    }
+
+    run.version = version
+    rt.dynamicAdded += 1
+    rt.emergentAdded += 1
+    run.versions.push({ version, createdAt: now(), description: reason, nodeIds: run.nodes.map((n) => n.id) })
+    this.emitEvent(rt, { type: 'graph:adapt', ts: now(), reason, version, nodes: changed.map((n) => ({ ...n })) })
+    this.log(
+      rt,
+      'adapt',
+      `＋ Эмерджентная развилка (v${version}): «${spec.title}» — ${spec.options.length} варианта${
+        spec.selection === 'mixed' ? ' (смешанный выбор допустим)' : ''
+      }. Причина: ${reason}`
+    )
+    store.save(run)
+  }
+
+  /** Публикация самооценки «понимания задачи»: насколько узкий вектор решения */
+  private emitCertainty(rt: Runtime, certainty: number, note?: string) {
+    const c = Math.min(1, Math.max(0, Number.isFinite(certainty) ? certainty : 0))
+    rt.snapshot.certainty = c
+    this.emitEvent(rt, { type: 'run:certainty', ts: now(), certainty: c, note })
+    const pct = Math.round(c * 100)
+    this.log(rt, 'decision', `◎ Понимание задачи: ${pct}% — ${note || 'агент переоценил вектор решения'}`)
+  }
+
   // ───────────────────── Развилки: предложения и выбор ─────────────────────
 
   /** Жизненный цикл узла-развилки: рассуждение → предложение вариантов → выбор → активация ветки */
@@ -552,16 +793,18 @@ ${graphDesc}
       this.log(
         rt,
         'decision',
-        `⎇ Режим «ручной выбор»: агент предлагает ${dec.options.length} варианта с обоснованием и ожидает решения пользователя`
+        `⎇ Режим «ручной выбор»: агент предлагает ${dec.options.length} варианта с обоснованием и ожидает решения пользователя${
+          dec.selection === 'mixed' ? ' (допустимо смешанное решение из нескольких)' : ''
+        }`
       )
       const choice = await this.waitForDecision(rt, node)
       if (!choice) return this.rollbackDecision(rt, node)
-      this.resolveDecision(rt, node, choice.optionId, choice.by, choice.reasoning)
+      this.resolveDecision(rt, node, choice.optionIds, choice.by, choice.reasoning)
     } else {
       this.log(rt, 'decision', '⎇ Режим «авто»: агент взвешивает варианты и принимает решение самостоятельно')
       const picked = await this.autoDecide(rt, node)
       if (rt.stopped) return this.rollbackDecision(rt, node)
-      this.resolveDecision(rt, node, picked.optionId, 'agent', picked.reasoning)
+      this.resolveDecision(rt, node, picked.optionIds, 'agent', picked.reasoning)
     }
     return true
   }
@@ -595,54 +838,78 @@ ${graphDesc}
   }
 
   /** Авто-режим: демо — скриптованный выбор; LLM — вызов модуля принятия решений */
-  private async autoDecide(rt: Runtime, node: GraphNode): Promise<{ optionId: string; reasoning: string }> {
+  private async autoDecide(rt: Runtime, node: GraphNode): Promise<{ optionIds: string[]; reasoning: string }> {
     const dec = node.decision!
     if (rt.snapshot.mode === 'demo') {
       await sleep(1200)
-      return { ...DEMO_AUTO_PICK }
+      const scripted = DEMO_WRITING_AUTO_PICKS[node.id]
+      if (scripted) return { optionIds: [...scripted.optionIds], reasoning: scripted.reasoning }
+      return { optionIds: [...DEMO_AUTO_PICK.optionIds], reasoning: DEMO_AUTO_PICK.reasoning }
     }
+    const mixed = dec.selection === 'mixed'
     const user = `Задача: «${rt.snapshot.task}»
 
 Развилка: ${dec.question}
+Тип выбора: ${mixed ? 'mixed — можно выбрать НЕСКОЛЬКО вариантов (смешанное решение)' : 'single — нужно выбрать ровно один вариант'}
 
 Варианты:
 ${dec.options.map((o) => `- id «${o.id}» — ${o.label}: ${o.rationale}`).join('\n')}
 
 ${node.input || ''}
 
-Выбери один вариант (id из списка) и обоснуй выбор. Ответ строго JSON:
-{"optionId":"<id>","reasoning":"обоснование в 1–2 предложениях"}`
+${mixed ? 'Выбери один или несколько вариантов (id из списка) и обоснуй состав.' : 'Выбери один вариант (id из списка) и обоснуй выбор.'} Ответ строго JSON:
+${mixed ? '{"optionIds":["<id1>","<id2>"],"reasoning":"обоснование в 1–2 предложениях"}' : '{"optionIds":["<id>"],"reasoning":"обоснование в 1–2 предложениях"}'}`
     try {
       const json = await chatJson(DECIDER_SYS, user, 45_000, 1)
-      const optId = String(json?.optionId ?? '').trim().toLowerCase()
-      if (dec.options.some((o) => o.id === optId) && json?.reasoning) {
-        return { optionId: optId, reasoning: String(json.reasoning).slice(0, 400) }
+      const rawIds: any[] = Array.isArray(json?.optionIds)
+        ? json.optionIds
+        : Array.isArray(json?.options)
+          ? json.options
+          : json?.optionId
+            ? [json.optionId]
+            : []
+      const valid = rawIds
+        .map((v) => String(v ?? '').trim().toLowerCase())
+        .filter((v) => dec.options.some((o) => o.id === v))
+      const unique = [...new Set(valid)]
+      if (unique.length && json?.reasoning) {
+        const picked = mixed ? unique : unique.slice(0, 1)
+        return { optionIds: picked, reasoning: String(json.reasoning).slice(0, 400) }
       }
     } catch {
       /* fallback ниже */
     }
-    return { optionId: dec.options[0].id, reasoning: 'Обоснование LLM недоступно — выбран первый вариант по умолчанию' }
+    return { optionIds: [dec.options[0].id], reasoning: 'Обоснование LLM недоступно — выбран первый вариант по умолчанию' }
   }
 
-  /** Применяет выбор: активирует ветку, гасит альтернативы, фиксирует аудит-трейл */
-  private resolveDecision(rt: Runtime, node: GraphNode, optionId: string, by: 'agent' | 'user', reasoning?: string) {
+  /** Применяет выбор (один или несколько вариантов): активирует ветки, гасит альтернативы, фиксирует аудит-трейл */
+  private resolveDecision(rt: Runtime, node: GraphNode, optionIds: string[], by: 'agent' | 'user', reasoning?: string) {
     const run = rt.snapshot
     const dec = node.decision!
-    const opt = dec.options.find((o) => o.id === optionId) ?? dec.options[0]
+    const single = dec.selection !== 'mixed'
+    // валидация: только известные id; single — ровно один
+    let picked = optionIds.map((id) => id.trim().toLowerCase()).filter((id) => dec.options.some((o) => o.id === id))
+    picked = [...new Set(picked)]
+    if (!picked.length) picked = [dec.options[0].id]
+    if (single) picked = picked.slice(0, 1)
+    const opts = picked.map((id) => dec.options.find((o) => o.id === id)!)
+    const isMixedResult = picked.length > 1
+    const pickedLabel = opts.map((o) => `«${o.label}»`).join(isMixedResult ? ' + ' : '')
+
     node.status = 'done'
     node.finishedAt = now()
     node.durationMs = node.finishedAt - (node.startedAt ?? node.finishedAt)
-    node.decision = { ...dec, status: 'resolved', chosen: opt.id, chosenBy: by, reasoning: reasoning?.trim() || undefined }
+    node.decision = { ...dec, status: 'resolved', chosen: picked, chosenBy: by, reasoning: reasoning?.trim() || undefined }
     node.output =
       by === 'agent'
-        ? `Решение агента: вариант «${opt.label}». ${reasoning || ''}`.trim()
-        : `Выбор пользователя: вариант «${opt.label}». ${opt.rationale}`
+        ? `${isMixedResult ? `Смешанное решение агента: ${pickedLabel}.` : `Решение агента: вариант ${pickedLabel}.`} ${reasoning || ''}`.trim()
+        : `${isMixedResult ? `Смешанный выбор пользователя: ${pickedLabel}.` : `Выбор пользователя: вариант ${pickedLabel}.`} ${opts.map((o) => o.rationale).join(' ')}`
     this.emitEvent(rt, { type: 'node:update', ts: now(), node: { ...node } })
 
     // мгновенная визуализация последствий: нереализованные ветки гаснут
     let discarded = 0
     for (const n of run.nodes) {
-      if (n.branchOf?.decisionId === node.id && n.branchOf.optionId !== opt.id && n.status === 'pending') {
+      if (n.branchOf?.decisionId === node.id && !picked.includes(n.branchOf.optionId) && n.status === 'pending') {
         n.status = 'discarded'
         discarded++
         this.emitEvent(rt, { type: 'node:update', ts: now(), node: { ...n } })
@@ -653,14 +920,27 @@ ${node.input || ''}
       type: 'decision:resolved',
       ts: now(),
       nodeId: node.id,
-      optionId: opt.id,
+      optionIds: picked,
       by,
       reasoning: node.decision.reasoning,
     })
     this.log(
       rt,
       'decision',
-      `⎇ Решение принято (${by === 'agent' ? 'агентом' : 'пользователем'}): «${opt.label}» — ветка активирована, узлов в нереализованных ветках: ${discarded}`
+      `⎇ Решение принято (${by === 'agent' ? 'агентом' : 'пользователем'}): ${pickedLabel}${
+        isMixedResult ? ' — ветки активированы' : ' — ветка активирована'
+      }, узлов в нереализованных ветках: ${discarded}`
+    )
+
+    // закрытие вопроса сужает вектор понимания задачи
+    const after =
+      dec.certaintyAfter ?? Math.min(0.95, (rt.snapshot.certainty ?? 0.4) + 0.15)
+    this.emitCertainty(
+      rt,
+      Math.max(rt.snapshot.certainty ?? 0, after),
+      isMixedResult
+        ? `смешанное решение по вопросу «${trunc(node.title, 48)}»`
+        : `вопрос «${trunc(node.title, 48)}» закрыт`
     )
   }
 
@@ -686,7 +966,7 @@ ${node.input || ''}
       if (node?.decision) {
         this.log(rt, 'decision', '⎇ Ожидание выбора прервано: агент принимает решение вместо пользователя')
         this.autoDecide(rt, node)
-          .then((picked) => pd.resolve({ optionId: picked.optionId, by: 'agent', reasoning: picked.reasoning }))
+          .then((picked) => pd.resolve({ optionIds: picked.optionIds, by: 'agent', reasoning: picked.reasoning }))
           .catch(() => pd.resolve(null))
       } else {
         pd.resolve(null)
@@ -695,17 +975,20 @@ ${node.input || ''}
     return { ok: true }
   }
 
-  /** Выбор пользователя на развилке (из модалки) */
-  resolveDecisionFromUser(runId: string, nodeId: string, optionId: string): { ok: boolean; error?: string } {
+  /** Выбор пользователя на развилке (из модалки): один или несколько вариантов */
+  resolveDecisionFromUser(runId: string, nodeId: string, optionIds: string[]): { ok: boolean; error?: string } {
     const rt = this.runs.get(runId)
     if (!rt) return { ok: false, error: 'Запуск не активен' }
     const pd = rt.pendingDecision
     if (!pd || pd.nodeId !== nodeId) return { ok: false, error: 'Решение не ожидается (уже принято или запуск завершён)' }
     const node = rt.snapshot.nodes.find((n) => n.id === nodeId)
-    const opt = node?.decision?.options.find((o) => o.id === optionId)
-    if (!opt) return { ok: false, error: 'Неизвестный вариант' }
+    const dec = node?.decision
+    const ids = (optionIds || []).map((id) => String(id).trim().toLowerCase())
+    if (!dec || !ids.length || !ids.every((id) => dec.options.some((o) => o.id === id))) {
+      return { ok: false, error: 'Неизвестный вариант' }
+    }
     rt.pendingDecision = null
-    pd.resolve({ optionId: opt.id, by: 'user' })
+    pd.resolve({ optionIds: ids, by: 'user' })
     return { ok: true }
   }
 

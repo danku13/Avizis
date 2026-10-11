@@ -73,7 +73,7 @@ export function HistoryPanel() {
         <Textarea
           value={task}
           onChange={(e) => setTask(e.target.value)}
-          placeholder="Опишите задачу: «Проанализируй данные о продажах за Q3 и найди аномалии»"
+          placeholder="Опишите задачу: «Проанализируй данные о продажах за Q3 и найди аномалии» — или текстовую: «Напиши пост про запуск новой функции» (демо-сценарий с уточнениями формата, блоков и тона)"
           className="min-h-[88px] resize-none text-sm"
           aria-label="Текст задачи"
         />

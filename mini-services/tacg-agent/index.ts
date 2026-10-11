@@ -52,11 +52,16 @@ io.on('connection', (socket) => {
   })
 
   socket.on('decision:resolve', (data: any) => {
-    const result = engine.resolveDecisionFromUser(
-      String(data?.runId || ''),
-      String(data?.nodeId || ''),
-      String(data?.optionId || '')
-    )
+    // optionIds — массив (смешанное решение); для совместимости принимаем и одиночную строку
+    const raw = data?.optionIds
+    const optionIds: string[] = Array.isArray(raw)
+      ? raw.map((v: any) => String(v ?? ''))
+      : typeof data?.optionId === 'string'
+        ? [data.optionId]
+        : typeof raw === 'string'
+          ? [raw]
+          : []
+    const result = engine.resolveDecisionFromUser(String(data?.runId || ''), String(data?.nodeId || ''), optionIds)
     socket.emit('decision:resolve:result', result)
   })
 

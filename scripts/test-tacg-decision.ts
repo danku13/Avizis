@@ -51,7 +51,7 @@ async function scenarioManual() {
 
   const resolveResult = await new Promise<any>((resolve) => {
     socket.once('decision:resolve:result', resolve)
-    socket.emit('decision:resolve', { runId, nodeId: offer.nodeId, optionId: 'a' })
+    socket.emit('decision:resolve', { runId, nodeId: offer.nodeId, optionIds: ['a'] })
   })
   push('вариант a принят движком', resolveResult?.ok === true, [JSON.stringify(resolveResult)])
 
@@ -62,7 +62,7 @@ async function scenarioManual() {
   })
   const byId = new Map<string, any>(snapshot.nodes.map((n: any) => [n.id, n]))
   const dec = byId.get('dec1')
-  const chosen = dec?.decision?.chosen
+  const chosen = Array.isArray(dec?.decision?.chosen) ? dec.decision.chosen.join() : dec?.decision?.chosen
   const b1a = byId.get('b1a')?.status
   const b1b = byId.get('b1b')?.status
   const b2b = byId.get('b2b')?.status
@@ -94,7 +94,7 @@ async function scenarioAuto() {
   const runId = await startRun('auto')
   const offer = await waitFor((d) => d.runId === runId && d.event?.type === 'decision:offer')
   const resolved = await waitFor((d) => d.runId === runId && d.event?.type === 'decision:resolved')
-  console.log(`[test] агент выбрал: ${resolved.optionId} · обоснование: ${String(resolved.reasoning).slice(0, 80)}…`)
+  console.log(`[test] агент выбрал: ${(resolved.optionIds ?? []).join(',')} · обоснование: ${String(resolved.reasoning).slice(0, 80)}…`)
   await waitFor((d) => d.runId === runId && d.event?.type === 'run:summary')
 
   const snapshot: any = await new Promise((resolve) => {
@@ -104,7 +104,7 @@ async function scenarioAuto() {
   const byId = new Map<string, any>(snapshot.nodes.map((n: any) => [n.id, n]))
   const dec = byId.get('dec1')
   const ok =
-    dec?.decision?.chosen === 'b' &&
+    Array.isArray(dec?.decision?.chosen) && dec?.decision?.chosen.join() === 'b' &&
     dec?.decision?.chosenBy === 'agent' &&
     !!dec?.decision?.reasoning &&
     byId.get('b1b')?.status === 'done' &&
@@ -151,7 +151,7 @@ async function scenarioSwitchToAuto() {
     ok,
     [
       `decision:mode result=${JSON.stringify(modeResult)}`,
-      `resolved by=${resolved.by} option=${resolved.optionId}`,
+      `resolved by=${resolved.by} option=${(resolved.optionIds ?? []).join(',')}`,
       `snapshot: chosenBy=${dec?.decision?.chosenBy} status=${snapshot.status}`,
     ]
   )

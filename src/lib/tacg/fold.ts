@@ -9,6 +9,7 @@ export function foldEvents(events: RunEvent[]): RunView {
   let progress = 0
   let summary: string | undefined
   let decisionMode: DecisionMode = 'manual'
+  let certainty: number | undefined
   const logs: LogEntry[] = []
 
   for (const ev of events) {
@@ -35,6 +36,9 @@ export function foldEvents(events: RunEvent[]): RunView {
       case 'run:summary':
         summary = ev.summary
         break
+      case 'run:certainty':
+        certainty = ev.certainty
+        break
       case 'decision:offer':
       case 'decision:resolved':
         // состояние развилки переносится через node:update; события — сигнал для UI
@@ -44,7 +48,7 @@ export function foldEvents(events: RunEvent[]): RunView {
         break
     }
   }
-  return { nodes: [...nodes.values()], version, status, progress, logs, summary, decisionMode }
+  return { nodes: [...nodes.values()], version, status, progress, logs, summary, decisionMode, certainty }
 }
 
 /** Рёбра графа выводятся из зависимостей узлов */

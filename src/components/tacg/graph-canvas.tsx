@@ -21,7 +21,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { CheckCircle2, GitFork, Loader2, Network, PenLine, Plus, X } from 'lucide-react'
-import { GraphNode } from '@/lib/tacg/types'
+import { chosenIds, GraphNode, selectionMode } from '@/lib/tacg/types'
 import { computeEdges } from '@/lib/tacg/fold'
 import { useTacgStore } from '@/store/tacg-store'
 import { cn } from '@/lib/utils'
@@ -107,9 +107,11 @@ function TacgNodeCard({ data: n, selected }: NodeProps<TacgFlowNode>) {
   const decisionMode = useTacgStore((s) => s.decisionMode)
   const isDecision = n.kind === 'decision' && !!n.decision
   const dec = isDecision ? n.decision! : undefined
-  const offered = isDecision && dec?.status === 'offered' && !dec?.chosen
+  const offered = isDecision && dec?.status === 'offered' && chosenIds(dec).length === 0
   const waitingUser = offered && (decisionMode ?? 'manual') === 'manual'
-  const chosenOpt = dec?.options.find((o) => o.id === dec?.chosen)
+  const picked = dec ? chosenIds(dec) : []
+  const chosenOpts = dec ? dec.options.filter((o) => picked.includes(o.id)) : []
+  const mixedSelection = selectionMode(dec) === 'mixed'
 
   return (
     <div
@@ -186,9 +188,10 @@ function TacgNodeCard({ data: n, selected }: NodeProps<TacgFlowNode>) {
               status={n.status}
               decisionStatus={dec?.status ?? 'pending'}
               waitingUser={!!waitingUser}
-              chosenLabel={chosenOpt?.label}
+              chosenLabels={chosenOpts.map((o) => o.label)}
               chosenBy={dec?.chosenBy}
               optionsCount={dec?.options.length ?? 0}
+              mixed={mixedSelection}
             />
           ) : n.status === 'running' ? (
             <span className="flex items-center gap-1 text-cyan-300">
@@ -237,22 +240,27 @@ function DecisionStatusRow({
   status,
   decisionStatus,
   waitingUser,
-  chosenLabel,
+  chosenLabels,
   chosenBy,
   optionsCount,
+  mixed,
 }: {
   status: GraphNode['status']
   decisionStatus: 'pending' | 'offered' | 'resolved'
   waitingUser: boolean
-  chosenLabel?: string
+  chosenLabels: string[]
   chosenBy?: 'agent' | 'user'
   optionsCount: number
+  mixed?: boolean
 }) {
-  if (decisionStatus === 'resolved' && chosenLabel) {
+  if (decisionStatus === 'resolved' && chosenLabels.length) {
+    const isMixed = chosenLabels.length > 1
     return (
       <span className="flex min-w-0 items-center gap-1.5 text-emerald-300">
         <CheckCircle2 className="size-3 shrink-0" />
-        <span className="truncate">выбрано: {chosenLabel}</span>
+        <span className="truncate">
+          {isMixed ? `смешанное: ${chosenLabels.join(' + ')}` : `выбрано: ${chosenLabels[0]}`}
+        </span>
         <span className="shrink-0 text-zinc-500">· {chosenBy === 'user' ? 'вы' : 'агент'}</span>
       </span>
     )
@@ -261,7 +269,7 @@ function DecisionStatusRow({
     return waitingUser ? (
       <span className="flex animate-pulse items-center gap-1 text-fuchsia-300">
         <GitFork className="size-3 shrink-0" />
-        ждёт вашего выбора
+        {mixed ? `ждёт выбора (можно несколько)` : 'ждёт вашего выбора'}
       </span>
     ) : (
       <span className="flex items-center gap-1 text-fuchsia-300">
@@ -336,11 +344,11 @@ function FlowStage({
         let dash: string | undefined
 
         const isBranchEdge = from.kind === 'decision' && to.branchOf?.decisionId === from.id
-        const chosen = from.decision?.chosen
+        const chosen = from.decision ? chosenIds(from.decision) : []
         const deadBranch =
           from.status === 'discarded' ||
           to.status === 'discarded' ||
-          (isBranchEdge && chosen && to.branchOf?.optionId !== chosen)
+          (isBranchEdge && chosen.length > 0 && !chosen.includes(to.branchOf?.optionId ?? ''))
 
         if (deadBranch) {
           // нереализованная ветка: тихое пунктирное ребро

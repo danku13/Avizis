@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { NodeStatusBadge } from './status-badge'
-import { GraphNode, RunEvent } from '@/lib/tacg/types'
+import { chosenIds, DECISION_DOMAIN_LABELS, GraphNode, RunEvent, selectionMode } from '@/lib/tacg/types'
 import { getSocket } from '@/lib/tacg/socket'
 import { useTacgStore } from '@/store/tacg-store'
 import { toast } from 'sonner'
@@ -68,7 +68,7 @@ export function NodeInspectorModal() {
     !!node &&
     node.kind === 'decision' &&
     node.decision?.status === 'offered' &&
-    !node.decision?.chosen &&
+    chosenIds(node.decision).length === 0 &&
     node.status === 'running'
 
   const [editing, setEditing] = useState(false)
@@ -107,6 +107,8 @@ export function NodeInspectorModal() {
   const isPlayback = cursor !== null
   const dec = node?.kind === 'decision' ? node.decision : undefined
   const branchOf = node?.branchOf
+  const pickedIds = dec ? chosenIds(dec) : []
+  const decMixed = selectionMode(dec) === 'mixed'
 
   return (
     <Dialog open={!!selectedNodeId} onOpenChange={close}>
@@ -196,19 +198,26 @@ export function NodeInspectorModal() {
                     <div className="rounded-lg border border-fuchsia-500/30 bg-fuchsia-500/10 p-3 text-xs leading-relaxed text-fuchsia-200">
                       <span className="font-semibold">Вопрос развилки: </span>
                       {dec.question}
+                      {(dec.domain || decMixed) && (
+                        <span className="mt-1.5 block text-[11px] text-fuchsia-300/70">
+                          {dec.domain ? `Домен уточнения: ${DECISION_DOMAIN_LABELS[dec.domain]}` : ''}
+                          {dec.domain && decMixed ? ' · ' : ''}
+                          {decMixed ? 'допустимо смешанное решение' : ''}
+                        </span>
+                      )}
                     </div>
 
                     <div className="space-y-2">
                       <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Варианты агента</h4>
                       {dec.options.map((o) => {
-                        const chosen = dec.chosen === o.id
+                        const chosen = pickedIds.includes(o.id)
                         return (
                           <div
                             key={o.id}
                             className={cn(
                               'rounded-lg border p-3',
                               chosen ? 'border-emerald-500/50 bg-emerald-500/10' : 'border-zinc-700/70 bg-zinc-900/60',
-                              !chosen && dec.chosen && 'opacity-60'
+                              !chosen && pickedIds.length > 0 && 'opacity-60'
                             )}
                           >
                             <div className="flex items-center justify-between gap-2">
@@ -226,7 +235,7 @@ export function NodeInspectorModal() {
                               {chosen && (
                                 <span className="flex shrink-0 items-center gap-1 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-300">
                                   <CheckCircle2 className="size-3" />
-                                  выбран
+                                  {pickedIds.length > 1 ? 'в составе' : 'выбран'}
                                 </span>
                               )}
                             </div>
@@ -250,12 +259,17 @@ export function NodeInspectorModal() {
                       </div>
                     )}
 
-                    {dec.chosen && (
+                    {pickedIds.length > 0 && (
                       <div className="space-y-2">
                         <div className="flex items-center gap-2 text-xs text-emerald-300">
                           <CheckCircle2 className="size-3.5" />
                           Решение принял: {dec.chosenBy === 'user' ? 'пользователь' : 'агент'}
-                          <span className="text-zinc-500">· вариант «{dec.chosen}»</span>
+                          <span className="text-zinc-500">
+                            ·{' '}
+                            {pickedIds.length > 1
+                              ? `смешанное решение «${pickedIds.join(' + ')}»`
+                              : `вариант «${pickedIds[0]}»`}
+                          </span>
                         </div>
                         {dec.reasoning && (
                           <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs leading-relaxed text-emerald-100">

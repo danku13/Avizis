@@ -1,0 +1,884 @@
+     1→// Вычислительный движок агента TACG: планирование → пошаговое выполнение →
+     2→// динамическая адаптация → вмешательство пользователя. Реальные вызовы LLM
+     3→// выполняются через z-ai-web-dev-sdk (llm.ts), демо-режим — симуляция.
+     4→import { Server } from 'socket.io'
+     5→import { DecisionMode, DecisionOption, GraphNode, RunEvent, RunMode, RunSnapshot, RunStatus } from './types'
+     6→import { DEMO_ADAPTATIONS, DEMO_AUTO_PICK, DEFAULT_TASK, demoOutput, demoPlan, sleep } from './demo'
+     7→import { chatJson, chatText, getZai } from './llm'
+     8→import { store } from './store'
+     9→
+    10→const now = () => Date.now()
+    11→const trunc = (s: string, n: number) => (s && s.length > n ? s.slice(0, n - 1) + '…' : s || '')
+    12→
+    13→export class StoppedError extends Error {
+    14→  constructor() {
+    15→    super('stopped')
+    16→  }
+    17→}
+    18→
+    19→/** Выбор на развилке: вариант + кто выбрал + обоснование агента */
+    20→interface DecisionChoice {
+    21→  optionId: string
+    22→  by: 'agent' | 'user'
+    23→  reasoning?: string
+    24→}
+    25→
+    26→interface Runtime {
+    27→  snapshot: RunSnapshot
+    28→  stopped: boolean
+    29→  paused: boolean
+    30→  loopActive: boolean
+    31→  dynamicAdded: number
+    32→  demoAdaptDone: Set<number>
+    33→  /** Текущий режим решений (зеркало snapshot.decisionMode) */
+    34→  decisionMode: DecisionMode
+    35→  /** Ожидаемое решение пользователя на развилке (null — ожидания нет) */
+    36→  pendingDecision: { nodeId: string; resolve: (choice: DecisionChoice | null) => void } | null
+    37→}
+    38→
+    39→const PLANNER_SYS = `Ты — модуль планирования ИИ-агента. Твоя задача — разбить запрос пользователя на вычислительный граф из шагов. Отвечай ТОЛЬКО валидным JSON без markdown-обёрток и пояснений.`
+    40→
+    41→const EXECUTOR_SYS = `Ты — исполнительный модуль ИИ-агента внутри вычислительного графа. Выполни запрошенный шаг. Отвечай по-русски, лаконично и по делу (до 120 слов), без markdown-заголовков.`
+    42→
+    43→const SUPERVISOR_SYS = `Ты — супервайзер вычислительного графа ИИ-агента. После завершения очередного узла ты решаешь, нужно ли ДОПОЛНИТЬ план новым шагом. Отвечай ТОЛЬКО валидным JSON.`
+    44→
+    45→const DECIDER_SYS = `Ты — модуль принятия решений ИИ-агента на развилке вычислительного графа. Взвесь варианты с учётом задачи и контекста, выбери один. Отвечай ТОЛЬКО валидным JSON без markdown-обёрток.`
+    46→
+    47→export class AgentEngine {
+    48→  private runs = new Map<string, Runtime>()
+    49→
+    50→  constructor(private io: Server) {}
+    51→
+    52→  getRun(runId: string): RunSnapshot | undefined {
+    53→    const rt = this.runs.get(runId)
+    54→    if (rt) return rt.snapshot
+    55→    return store.get(runId)
+    56→  }
+    57→
+    58→  private emit(channel: string, payload: any) {
+    59→    this.io.emit(channel, payload)
+    60→  }
+    61→
+    62→  /** Каждое событие: в журнал запуска (для replay) + broadcast всем клиентам */
+    63→  private emitEvent(rt: Runtime, ev: RunEvent) {
+    64→    rt.snapshot.events.push(ev)
+    65→    this.emit('run:event', { runId: rt.snapshot.id, event: ev })
+    66→  }
+    67→
+    68→  private log(rt: Runtime, kind: RunSnapshot['logs'][number]['kind'], message: string) {
+    69→    const entry = { id: 'l' + rt.snapshot.logs.length, ts: now(), kind, message }
+    70→    rt.snapshot.logs.push(entry)
+    71→    this.emitEvent(rt, { type: 'log', ts: entry.ts, entry })
+    72→  }
+    73→
+    74→  private pushStatus(rt: Runtime, status: RunStatus, progress: number) {
+    75→    rt.snapshot.status = status
+    76→    rt.snapshot.progress = progress
+    77→    this.emitEvent(rt, { type: 'run:status', ts: now(), status, progress })
+    78→    if (status === 'completed' || status === 'stopped' || status === 'error') {
+    79→      this.emit('history:list', { runs: store.history() })
+    80→    }
+    81→  }
+    82→
+    83→  // ─────────────────────────── Запуск ───────────────────────────
+    84→
+    85→  async start(taskInput: string, mode: RunMode, decisionMode: DecisionMode = 'manual'): Promise<RunSnapshot> {
+    86→    const task = (taskInput || '').trim().slice(0, 500) || DEFAULT_TASK
+    87→    const id = 'run_' + now().toString(36) + Math.random().toString(36).slice(2, 7)
+    88→    const run: RunSnapshot = {
+    89→      id,
+    90→      task,
+    91→      mode,
+    92→      decisionMode,
+    93→      status: 'planning',
+    94→      createdAt: now(),
+    95→      progress: 0,
+    96→      nodes: [],
+    97→      version: 0,
+    98→      versions: [],
+    99→      events: [],
+   100→      logs: [],
+   101→    }
+   102→    const rt: Runtime = {
+   103→      snapshot: run,
+   104→      stopped: false,
+   105→      paused: false,
+   106→      loopActive: false,
+   107→      dynamicAdded: 0,
+   108→      demoAdaptDone: new Set(),
+   109→      decisionMode,
+   110→      pendingDecision: null,
+   111→    }
+   112→    this.runs.set(id, rt)
+   113→
+   114→    this.emit('run:created', { runId: id, task, mode, decisionMode, createdAt: run.createdAt })
+   115→    this.emitEvent(rt, { type: 'decision:mode', ts: now(), mode: decisionMode })
+   116→    this.pushStatus(rt, 'planning', 0)
+   117→    this.log(rt, 'run', `Запуск агента · ${mode === 'demo' ? 'демо-режим (симуляция)' : 'LLM через z-ai-web-dev-sdk'} · задача: «${trunc(task, 90)}»`)
+   118→
+   119→    if (mode === 'llm') {
+   120→      this.log(rt, 'plan', 'Планировщик LLM анализирует задачу…')
+   121→      try {
+   122→        await getZai()
+   123→      } catch (e: any) {
+   124→        this.log(rt, 'run', `Ошибка инициализации SDK: ${e?.message || e}`)
+   125→        this.pushStatus(rt, 'error', 0)
+   126→        store.save(run)
+   127→        return run
+   128→      }
+   129→    } else {
+   130→      this.log(rt, 'plan', 'Планировщик строит граф задачи…')
+   131→      await sleep(900)
+   132→    }
+   133→
+   134→    let nodes: GraphNode[]
+   135→    if (mode === 'llm') {
+   136→      nodes = await this.planWithLLM(task, rt)
+   137→    } else {
+   138→      nodes = demoPlan()
+   139→    }
+   140→
+   141→    this.emitEvent(rt, { type: 'graph:init', ts: now(), nodes })
+   142→    run.nodes = nodes.map((n) => ({ ...n }))
+   143→    run.version = 1
+   144→    run.versions.push({ version: 1, createdAt: now(), description: 'Исходный план агента', nodeIds: nodes.map((n) => n.id) })
+   145→    this.log(rt, 'plan', `План готов: ${nodes.length} узлов · версия графа v1`)
+   146→    this.pushStatus(rt, 'running', 0)
+   147→    this.log(rt, 'run', 'Выполнение графа началось')
+   148→    store.save(run)
+   149→
+   150→    this.runLoop(rt).catch((err: any) => {
+   151→      this.log(rt, 'run', `Внутренняя ошибка цикла выполнения: ${err?.message || err}`)
+   152→      this.pushStatus(rt, 'error', run.progress)
+   153→    })
+   154→    return run
+   155→  }
+   156→
+   157→  private async planWithLLM(task: string, rt: Runtime): Promise<GraphNode[]> {
+   158→    const user = `Задача пользователя: «${task}»
+   159→
+   160→Составь план из 4–7 шагов с ОДНОЙ развилкой (узлом-решением): точкой, где выбор одного из вариантов меняет дальнейшие шаги и итоговый результат. Формат ответа — строго один JSON-объект без каких-либо дополнений:
+   161→
+   162→{"nodes":[
+   163→  {"id":"n1","title":"краткое название шага","description":"что делает шаг, 1-2 предложения","dependsOn":[]},
+   164→  {"id":"dec1","title":"Решение: ...","description":"суть развилки","dependsOn":["n1"],
+   165→   "decision":{"question":"вопрос, который решается на развилке","options":[
+   166→     {"id":"a","label":"название варианта","rationale":"обоснование: плюсы, минусы, цена выбора","steps":[
+   167→       {"id":"ba1","title":"шаг ветки A","description":"..."}
+   168→     ]},
+   169→     {"id":"b","label":"название варианта","rationale":"...","steps":[
+   170→       {"id":"bb1","title":"шаг ветки B","description":"..."}
+   171→     ]}
+   172→   ]}},
+   173→  {"id":"nfin","title":"Формирование результата","description":"сведение итога","dependsOn":["ba1","bb1"]}
+   174→]}
+   175→
+   176→Правила:
+   177→- Названия и описания — на русском языке. Первый узел имеет пустой dependsOn.
+   178→- Развилка одна; вариантов 2–3; шагов в каждой ветке 1–3. Первый шаг ветки выполняется вместо шагов других веток.
+   179→- Итоговый узел зависит от хвостов ВСЕХ веток (перечисли их в dependsOn).
+   180→- dependsOn ссылается только на id уже объявленных узлов. Массив nodes обязан быть закрыт перед концом объекта.`
+   181→    try {
+   182→      const json = await chatJson(PLANNER_SYS, user, 60_000, 2)
+   183→      const nodes = this.sanitizePlan(json)
+   184→      if (nodes) {
+   185→        const decCount = nodes.filter((n) => n.kind === 'decision').length
+   186→        this.log(rt, 'plan', `Планировщик LLM построил граф из ${nodes.length} узлов${decCount ? ` · развилок: ${decCount}` : ''}`)
+   187→        return nodes
+   188→      }
+   189→      this.log(rt, 'info', 'Не удалось разобрать JSON плана — применён резервный план')
+   190→    } catch (e: any) {
+   191→      this.log(rt, 'info', `Планировщик LLM недоступен (${trunc(e?.message || '', 80)}) — применён резервный план`)
+   192→    }
+   193→    return demoPlan()
+   194→  }
+   195→
+   196→  /** Нормализация плана LLM: цепочки + узел-развилка с ветками вариантов */
+   197→  private sanitizePlan(json: any): GraphNode[] | null {
+   198→    const rawNodes = Array.isArray(json?.nodes) ? json.nodes.slice(0, 12) : null
+   199→    if (!rawNodes || rawNodes.length === 0) return null
+   200→
+   201→    const used = new Set<string>()
+   202→    const cleanId = (v: any, fallback: string): string => {
+   203→      let s = String(v ?? '').trim().toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 12)
+   204→      if (!s) s = fallback
+   205→      while (used.has(s)) s = (s.slice(0, 9) || 'n') + 'x' + Math.floor(Math.random() * 900 + 100)
+   206→      used.add(s)
+   207→      return s
+   208→    }
+   209→
+   210→    const declared = new Set<string>()
+   211→    const cleanDeps = (raw: any, exclude: Set<string>): string[] => {
+   212→      const arr: any[] = Array.isArray(raw?.dependsOn) ? raw.dependsOn : []
+   213→      const deps = arr
+   214→        .map((d: any) => String(d ?? '').trim().toLowerCase().replace(/[^a-z0-9]/g, ''))
+   215→        .filter((d: string) => d && declared.has(d) && !exclude.has(d))
+   216→      return [...new Set(deps)].slice(0, 5)
+   217→    }
+   218→
+   219→    const nodes: GraphNode[] = []
+   220→    rawNodes.forEach((raw: any, i: number) => {
+   221→      const id = cleanId(raw?.id, `n${i + 1}`)
+   222→      const decisionRaw = raw?.decision
+   223→      const optionsRaw = Array.isArray(decisionRaw?.options) ? decisionRaw.options.filter((o: any) => o).slice(0, 3) : []
+   224→      const hasDecision = optionsRaw.length >= 2 && !!decisionRaw?.question
+   225→
+   226→      if (hasDecision) {
+   227→        const branchIds = new Set<string>()
+   228→        const options: DecisionOption[] = []
+   229→        optionsRaw.forEach((ro: any, j: number) => {
+   230→          const optId = ['a', 'b', 'c'][j]
+   231→          const stepsRaw = Array.isArray(ro?.steps) ? ro.steps.filter((s: any) => s).slice(0, 3) : []
+   232→          options.push({
+   233→            id: optId,
+   234→            label: String(ro?.label || `Вариант ${optId}`).slice(0, 60),
+   235→            rationale: String(ro?.rationale || '').slice(0, 320),
+   236→            nextSteps: stepsRaw.map((s: any) => String(s?.title || 'шаг ветки').slice(0, 60)),
+   237→          })
+   238→          // шаги ветки: цепочка от развилки
+   239→          let prev = id
+   240→          stepsRaw.forEach((rs: any, k: number) => {
+   241→            const bid = cleanId(rs?.id, `${id}${optId}${k + 1}`)
+   242→            branchIds.add(bid)
+   243→            declared.add(bid)
+   244→            nodes.push({
+   245→              id: bid,
+   246→              title: String(rs?.title || `Шаг ветки ${optId}${k + 1}`).slice(0, 60),
+   247→              description: String(rs?.description || '').slice(0, 240),
+   248→              status: 'pending',
+   249→              dependsOn: [prev],
+   250→              dynamic: false,
+   251→              runs: 0,
+   252→              branchOf: { decisionId: id, optionId: optId },
+   253→            })
+   254→            prev = bid
+   255→          })
+   256→        })
+   257→        declared.add(id)
+   258→        nodes.push({
+   259→          id,
+   260→          kind: 'decision',
+   261→          title: String(raw?.title || 'Решение').slice(0, 60),
+   262→          description: String(raw?.description || '').slice(0, 240),
+   263→          status: 'pending',
+   264→          dependsOn: cleanDeps(raw, branchIds),
+   265→          dynamic: false,
+   266→          runs: 0,
+   267→          decision: {
+   268→            question: String(decisionRaw.question).slice(0, 300),
+   269→            options,
+   270→            status: 'pending',
+   271→          },
+   272→        })
+   273→      } else {
+   274→        declared.add(id)
+   275→        nodes.push({
+   276→          id,
+   277→          title: String(raw?.title || `Шаг ${i + 1}`).slice(0, 60),
+   278→          description: String(raw?.description || '').slice(0, 240),
+   279→          status: 'pending',
+   280→          dependsOn: cleanDeps(raw, new Set()),
+   281→          dynamic: false,
+   282→          runs: 0,
+   283→        })
+   284→      }
+   285→    })
+   286→    if (nodes.length < 2) return null
+   287→    return nodes
+   288→  }
+   289→
+   290→  // ─────────────────────── Цикл выполнения ───────────────────────
+   291→
+   292→  private async runLoop(rt: Runtime) {
+   293→    if (rt.loopActive) return
+   294→    rt.loopActive = true
+   295→    try {
+   296→      while (true) {
+   297→        const run = rt.snapshot
+   298→        if (rt.stopped) {
+   299→          this.finalizeStopped(rt)
+   300→          return
+   301→        }
+   302→        const node = this.nextReadyNode(run)
+   303→        if (!node) {
+   304→          const errored = run.nodes.find((n) => n.status === 'error')
+   305→          if (errored) {
+   306→            this.log(rt, 'node-error', `Узел «${errored.title}» завершился ошибкой — выполнение остановлено. Доступно вмешательство: «Повторить узел».`)
+   307→            this.pushStatus(rt, 'error', run.progress)
+   308→            run.finishedAt = now()
+   309→            store.save(run)
+   310→            return
+   311→          }
+   312→          const pending = run.nodes.filter((n) => n.status === 'pending')
+   313→          if (pending.length) {
+   314→            this.log(rt, 'run', 'Обнаружена циклическая зависимость — оставшиеся узлы пропущены')
+   315→            pending.forEach((n) => {
+   316→              n.status = 'skipped'
+   317→              this.emitEvent(rt, { type: 'node:update', ts: now(), node: { ...n } })
+   318→            })
+   319→          }
+   320→          this.finalizeCompleted(rt)
+   321→          return
+   322→        }
+   323→
+   324→        await this.waitWhilePaused(rt)
+   325→        if (rt.stopped) continue
+   326→
+   327→        node.input = this.buildInput(run, node)
+   328→        node.status = 'running'
+   329→        node.startedAt = now()
+   330→        node.runs = (node.runs ?? 0) + 1
+   331→        node.error = undefined
+   332→        this.emitEvent(rt, { type: 'node:update', ts: now(), node: { ...node } })
+   333→        this.log(rt, 'node-start', `▶ «${node.title}» — выполнение`)
+   334→
+   335→        // ─── Узел-развилка: рассуждение → предложение вариантов → выбор → гашение веток ───
+   336→        if (node.kind === 'decision' && node.decision) {
+   337→          const decided = await this.handleDecisionNode(rt, node)
+   338→          if (!decided) continue // остановлен во время решения — цикл завершит очистку
+   339→          this.recalcProgress(rt)
+   340→          this.pushStatus(rt, rt.paused ? 'paused' : 'running', run.progress)
+   341→          store.save(run)
+   342→          continue
+   343→        }
+   344→
+   345→        try {
+   346→          const output =
+   347→            run.mode === 'demo' ? await this.demoExecute(node, rt) : await this.llmExecute(run, node)
+   348→          node.status = 'done'
+   349→          node.output = output
+   350→          node.finishedAt = now()
+   351→          node.durationMs = node.finishedAt - (node.startedAt ?? node.finishedAt)
+   352→          this.emitEvent(rt, { type: 'node:update', ts: now(), node: { ...node } })
+   353→          this.log(rt, 'node-done', `✓ «${node.title}» — завершён за ${((node.durationMs ?? 0) / 1000).toFixed(1)} с`)
+   354→        } catch (err: any) {
+   355→          if (err instanceof StoppedError) {
+   356→            node.status = 'pending'
+   357→            node.startedAt = undefined
+   358→            node.input = undefined
+   359→            this.emitEvent(rt, { type: 'node:update', ts: now(), node: { ...node } })
+   360→            this.finalizeStopped(rt)
+   361→            return
+   362→          }
+   363→          node.status = 'error'
+   364→          node.error = err?.message || String(err)
+   365→          node.finishedAt = now()
+   366→          node.durationMs = node.finishedAt - (node.startedAt ?? node.finishedAt)
+   367→          this.emitEvent(rt, { type: 'node:update', ts: now(), node: { ...node } })
+   368→          this.log(rt, 'node-error', `✗ «${node.title}» — ошибка: ${trunc(node.error ?? '', 140)}`)
+   369→          continue
+   370→        }
+   371→
+   372→        await this.maybeAdapt(rt, node)
+   373→        this.recalcProgress(rt)
+   374→        this.pushStatus(rt, rt.paused ? 'paused' : 'running', run.progress)
+   375→        store.save(run)
+   376→      }
+   377→    } finally {
+   378→      rt.loopActive = false
+   379→    }
+   380→  }
+   381→
+   382→  private nextReadyNode(run: RunSnapshot): GraphNode | undefined {
+   383→    const byId = new Map(run.nodes.map((n) => [n.id, n]))
+   384→    // «discarded» = ветка не реализована: зависимость от неё считается удовлетворённой
+   385→    const ready = (n: GraphNode) =>
+   386→      n.dependsOn.every((d) => {
+   387→        const dep = byId.get(d)
+   388→        return !dep || dep.status === 'done' || dep.status === 'skipped' || dep.status === 'discarded'
+   389→      })
+   390→    return run.nodes.find((n) => n.status === 'pending' && ready(n))
+   391→  }
+   392→
+   393→  private buildInput(run: RunSnapshot, node: GraphNode): string {
+   394→    const deps = node.dependsOn
+   395→      .map((id) => run.nodes.find((n) => n.id === id))
+   396→      .filter((n): n is GraphNode => !!n && n.status === 'done')
+   397→    if (!deps.length) return `Задача: ${run.task}`
+   398→    return `Задача: ${run.task}\n\nРезультаты предыдущих шагов:\n${deps
+   399→      .map((d) => `• «${d.title}»: ${trunc(d.output || '—', 260)}`)
+   400→      .join('\n')}`
+   401→  }
+   402→
+   403→  private async demoExecute(node: GraphNode, rt: Runtime): Promise<string> {
+   404→    const dec = rt.snapshot.nodes.find(
+   405→      (n) => n.kind === 'decision' && n.decision?.status === 'resolved' && n.decision.chosen
+   406→    )
+   407→    const chosen = dec?.decision
+   408→      ? {
+   409→          id: dec.decision.chosen!,
+   410→          label: dec.decision.options.find((o) => o.id === dec.decision!.chosen)?.label ?? '',
+   411→        }
+   412→      : undefined
+   413→    const base = demoOutput(node, rt.snapshot.task, chosen)
+   414→    const isRerun = (node.runs ?? 0) > 1
+   415→    const text = isRerun ? `↻ Пересчёт после вмешательства пользователя.\n\n${base}` : base
+   416→    const duration = isRerun ? 1200 : 2300
+   417→    const deadline = now() + duration
+   418→    while (now() < deadline) {
+   419→      if (rt.stopped) throw new StoppedError()
+   420→      while (rt.paused && !rt.stopped) await sleep(150)
+   421→      if (rt.stopped) throw new StoppedError()
+   422→      await sleep(120)
+   423→    }
+   424→    return text
+   425→  }
+   426→
+   427→  private async llmExecute(run: RunSnapshot, node: GraphNode): Promise<string> {
+   428→    const user = `Задача пользователя: «${run.task}»
+   429→
+   430→Текущий шаг: «${node.title}»
+   431→Описание шага: ${node.description || '—'}
+   432→
+   433→${node.input || `Задача: ${run.task}`}
+   434→
+   435→Выполни текущий шаг и верни его результат.`
+   436→    return chatText(EXECUTOR_SYS, user, 90_000, 1)
+   437→  }
+   438→
+   439→  // ───────────────────── Динамическая адаптация ─────────────────────
+   440→
+   441→  private async maybeAdapt(rt: Runtime, finished: GraphNode) {
+   442→    const run = rt.snapshot
+   443→    if (run.mode === 'demo') {
+   444→      const idx = DEMO_ADAPTATIONS.findIndex((a, i) => a.after === finished.id && !rt.demoAdaptDone.has(i))
+   445→      if (idx < 0) return
+   446→      rt.demoAdaptDone.add(idx)
+   447→      await sleep(450)
+   448→      const spec = DEMO_ADAPTATIONS[idx]
+   449→      this.insertNode(rt, { ...spec.node, dependsOn: [finished.id] }, spec.reason)
+   450→      return
+   451→    }
+   452→
+   453→    // LLM-режим: супервайзер решает, нужен ли дополнительный шаг
+   454→    if (rt.dynamicAdded >= 2) return
+   455→    const hasPendingSuccessors = run.nodes.some((n) => n.status === 'pending' && n.dependsOn.includes(finished.id))
+   456→    const anyPending = run.nodes.some((n) => n.status === 'pending')
+   457→    if (!hasPendingSuccessors && !anyPending) return
+   458→    if (run.nodes.filter((n) => n.dynamic).length >= 2) return
+   459→
+   460→    const graphDesc = run.nodes
+   461→      .map((n) => `- ${n.id} «${n.title}» [${n.status}]${n.output ? ': ' + trunc(n.output, 110) : ''}`)
+   462→      .join('\n')
+   463→    const user = `Задача: «${run.task}»
+   464→
+   465→Текущий граф:
+   466→${graphDesc}
+   467→
+   468→Только что завершён узел «${finished.title}»: ${trunc(finished.output || '', 300)}
+   469→
+   470→Вопрос: есть ли ЯВНЫЙ пробел, который стоит закрыть дополнительным шагом перед выполнением следующих узлов? В подавляющем большинстве случаев отвечай no_changes — добавляй узел только при реальном пробеле (например, данные требуют валидации, а её нет в плане).
+   471→
+   472→Формат ответа:
+   473→{"decision":"no_changes"}
+   474→или
+   475→{"decision":"add_node","node":{"title":"...","description":"...","reason":"почему добавляем"}}`
+   476→
+   477→    try {
+   478→      const json = await chatJson(SUPERVISOR_SYS, user, 45_000, 0)
+   479→      if (json?.decision === 'add_node' && json.node?.title) {
+   480→        const id = `dyn${rt.dynamicAdded + 1}`
+   481→        this.insertNode(
+   482→          rt,
+   483→          {
+   484→            id,
+   485→            title: String(json.node.title).slice(0, 60),
+   486→            description: String(json.node.description || '').slice(0, 240),
+   487→            dependsOn: [finished.id],
+   488→          },
+   489→          String(json.node.reason || 'Выявлен пробел в плане').slice(0, 240)
+   490→        )
+   491→      }
+   492→    } catch {
+   493→      /* супервайзер недоступен → план не меняем */
+   494→    }
+   495→  }
+   496→
+   497→  private insertNode(rt: Runtime, spec: { id: string; title: string; description: string; dependsOn: string[] }, reason: string) {
+   498→    const run = rt.snapshot
+   499→    const newNode: GraphNode = {
+   500→      id: spec.id,
+   501→      title: spec.title,
+   502→      description: spec.description,
+   503→      status: 'pending',
+   504→      dependsOn: [...spec.dependsOn],
+   505→      dynamic: true,
+   506→      reason,
+   507→      addedAtVersion: run.version + 1,
+   508→      runs: 0,
+   509→    }
+   510→    const changed: GraphNode[] = [newNode]
+   511→    const anchor = spec.dependsOn[0]
+   512→    // Перепривязываем ещё не начатые узлы, зависящие от якоря, на новый узел
+   513→    for (const n of run.nodes) {
+   514→      if (n.status === 'pending' && n.dependsOn.includes(anchor)) {
+   515→        n.dependsOn = [...new Set(n.dependsOn.map((d) => (d === anchor ? newNode.id : d)))]
+   516→        changed.push({ ...n })
+   517→      }
+   518→    }
+   519→    run.nodes.push(newNode)
+   520→    run.version += 1
+   521→    rt.dynamicAdded += 1
+   522→    run.versions.push({ version: run.version, createdAt: now(), description: reason, nodeIds: run.nodes.map((n) => n.id) })
+   523→    this.emitEvent(rt, { type: 'graph:adapt', ts: now(), reason, version: run.version, nodes: changed.map((n) => ({ ...n })) })
+   524→    this.log(rt, 'adapt', `＋ Граф адаптирован (v${run.version}): добавлен узел «${newNode.title}». Причина: ${reason}`)
+   525→    store.save(run)
+   526→  }
+   527→
+   528→  // ───────────────────── Развилки: предложения и выбор ─────────────────────
+   529→
+   530→  /** Жизненный цикл узла-развилки: рассуждение → предложение вариантов → выбор → активация ветки */
+   531→  private async handleDecisionNode(rt: Runtime, node: GraphNode): Promise<boolean> {
+   532→    const dec = node.decision!
+   533→    this.log(rt, 'decision', `⎇ Развилка «${node.title}»: ${dec.question}`)
+   534→    try {
+   535→      await this.decisionThinkDelay(rt)
+   536→    } catch {
+   537→      return this.rollbackDecision(rt, node)
+   538→    }
+   539→    if (rt.stopped) return this.rollbackDecision(rt, node)
+   540→
+   541→    dec.status = 'offered'
+   542→    this.emitEvent(rt, { type: 'node:update', ts: now(), node: { ...node } })
+   543→    this.emitEvent(rt, {
+   544→      type: 'decision:offer',
+   545→      ts: now(),
+   546→      nodeId: node.id,
+   547→      question: dec.question,
+   548→      options: dec.options,
+   549→    })
+   550→
+   551→    if (rt.decisionMode === 'manual') {
+   552→      this.log(
+   553→        rt,
+   554→        'decision',
+   555→        `⎇ Режим «ручной выбор»: агент предлагает ${dec.options.length} варианта с обоснованием и ожидает решения пользователя`
+   556→      )
+   557→      const choice = await this.waitForDecision(rt, node)
+   558→      if (!choice) return this.rollbackDecision(rt, node)
+   559→      this.resolveDecision(rt, node, choice.optionId, choice.by, choice.reasoning)
+   560→    } else {
+   561→      this.log(rt, 'decision', '⎇ Режим «авто»: агент взвешивает варианты и принимает решение самостоятельно')
+   562→      const picked = await this.autoDecide(rt, node)
+   563→      if (rt.stopped) return this.rollbackDecision(rt, node)
+   564→      this.resolveDecision(rt, node, picked.optionId, 'agent', picked.reasoning)
+   565→    }
+   566→    return true
+   567→  }
+   568→
+   569→  /** Откат развилки (остановка во время решения): узел возвращается в очередь */
+   570→  private rollbackDecision(rt: Runtime, node: GraphNode): boolean {
+   571→    node.status = 'pending'
+   572→    node.startedAt = undefined
+   573→    node.input = undefined
+   574→    if (node.decision) node.decision = { ...node.decision, status: 'pending' }
+   575→    this.emitEvent(rt, { type: 'node:update', ts: now(), node: { ...node } })
+   576→    return false
+   577→  }
+   578→
+   579→  /** Фаза рассуждения на развилке: пауза с уважением stop/pause */
+   580→  private async decisionThinkDelay(rt: Runtime): Promise<void> {
+   581→    const deadline = now() + (rt.snapshot.mode === 'llm' ? 700 : 1600)
+   582→    while (now() < deadline) {
+   583→      if (rt.stopped) throw new StoppedError()
+   584→      while (rt.paused && !rt.stopped) await sleep(150)
+   585→      if (rt.stopped) throw new StoppedError()
+   586→      await sleep(120)
+   587→    }
+   588→  }
+   589→
+   590→  /** Ожидание выбора: движок засыпает на promise до решения пользователя / переключения в авто / остановки */
+   591→  private waitForDecision(rt: Runtime, node: GraphNode): Promise<DecisionChoice | null> {
+   592→    return new Promise<DecisionChoice | null>((resolve) => {
+   593→      rt.pendingDecision = { nodeId: node.id, resolve }
+   594→    })
+   595→  }
+   596→
+   597→  /** Авто-режим: демо — скриптованный выбор; LLM — вызов модуля принятия решений */
+   598→  private async autoDecide(rt: Runtime, node: GraphNode): Promise<{ optionId: string; reasoning: string }> {
+   599→    const dec = node.decision!
+   600→    if (rt.snapshot.mode === 'demo') {
+   601→      await sleep(1200)
+   602→      return { ...DEMO_AUTO_PICK }
+   603→    }
+   604→    const user = `Задача: «${rt.snapshot.task}»
+   605→
+   606→Развилка: ${dec.question}
+   607→
+   608→Варианты:
+   609→${dec.options.map((o) => `- id «${o.id}» — ${o.label}: ${o.rationale}`).join('\n')}
+   610→
+   611→${node.input || ''}
+   612→
+   613→Выбери один вариант (id из списка) и обоснуй выбор. Ответ строго JSON:
+   614→{"optionId":"<id>","reasoning":"обоснование в 1–2 предложениях"}`
+   615→    try {
+   616→      const json = await chatJson(DECIDER_SYS, user, 45_000, 1)
+   617→      const optId = String(json?.optionId ?? '').trim().toLowerCase()
+   618→      if (dec.options.some((o) => o.id === optId) && json?.reasoning) {
+   619→        return { optionId: optId, reasoning: String(json.reasoning).slice(0, 400) }
+   620→      }
+   621→    } catch {
+   622→      /* fallback ниже */
+   623→    }
+   624→    return { optionId: dec.options[0].id, reasoning: 'Обоснование LLM недоступно — выбран первый вариант по умолчанию' }
+   625→  }
+   626→
+   627→  /** Применяет выбор: активирует ветку, гасит альтернативы, фиксирует аудит-трейл */
+   628→  private resolveDecision(rt: Runtime, node: GraphNode, optionId: string, by: 'agent' | 'user', reasoning?: string) {
+   629→    const run = rt.snapshot
+   630→    const dec = node.decision!
+   631→    const opt = dec.options.find((o) => o.id === optionId) ?? dec.options[0]
+   632→    node.status = 'done'
+   633→    node.finishedAt = now()
+   634→    node.durationMs = node.finishedAt - (node.startedAt ?? node.finishedAt)
+   635→    node.decision = { ...dec, status: 'resolved', chosen: opt.id, chosenBy: by, reasoning: reasoning?.trim() || undefined }
+   636→    node.output =
+   637→      by === 'agent'
+   638→        ? `Решение агента: вариант «${opt.label}». ${reasoning || ''}`.trim()
+   639→        : `Выбор пользователя: вариант «${opt.label}». ${opt.rationale}`
+   640→    this.emitEvent(rt, { type: 'node:update', ts: now(), node: { ...node } })
+   641→
+   642→    // мгновенная визуализация последствий: нереализованные ветки гаснут
+   643→    let discarded = 0
+   644→    for (const n of run.nodes) {
+   645→      if (n.branchOf?.decisionId === node.id && n.branchOf.optionId !== opt.id && n.status === 'pending') {
+   646→        n.status = 'discarded'
+   647→        discarded++
+   648→        this.emitEvent(rt, { type: 'node:update', ts: now(), node: { ...n } })
+   649→      }
+   650→    }
+   651→
+   652→    this.emitEvent(rt, {
+   653→      type: 'decision:resolved',
+   654→      ts: now(),
+   655→      nodeId: node.id,
+   656→      optionId: opt.id,
+   657→      by,
+   658→      reasoning: node.decision.reasoning,
+   659→    })
+   660→    this.log(
+   661→      rt,
+   662→      'decision',
+   663→      `⎇ Решение принято (${by === 'agent' ? 'агентом' : 'пользователем'}): «${opt.label}» — ветка активирована, узлов в нереализованных ветках: ${discarded}`
+   664→    )
+   665→  }
+   666→
+   667→  /** Переключение режима решений на ходу; «авто» во время ожидания — агент решает немедленно */
+   668→  setDecisionMode(runId: string, mode: DecisionMode): { ok: boolean; error?: string } {
+   669→    const rt = this.runs.get(runId)
+   670→    if (!rt) return { ok: false, error: 'Запуск не активен или уже выгружен' }
+   671→    if (rt.decisionMode === mode) return { ok: true }
+   672→    rt.decisionMode = mode
+   673→    rt.snapshot.decisionMode = mode
+   674→    this.emitEvent(rt, { type: 'decision:mode', ts: now(), mode })
+   675→    this.log(
+   676→      rt,
+   677→      'control',
+   678→      `⎇ Режим решений: ${mode === 'auto' ? '«авто» — агент решает сам' : '«ручной выбор» — агент предлагает варианты и ждёт'}`
+   679→    )
+   680→    store.save(rt.snapshot)
+   681→    // если сейчас ожидается выбор, а включили «авто» — агент принимает решение вместо пользователя
+   682→    if (mode === 'auto' && rt.pendingDecision) {
+   683→      const pd = rt.pendingDecision
+   684→      rt.pendingDecision = null
+   685→      const node = rt.snapshot.nodes.find((n) => n.id === pd.nodeId)
+   686→      if (node?.decision) {
+   687→        this.log(rt, 'decision', '⎇ Ожидание выбора прервано: агент принимает решение вместо пользователя')
+   688→        this.autoDecide(rt, node)
+   689→          .then((picked) => pd.resolve({ optionId: picked.optionId, by: 'agent', reasoning: picked.reasoning }))
+   690→          .catch(() => pd.resolve(null))
+   691→      } else {
+   692→        pd.resolve(null)
+   693→      }
+   694→    }
+   695→    return { ok: true }
+   696→  }
+   697→
+   698→  /** Выбор пользователя на развилке (из модалки) */
+   699→  resolveDecisionFromUser(runId: string, nodeId: string, optionId: string): { ok: boolean; error?: string } {
+   700→    const rt = this.runs.get(runId)
+   701→    if (!rt) return { ok: false, error: 'Запуск не активен' }
+   702→    const pd = rt.pendingDecision
+   703→    if (!pd || pd.nodeId !== nodeId) return { ok: false, error: 'Решение не ожидается (уже принято или запуск завершён)' }
+   704→    const node = rt.snapshot.nodes.find((n) => n.id === nodeId)
+   705→    const opt = node?.decision?.options.find((o) => o.id === optionId)
+   706→    if (!opt) return { ok: false, error: 'Неизвестный вариант' }
+   707→    rt.pendingDecision = null
+   708→    pd.resolve({ optionId: opt.id, by: 'user' })
+   709→    return { ok: true }
+   710→  }
+   711→
+   712→  // ─────────────── Управление и вмешательство пользователя ───────────────
+   713→
+   714→  control(runId: string, action: 'pause' | 'resume' | 'stop') {
+   715→    const rt = this.runs.get(runId)
+   716→    if (!rt) return
+   717→    if (action === 'pause') {
+   718→      if (!rt.paused && !rt.stopped && rt.snapshot.status === 'running') {
+   719→        rt.paused = true
+   720→        this.pushStatus(rt, 'paused', rt.snapshot.progress)
+   721→        this.log(rt, 'control', '⏸ Пауза: текущий узел завершится, новые не стартуют')
+   722→      }
+   723→    } else if (action === 'resume') {
+   724→      if (rt.paused) {
+   725→        rt.paused = false
+   726→        this.log(rt, 'control', '▶ Выполнение возобновлено')
+   727→        if (rt.snapshot.status === 'paused') {
+   728→          this.pushStatus(rt, 'running', rt.snapshot.progress)
+   729→        }
+   730→      }
+   731→    } else if (action === 'stop') {
+   732→      if (rt.stopped) return
+   733→      if (['completed', 'error', 'stopped'].includes(rt.snapshot.status)) return
+   734→      rt.stopped = true
+   735→      rt.paused = false
+   736→      // если ждём выбор пользователя на развилке — разблокируем ожидание
+   737→      if (rt.pendingDecision) {
+   738→        const pd = rt.pendingDecision
+   739→        rt.pendingDecision = null
+   740→        pd.resolve(null)
+   741→      }
+   742→      this.log(rt, 'control', '⏹ Остановка запрошена — применится после завершения текущего узла')
+   743→    }
+   744→  }
+   745→
+   746→  private async waitWhilePaused(rt: Runtime) {
+   747→    while (rt.paused && !rt.stopped) await sleep(150)
+   748→  }
+   749→
+   750→  private finalizeStopped(rt: Runtime) {
+   751→    const run = rt.snapshot
+   752→    let skipped = 0
+   753→    for (const n of run.nodes) {
+   754→      if (n.status === 'pending') {
+   755→        n.status = 'skipped'
+   756→        skipped++
+   757→        this.emitEvent(rt, { type: 'node:update', ts: now(), node: { ...n } })
+   758→      }
+   759→    }
+   760→    this.recalcProgress(rt)
+   761→    this.pushStatus(rt, 'stopped', run.progress)
+   762→    const doneCount = run.nodes.filter((n) => n.status === 'done').length
+   763→    this.log(rt, 'run', `Выполнение остановлено пользователем · выполнено узлов: ${doneCount}, пропущено: ${skipped}`)
+   764→    run.finishedAt = now()
+   765→    store.save(run)
+   766→  }
+   767→
+   768→  private finalizeCompleted(rt: Runtime) {
+   769→    const run = rt.snapshot
+   770→    rt.stopped = false
+   771→    run.progress = 100
+   772→    this.pushStatus(rt, 'completed', 100)
+   773→    run.finishedAt = now()
+   774→    const dynamic = run.nodes.filter((n) => n.dynamic).length
+   775→    const durS = ((run.finishedAt - run.createdAt) / 1000).toFixed(1)
+   776→    const last = [...run.nodes].filter((n) => n.status === 'done').pop()
+   777→    const summary = `Готово за ${durS} с: ${run.nodes.length} узлов, ${dynamic} добавлено динамически, версий графа — ${run.version}. Итог: ${trunc(last?.output || '—', 220)}`
+   778→    run.summary = summary
+   779→    this.emitEvent(rt, { type: 'run:summary', ts: now(), summary })
+   780→    this.log(rt, 'run', `✓ Задача выполнена за ${durS} с`)
+   781→    store.save(run)
+   782→  }
+   783→
+   784→  private recalcProgress(rt: Runtime) {
+   785→    const run = rt.snapshot
+   786→    // нереализованные ветки не считаются работой: прогресс по активным узлам
+   787→    const active = run.nodes.filter((n) => n.status !== 'discarded').length || 1
+   788→    const done = run.nodes.filter((n) => n.status === 'done').length
+   789→    run.progress = Math.round((done / active) * 100)
+   790→  }
+   791→
+   792→  private downstreamOf(run: RunSnapshot, nodeId: string): GraphNode[] {
+   793→    const out: GraphNode[] = []
+   794→    const queue = [nodeId]
+   795→    const seen = new Set<string>()
+   796→    while (queue.length) {
+   797→      const cur = queue.shift()!
+   798→      for (const n of run.nodes) {
+   799→        if (n.dependsOn.includes(cur) && !seen.has(n.id)) {
+   800→          seen.add(n.id)
+   801→          out.push(n)
+   802→          queue.push(n.id)
+   803→        }
+   804→      }
+   805→    }
+   806→    return out
+   807→  }
+   808→
+   809→  overrideNode(runId: string, nodeId: string, output: string): { ok: boolean; error?: string; resetCount?: number } {
+   810→    const rt = this.runs.get(runId)
+   811→    if (!rt) return { ok: false, error: 'Запуск не активен или уже выгружен' }
+   812→    const run = rt.snapshot
+   813→    const node = run.nodes.find((n) => n.id === nodeId && n.status === 'done')
+   814→    if (!node) return { ok: false, error: 'Узел не найден или ещё не завершён' }
+   815→    if (rt.stopped) return { ok: false, error: 'Запуск остановлен — переопределение недоступно' }
+   816→    const trimmed = (output || '').trim()
+   817→    if (!trimmed) return { ok: false, error: 'Результат не может быть пустым' }
+   818→
+   819→    node.output = trimmed.slice(0, 4000)
+   820→    node.overridden = true
+   821→    this.emitEvent(rt, { type: 'node:update', ts: now(), node: { ...node } })
+   822→    this.log(rt, 'intervention', `✎ Вмешательство: результат узла «${node.title}» переопределён пользователем`)
+   823→
+   824→    // нереализованные ветки не восстанавливаем — выбор на развилке остаётся в силе
+   825→    const down = this.downstreamOf(run, nodeId).filter((d) => d.status !== 'discarded')
+   826→    for (const d of down) {
+   827→      d.status = 'pending'
+   828→      d.output = undefined
+   829→      d.startedAt = undefined
+   830→      d.finishedAt = undefined
+   831→      d.durationMs = undefined
+   832→      d.error = undefined
+   833→      d.overridden = false
+   834→      this.emitEvent(rt, { type: 'node:update', ts: now(), node: { ...d } })
+   835→    }
+   836→    if (down.length) {
+   837→      this.log(rt, 'intervention', `↓ Пересчёт: ${down.length} зависимых узлов сброшены и будут выполнены заново`)
+   838→      this.recalcProgress(rt)
+   839→    }
+   840→    if (down.length && !rt.loopActive) {
+   841→      this.pushStatus(rt, 'running', run.progress)
+   842→      this.runLoop(rt).catch(() => {})
+   843→    }
+   844→    store.save(run)
+   845→    return { ok: true, resetCount: down.length }
+   846→  }
+   847→
+   848→  retryNode(runId: string, nodeId: string): { ok: boolean; error?: string } {
+   849→    const rt = this.runs.get(runId)
+   850→    if (!rt) return { ok: false, error: 'Запуск не активен' }
+   851→    const node = rt.snapshot.nodes.find((n) => n.id === nodeId)
+   852→    if (!node || node.status !== 'error') return { ok: false, error: 'Узел не в состоянии ошибки' }
+   853→    rt.stopped = false
+   854→    node.status = 'pending'
+   855→    node.error = undefined
+   856→    node.startedAt = undefined
+   857→    node.finishedAt = undefined
+   858→    node.durationMs = undefined
+   859→    this.emitEvent(rt, { type: 'node:update', ts: now(), node: { ...node } })
+   860→    this.log(rt, 'intervention', `↻ Повтор узла «${node.title}» по запросу пользователя`)
+   861→    if (!rt.loopActive) {
+   862→      this.pushStatus(rt, 'running', rt.snapshot.progress)
+   863→      this.runLoop(rt).catch(() => {})
+   864→    }
+   865→    store.save(rt.snapshot)
+   866→    return { ok: true }
+   867→  }
+   868→
+   869→  deleteRun(runId: string) {
+   870→    const rt = this.runs.get(runId)
+   871→    if (rt) {
+   872→      rt.stopped = true
+   873→      if (rt.pendingDecision) {
+   874→        const pd = rt.pendingDecision
+   875→        rt.pendingDecision = null
+   876→        pd.resolve(null)
+   877→      }
+   878→      this.runs.delete(runId)
+   879→    }
+   880→    store.remove(runId)
+   881→    this.emit('history:list', { runs: store.history() })
+   882→  }
+   883→}
+   884→

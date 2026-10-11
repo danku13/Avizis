@@ -2,13 +2,13 @@
 'use client'
 
 import { useMemo } from 'react'
-import { Pause, Play, Square, Download, Radio, Bot, Hand, GitFork } from 'lucide-react'
+import { Pause, Play, Square, Download, Radio, Bot, Hand, GitFork, Compass } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { RunStatusBadge, ModeBadge } from './status-badge'
 import { findOfferedDecision, foldEvents, versionMarkers } from '@/lib/tacg/fold'
-import { DecisionMode } from '@/lib/tacg/types'
+import { chosenIds, certaintyLabel, DECISION_DOMAIN_LABELS, DecisionMode, selectionMode } from '@/lib/tacg/types'
 import { getSocket } from '@/lib/tacg/socket'
 import { useTacgStore } from '@/store/tacg-store'
 import { toast } from 'sonner'
@@ -31,6 +31,11 @@ export function RunToolbar() {
 
   const canControl = isLive && currentRunId && ['planning', 'running', 'paused'].includes(view.status)
   const doneCount = view.nodes.filter((n) => n.status === 'done').length
+  const certainty = view.certainty
+  const certaintyInfo = certainty != null ? certaintyLabel(certainty) : null
+  const openQuestions = view.nodes.filter(
+    (n) => n.kind === 'decision' && (n.status === 'pending' || n.status === 'running')
+  ).length
   const elapsed = (() => {
     if (!meta) return null
     const terminal = ['completed', 'stopped', 'error'].includes(view.status)
@@ -76,6 +81,11 @@ export function RunToolbar() {
     lines.push(`- **Статус:** ${view.status}`)
     lines.push(`- **Прогресс:** ${view.progress}% (${doneCount}/${view.nodes.length} узлов)`)
     lines.push(`- **Версий графа:** ${view.version}`)
+    if (certainty != null) {
+      lines.push(
+        `- **Понимание задачи:** ${Math.round(certainty * 100)}% — ${certaintyLabel(certainty).label} (оценка агента: насколько узкий вектор решения)`
+      )
+    }
     lines.push(`- **Событий записано:** ${events.length}`)
     if (elapsed != null) lines.push(`- **Длительность:** ${elapsed.toFixed(1)} с`)
     lines.push('')
@@ -97,16 +107,21 @@ export function RunToolbar() {
       lines.push('')
       decisions.forEach((d) => {
         const dec = d.decision!
+        const picked = chosenIds(dec)
         lines.push(`### ${d.title}`)
         lines.push(`- **Вопрос:** ${dec.question}`)
+        if (dec.domain) lines.push(`- **Домен:** ${DECISION_DOMAIN_LABELS[dec.domain]}`)
+        if (selectionMode(dec) === 'mixed') lines.push('- **Тип выбора:** смешанный (несколько вариантов)')
         dec.options.forEach((o) => {
-          const mark = o.id === dec.chosen ? '✅ **ВЫБРАН**' : '—'
+          const mark = picked.includes(o.id) ? '✅ **ВЫБРАН**' : '—'
           lines.push(`- ${mark} **Вариант «${o.id}» — ${o.label}:** ${o.rationale}`)
           if (o.nextSteps.length) lines.push(`  - Дальнейшие шаги: ${o.nextSteps.join(' → ')}`)
         })
-        if (dec.chosen) {
+        if (picked.length) {
           lines.push(
-            `- **Итог:** вариант «${dec.chosen}» · решение принял: ${dec.chosenBy === 'user' ? 'пользователь' : 'агент'}`
+            `- **Итог:** вариант(ы) «${picked.join(' + ')}» · решение принял: ${
+              dec.chosenBy === 'user' ? 'пользователь' : 'агент'
+            }${picked.length > 1 ? ' · смешанное решение' : ''}`
           )
           if (dec.reasoning) lines.push(`- **Обоснование:** ${dec.reasoning}`)
         } else {
@@ -248,6 +263,51 @@ export function RunToolbar() {
             {view.progress}% · {doneCount}/{view.nodes.length} узлов
           </span>
         </div>
+
+        {/* ─── Метр «понимания задачи»: насколько узкий вектор решения ─── */}
+        {certainty != null && certaintyInfo && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex min-w-[210px] max-w-[290px] items-center gap-2" role="meter" aria-label="Понимание задачи агентом" aria-valuenow={Math.round(certainty * 100)}>
+                <Compass
+                  className={cn(
+                    'size-3.5 shrink-0',
+                    certainty < 0.35 ? 'text-amber-400' : certainty < 0.7 ? 'text-yellow-300' : 'text-emerald-400'
+                  )}
+                />
+                <div className="min-w-0 flex-1">
+                  <Progress
+                    value={Math.round(certainty * 100)}
+                    className={cn(
+                      'h-1.5',
+                      certainty < 0.35
+                        ? '[&>div]:bg-amber-500'
+                        : certainty < 0.7
+                          ? '[&>div]:bg-yellow-400'
+                          : '[&>div]:bg-emerald-500'
+                    )}
+                  />
+                </div>
+                <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                  {Math.round(certainty * 100)}% · {certaintyInfo.label}
+                </span>
+                {openQuestions > 0 && (
+                  <span className="shrink-0 rounded border border-fuchsia-500/40 bg-fuchsia-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-fuchsia-300">
+                    ждёт уточнений: {openQuestions}
+                  </span>
+                )}
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-xs">
+              <p className="font-semibold">Понимание задачи — {certaintyInfo.label}</p>
+              <p className="mt-1 text-xs opacity-90">{certaintyInfo.hint}</p>
+              {openQuestions > 0 && (
+                <p className="mt-1 text-xs text-fuchsia-300">Открытых вопросов агента: {openQuestions}</p>
+              )}
+            </TooltipContent>
+          </Tooltip>
+        )}
+
         {elapsed != null && (
           <span className="text-xs tabular-nums text-muted-foreground">
             {['completed', 'stopped', 'error'].includes(view.status) ? 'длительность' : 'прошло'}: {elapsed.toFixed(1)} с
