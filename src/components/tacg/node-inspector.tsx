@@ -230,7 +230,7 @@ export function NodeInspectorModal() {
                                 >
                                   {o.id}
                                 </span>
-                                <span className="min-w-0 truncate text-xs font-semibold text-zinc-100">{o.label}</span>
+                                <span className="min-w-0 text-xs font-semibold leading-snug break-words text-zinc-100">{o.label}</span>
                               </div>
                               {chosen && (
                                 <span className="flex shrink-0 items-center gap-1 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-300">

@@ -268,3 +268,40 @@ Stage Summary:
   ADR-005-обновление, PRD v0.4
 - Артефакты: mini-services/tacg-agent/engine.ts, src/components/tacg/node-inspector.tsx,
   docs/**, README.md, scripts/tacg-inspector-{before,fulltext}.png
+
+---
+Task ID: 7
+Agent: main (Super Z)
+Task: Снять лимиты эмерджентных вопросов и жёсткие объёмные капы входов/выходов/обоснований; дисциплину перенести в промпты; вывести в чат полный реестр применённых ограничений
+
+Work Log:
+- Аудит ограничений: grep по engine.ts/llm.ts/store.ts + src/ (truncate/line-clamp/slice/MAX)
+- engine.ts — лимиты количества сняты: удалены rt.dynamicAdded >= 2, dynamic-узлов >= 3,
+  rt.emergentAdded < 2; askAllowed = !hasOpenDecision (последовательность, не количество)
+- engine.ts — объёмные срезы сняты: task .slice(0,500), 11× .slice(0,800)
+  (description/question/rationale/reason/reasoning), override-output .slice(0,4000);
+  ярлыки title/label <= 60 и заголовок вопроса <= 40 сохранены (идентификация на канве)
+- Промпты: EXECUTOR_SYS «до 120 слов» → гигиена контекста («минимально достаточный объём,
+  без воды и повторов»); супервайзеру добавлено «количество вопросов не ограничено, но каждый
+  обязан быть полезным: не дублируй закрытые»; decider «1–2 предложения» → «краткое, но
+  исчерпывающее без воды»
+- Компакция промптов сохранена (12000 вход исполнителя; 400/2000 контекст супервайзера) —
+  это защита промптов, не данных
+- UI: node-inspector.tsx + decision-modal.tsx — label вариантов перенос (break-words)
+  вместо truncate
+- docs: новый ADR-011 (без лимитов; дисциплина в промптах), CR-006, FR-808 переписан,
+  новый FR-809, ADR-010 блок «Обновление», индексы adr/cr/fr + README v0.5
+- Сервис перезапущен (kill 13766 → bun index.ts, :3003); тесты: test-tacg-decision — все
+  сценарии; test-tacg-clarity — 17/17; новый scripts/test-tacg-llm-auto.ts — полный LLM-прогон
+  28.7 с, 2 авто-решения, выходы до 1314 симв. (кап 800 снят); tsc мини-сервиса чист
+  (кроме Bun import.meta.dir); 8 ошибок tsc в src/ (graph-canvas, React Flow) —
+  преждесуществующие, подтверждено git stash
+- Реестр ограничений «было/стало» выведен пользователю в чат (по прямому запросу)
+
+Stage Summary:
+- Эмерджентные вопросы не ограничены по количеству; гарды только на последовательность
+  (один открытый вопрос) и структуру (варианты 2–4, шаги ветки 1–3)
+- Входы/выходы/обоснования хранятся и отображаются полностью; объём регулируется промптами
+  (полезность, без воды), компакция — только при сборке промптов
+- Артефакты: engine.ts, node-inspector.tsx, decision-modal.tsx, docs/{adr,cr,fr}/**,
+  scripts/test-tacg-llm-auto.ts, docs/README.md (v0.5)

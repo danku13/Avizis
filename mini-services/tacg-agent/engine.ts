@@ -57,7 +57,7 @@ interface Runtime {
 
 const PLANNER_SYS = `Ты — модуль планирования ИИ-агента. Твоя задача — разбить запрос пользователя на вычислительный граф из шагов и оценить, насколько ты понимаешь задачу. Отвечай ТОЛЬКО валидным JSON без markdown-обёрток и пояснений.`
 
-const EXECUTOR_SYS = `Ты — исполнительный модуль ИИ-агента внутри вычислительного графа. Выполни запрошенный шаг. Отвечай по-русски, лаконично и по делу (до 120 слов), без markdown-заголовков.`
+const EXECUTOR_SYS = `Ты — исполнительный модуль ИИ-агента внутри вычислительного графа. Выполни запрошенный шаг и верни его результат. Отвечай по-русски, по делу, без markdown-заголовков. Объём не ограничен жёстко — он должен быть минимально достаточным для полноценного результата шага: не раздувай контекст, избегай воды и повторов, следи, чтобы каждая фраза несла полезную информацию для следующих шагов и пользователя.`
 
 const SUPERVISOR_SYS = `Ты — супервайзер вычислительного графа ИИ-агента. После каждого шага ты анализируешь входящие данные и решаешь: дополнить ли план новым шагом, задать ли уточняющий вопрос-развилку (если неоднозначность влияет на итог) или ничего не менять. Также ты оцениваешь, насколько узкий вектор решения сложился. Отвечай ТОЛЬКО валидным JSON.`
 
@@ -104,7 +104,7 @@ export class AgentEngine {
   // ─────────────────────────── Запуск ───────────────────────────
 
   async start(taskInput: string, mode: RunMode, decisionMode: DecisionMode = 'manual'): Promise<RunSnapshot> {
-    const task = (taskInput || '').trim().slice(0, 500) || DEFAULT_TASK
+    const task = (taskInput || '').trim() || DEFAULT_TASK
     const id = 'run_' + now().toString(36) + Math.random().toString(36).slice(2, 7)
     const scenario = mode === 'demo' ? detectDemoScenario(task) : 'data'
     const run: RunSnapshot = {
@@ -281,7 +281,7 @@ export class AgentEngine {
           options.push({
             id: optId,
             label: String(ro?.label || `Вариант ${optId}`).slice(0, 60),
-            rationale: String(ro?.rationale || '').slice(0, 800),
+            rationale: String(ro?.rationale || ''),
             nextSteps: stepsRaw.map((s: any) => String(s?.title || 'шаг ветки').slice(0, 60)),
           })
           // шаги ветки: цепочка от развилки
@@ -293,7 +293,7 @@ export class AgentEngine {
             nodes.push({
               id: bid,
               title: String(rs?.title || `Шаг ветки ${optId}${k + 1}`).slice(0, 60),
-              description: String(rs?.description || '').slice(0, 800),
+              description: String(rs?.description || ''),
               status: 'pending',
               dependsOn: [prev],
               dynamic: false,
@@ -308,13 +308,13 @@ export class AgentEngine {
           id,
           kind: 'decision',
           title: String(raw?.title || 'Решение').slice(0, 60),
-          description: String(raw?.description || '').slice(0, 800),
+          description: String(raw?.description || ''),
           status: 'pending',
           dependsOn: cleanDeps(raw, branchIds),
           dynamic: false,
           runs: 0,
           decision: {
-            question: String(decisionRaw.question).slice(0, 800),
+            question: String(decisionRaw.question),
             domain,
             selection,
             certaintyAfter: Number.isFinite(certaintyAfter) ? Math.min(1, Math.max(0, certaintyAfter)) : undefined,
@@ -327,7 +327,7 @@ export class AgentEngine {
         nodes.push({
           id,
           title: String(raw?.title || `Шаг ${i + 1}`).slice(0, 60),
-          description: String(raw?.description || '').slice(0, 800),
+          description: String(raw?.description || ''),
           status: 'pending',
           dependsOn: cleanDeps(raw, new Set()),
           dynamic: false,
@@ -519,15 +519,15 @@ ${trunc(node.input || `Задача: ${run.task}`, 12000)}
       return
     }
 
-    // LLM-режим: супервайзер анализирует результаты шагов — новый шаг / вопрос-развилка / ничего
-    if (rt.dynamicAdded >= 2) return
+    // LLM-режим: супервайзер анализирует результаты шагов — новый шаг / вопрос-развилка / ничего.
+    // Количество эмерджентных вопросов и динамических вставок НЕ ограничено (ADR-011):
+    // дисциплину задаёт промпт (полезность вопроса, недублирование), а не жёсткие счётчики.
     const hasPendingSuccessors = run.nodes.some((n) => n.status === 'pending' && n.dependsOn.includes(finished.id))
     const anyPending = run.nodes.some((n) => n.status === 'pending')
     if (!hasPendingSuccessors && !anyPending) return
-    if (run.nodes.filter((n) => n.dynamic).length >= 3) return
-    // не вставляем вопрос, если уже есть открытая развилка или лимит эмерджентных вопросов исчерпан
+    // вопрос не вставляется, пока открыта другая развилка: уточнения идут последовательно
     const hasOpenDecision = run.nodes.some((n) => n.kind === 'decision' && (n.status === 'pending' || n.status === 'running'))
-    const askAllowed = rt.emergentAdded < 2 && !hasOpenDecision
+    const askAllowed = !hasOpenDecision
 
     const graphDesc = run.nodes
       .map((n) => `- ${n.id} «${n.title}» [${n.status}]${n.output ? ': ' + trunc(n.output, 400) : ''}`)
@@ -552,6 +552,7 @@ ${graphDesc}
       askAllowed ? '' : ' (сейчас ask недоступен — используй только no_changes/add_node)'
     }
 3) no_changes — в остальных случаях (в подавляющем большинстве).
+Количество вопросов не ограничено, но каждый обязан быть полезным: не дублируй уже заданные/закрытые вопросы (список выше), не уточняй то, что не влияет на итог. Во всех текстах (description, rationale, reason) не раздувай контекст: только полезная информация, без воды и повторов.
 Также верни certainty — текущую оценку понимания задачи (0..1: насколько узкий вектор решения сложился).
 
 Формат ответа:
@@ -576,10 +577,10 @@ ${graphDesc}
           {
             id,
             title: String(json.node.title).slice(0, 60),
-            description: String(json.node.description || '').slice(0, 800),
+            description: String(json.node.description || ''),
             dependsOn: [finished.id],
           },
-          String(json.node.reason || 'Выявлен пробел в плане').slice(0, 800)
+          String(json.node.reason || 'Выявлен пробел в плане')
         )
       } else if (json?.decision === 'ask' && askAllowed) {
         const q = json.question
@@ -590,10 +591,10 @@ ${graphDesc}
             .map((o: any, j: number) => ({
               id: ['a', 'b', 'c', 'd'][j],
               label: String(o.label).slice(0, 60),
-              rationale: String(o.rationale || '').slice(0, 800),
+              rationale: String(o.rationale || ''),
               steps: (Array.isArray(o.steps) ? o.steps.filter((s: any) => s).slice(0, 3) : []).map((s: any) => ({
                 title: String(s?.title || 'шаг ветки').slice(0, 60),
-                description: String(s?.description || '').slice(0, 800),
+                description: String(s?.description || ''),
               })),
             }))
           if (options.length >= 2) {
@@ -604,8 +605,8 @@ ${graphDesc}
               {
                 id: `decq${rt.emergentAdded + 1}`,
                 title: `Вопрос: ${String(q.question).slice(0, 40)}`,
-                description: String(q.reason || 'Выявлена неоднозначность, влияющая на итог').slice(0, 800),
-                question: String(q.question).slice(0, 800),
+                description: String(q.reason || 'Выявлена неоднозначность, влияющая на итог'),
+                question: String(q.question),
                 domain: DECISION_DOMAINS.includes(q.domain) ? q.domain : 'context',
                 selection: q.selection === 'mixed' ? 'mixed' : 'single',
                 certaintyAfter: Number.isFinite(certaintyAfter)
@@ -613,7 +614,7 @@ ${graphDesc}
                   : Math.min(0.95, (run.certainty ?? 0.4) + 0.2),
                 options,
               },
-              String(q.reason || 'Агент обнаружил неоднозначность, влияющую на итог').slice(0, 800)
+              String(q.reason || 'Агент обнаружил неоднозначность, влияющую на итог')
             )
           }
         }
@@ -860,7 +861,7 @@ ${dec.options.map((o) => `- id «${o.id}» — ${o.label}: ${o.rationale}`).join
 ${node.input || ''}
 
 ${mixed ? 'Выбери один или несколько вариантов (id из списка) и обоснуй состав.' : 'Выбери один вариант (id из списка) и обоснуй выбор.'} Ответ строго JSON:
-${mixed ? '{"optionIds":["<id1>","<id2>"],"reasoning":"обоснование в 1–2 предложениях"}' : '{"optionIds":["<id>"],"reasoning":"обоснование в 1–2 предложениях"}'}`
+${mixed ? '{"optionIds":["<id1>","<id2>"],"reasoning":"краткое, но исчерпывающее обоснование без воды"}' : '{"optionIds":["<id>"],"reasoning":"краткое, но исчерпывающее обоснование без воды"}'}`
     try {
       const json = await chatJson(DECIDER_SYS, user, 45_000, 1)
       const rawIds: any[] = Array.isArray(json?.optionIds)
@@ -876,7 +877,7 @@ ${mixed ? '{"optionIds":["<id1>","<id2>"],"reasoning":"обоснование в
       const unique = [...new Set(valid)]
       if (unique.length && json?.reasoning) {
         const picked = mixed ? unique : unique.slice(0, 1)
-        return { optionIds: picked, reasoning: String(json.reasoning).slice(0, 800) }
+        return { optionIds: picked, reasoning: String(json.reasoning) }
       }
     } catch {
       /* fallback ниже */
@@ -1101,7 +1102,7 @@ ${mixed ? '{"optionIds":["<id1>","<id2>"],"reasoning":"обоснование в
     const trimmed = (output || '').trim()
     if (!trimmed) return { ok: false, error: 'Результат не может быть пустым' }
 
-    node.output = trimmed.slice(0, 4000)
+    node.output = trimmed
     node.overridden = true
     this.emitEvent(rt, { type: 'node:update', ts: now(), node: { ...node } })
     this.log(rt, 'intervention', `✎ Вмешательство: результат узла «${node.title}» переопределён пользователем`)

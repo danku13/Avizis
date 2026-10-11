@@ -12,7 +12,7 @@
 | FR-5xx | [FR-500-replay-and-versions.md](./FR-500-replay-and-versions.md) | FR-501…504 (4) | ✅ 4/4 |
 | FR-6xx | [FR-600-history-and-log.md](./FR-600-history-and-log.md) | FR-601…602 (2) | ✅ 2/2 |
 | FR-7xx | [FR-700-nfr.md](./FR-700-nfr.md) | FR-701…705 (5) | ✅ 4 · ⬜ 1 (FR-705 задел) |
-| FR-8xx | [FR-800-clarity-agent.md](./FR-800-clarity-agent.md) | FR-801…808 (8) | ✅ 8/8 |
+| FR-8xx | [FR-800-clarity-agent.md](./FR-800-clarity-agent.md) | FR-801…809 (9) | ✅ 9/9 (FR-808/809 — в CR-006) |
 
 ## Правила ведения
 

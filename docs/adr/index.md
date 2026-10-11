@@ -15,6 +15,7 @@
 | 008 | [ADR-008-demo-llm-dual-mode.md](./ADR-008-demo-llm-dual-mode.md) | Двойной режим движка demo/llm | старт |
 | 009 | [ADR-009-mixed-selection-certainty.md](./ADR-009-mixed-selection-certainty.md) | Mixed-выбор + certainty (метр понимания) | CR-004 |
 | 010 | [ADR-010-emergent-decisions.md](./ADR-010-emergent-decisions.md) | Эмерджентные развилки по ходу выполнения | CR-004 |
+| 011 | [ADR-011-unbounded-questions-soft-volumes.md](./ADR-011-unbounded-questions-soft-volumes.md) | Без лимитов на вопросы и объёмы; дисциплина — в промптах | CR-006 |
 | — | [tech-stack.md](./tech-stack.md) | Сводка технологического стека | — |
 
 ## Правила ведения
