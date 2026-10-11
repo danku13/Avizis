@@ -329,3 +329,111 @@ Work Log:
 Stage Summary:
 - Ответ в чате; артефактов кода не производилось; BYOK-MVP согласован как кандидат на
   следующую итерацию (B1+B3+B4+B6: роутер openai-compatible + хранение ключей + provenance + UI)
+
+---
+Task ID: 9
+Agent: Super Z (main agent)
+Task: Документация как спека для двух агентных реализаций: BYOK-MVP (CR-007) и аудит усечений (CR-008); задел на вычислимую метрику (ADR-014)
+
+Work Log:
+- Изучены конвенции docs/ (README v0.5, индексы adr/fr/cr, форматы ADR-011/FR-800/CR-006)
+- Написаны: ADR-012 (BYOK: LLM-роутер, адаптеры zai/openai-compatible, ключи, provenance),
+  ADR-013 (аудит усечений — конец тихим потерям), ADR-014 (задел: вычислимая метрика
+  понимания из состояния графа — формула-кандидат, гибрид, миграция, открытые вопросы)
+- FR: новый блок FR-900-byok.md (FR-901..907; 901-906 — в реализации CR-007, 907 — задел);
+  FR-600 дополнен FR-603/604 (аудит усечений, в реализации CR-008); FR-800 дополнен FR-810
+  (задел на ADR-014)
+- CR-007 (BYOK-MVP, Task 10-a) и CR-008 (аудит усечений, Task 10-b) — полные спеки с
+  инвариантами безопасности ключей и списком тестов; результат-секции заполняются по верификации
+- Обновлены индексы adr/fr/cr и docs/README.md (v0.6)
+- Статусы FR честно «⬜ в реализации» до верификации агентов; переворот в ✅ — задача 11
+
+Stage Summary:
+- Спека-пакет для агентной разработки готов: 3 ADR, 1 новый FR-блок, 2 дополнения FR, 2 CR,
+  индексы и README v0.6; (в) зафиксирован как ADR-014/FR-810 (задел, реализации не требует)
+
+---
+Task ID: 10-a
+Agent: full-stack-developer
+Task: BYOK-MVP (CR-007): LLM-роутер с адаптерами zai/openai-compatible, ключи с маскированием, provenance моделей, модалка настроек + тесты + E2E
+
+Work Log:
+- Шаг 0: прочитан worklog (задачи 1–9), спеки ADR-012/FR-900/CR-007, весь код движка и фронта
+- Обнаружено: реализация BYOK уже частично существовала после прерванной сессии (llm-роутер, llm-config, settings-modal, мок, тест, скриншоты), но не верифицирована и без записи в worklog — проведена полная ревизия по спеке, все пункты сверены
+- Доработки найденные при ревизии:
+  1. settings-modal.tsx: баг `onClick={() => closeSettings}` (лямбда возвращала функцию вместо вызова — кнопка «Закрыть» не закрывала модалку) → `onClick={closeSettings}`; проверено E2E (модалка закрывается)
+  2. llm-config.ts / test-tacg-byok.ts: import.meta.dir → `(import.meta as any).dir` (Bun-API с cast — не добавляет новых ошибок tsc)
+- Перезапуск сервиса :3003 (kill → double-fork setsid, pid 21524), smoke: connected + llm:config:get → zai
+- Тесты:
+  - bun scripts/test-tacg-byok.ts — 13/13 ✅ (мок :3099: сохранение с валидацией пробой, повторное сохранение без ключа хранит прежний, маска sk-…4242 в llm:config:get, файл с ключом и правами 600, полный LLM-прогон через мок, snapshot.llm 4 роли openai-compatible·mock-model, node.llm у всех done-узлов, 9 запросов к моку все с Bearer и model=mock-model, runs.json без ключа, дефолт zai восстановлен, ключ из файла удалён)
+  - bun scripts/test-tacg-decision.ts — все сценарии ✅ (ручной выбор/авто/переключение в авто во время ожидания)
+  - bun scripts/test-tacg-clarity.ts — 17/17 ✅
+  - bun scripts/test-tacg-llm-auto.ts — ✅ (реальный z-ai, 37 с, 2 авто-решения, 9 узлов — дефолтный конфиг восстановлен)
+  - bun run lint — чисто; tsc — 0 новых ошибок (25 преждесуществующих: graph-canvas 8, store.ts import.meta.dir 1, старые скрипты 13, skills/examples 3)
+- E2E agent-browser (:81 через Caddy):
+  1. чистая загрузка: 0 ошибок / 0 варнингов консоли (React DevTools info-log не в счёт)
+  2. настройки открываются: 6 пресетов (z-ai SDK/OpenAI/DeepSeek/OpenRouter/Ollama/Свой), поля baseUrl/модель/ключ(+глаз)/проверка/Collapsible «Роли» (4 input'а)
+  3. пресет OpenAI подставляет baseUrl api.openai.com/v1; «Свой OpenAI-compatible» + baseUrl http://127.0.0.1:3099/v1 + mock-model + тестовый ключ → «Проверить подключение» → бейдж «подключение работает · 3 мс» → «Сохранить» → тост «Конфигурация LLM сохранена»
+  4. чип тулбара «LLM: openai-compatible · mock-model» (+ aria-label на мобиле)
+  5. LLM-прогон через мок завершён (100% · 4/7, статус «Завершено», журнал: «Запуск агента · LLM через openai-compatible · mock-model», «Планировщик: openai-compatible · mock-model»)
+  6. инспектор узла: бейдж «Модель: mock-model · openai-compatible»
+  7. MD-отчёт (перехват Blob): секция «## Модели (BYOK)» со всеми 4 ролями; ключа в отчёте нет
+  8. мобильная 390px: без горизонтального скролла (scrollW=clientW=390), чистая консоль, скриншот
+  9. дефолт zai восстановлен ЧЕРЕЗ UI (настройки → Дефолт: z-ai SDK → Сохранить; файл llm-config.json = {"default":{"adapter":"zai"}})
+  10. скриншоты: scripts/tacg-byok-{settings,toolbar,inspector,mobile}.png
+  - доп. проверки: маска-плейсхолдер ключа при повторном открытии («sk-…9999 — пусто = не менять», поле пустое — ключ не возвращается клиенту); кнопка «Закрыть» работает (фикс)
+- Безопасность (финальный аудит): ключи отсутствуют в runs.json (оба тестовых), tacg.log, снапшотах, событиях, MD-отчёте, ответах API (только маска); мок-провайдер остановлен после E2E
+
+Stage Summary:
+- BYOK-MVP реализован полностью по CR-007: роутер в llm.ts (zai дефолт + openai-compatible fetch/AbortController/Bearer), llm-config.ts (хранение chmod 600, маски, env-бутстрап TACG_LLM_*, резолв роль→дефолт→zai, валидация пробой), provenance (RunSnapshot.llm 4 роли, node.llm на исполнении/autoDecide/insertNode, запись в журнал при старте планирования), socket API llm:config:get/save/test (санитайз + merge старого ключа при пустом поле), фронт (settings-modal с пресетами и per-role моделями, чип+шестерёнка в тулбаре, бейдж модели в инспекторе, секция «Модели (BYOK)» в MD-отчёте, стор с подписками)
+- Артефакты: mini-services/tacg-agent/{llm.ts,llm-config.ts,engine.ts,index.ts,types.ts}, src/lib/tacg/{types.ts,fold.ts}, src/store/tacg-store.ts, src/components/tacg/{settings-modal.tsx,run-toolbar.tsx,node-inspector.tsx}, src/app/page.tsx, scripts/{mock-openai.ts,test-tacg-byok.ts}, scripts/tacg-byok-*.png
+- Все регрессионные тесты зелёные, дефолт zai восстановлен, сервис :3003 работает (double-fork), known-issue: временный React Flow warning 004 при resize/Fast Refresh (на чистой загрузке отсутствует)
+
+---
+Task ID: 10-b
+Agent: full-stack-developer
+Task: Аудит усечений (CR-008/ADR-013): все структурные лимиты плана и адаптации логируются в журнал прогона с новым kind «limits»
+
+Work Log:
+- Шаг 0: прочитан worklog (задачи 1–10-a), спеки ADR-013/FR-600 (FR-603/604)/CR-008, весь релевантный код (engine, types, llm, llm-config, fold, event-log, mock-openai, test-tacg-byok)
+- mini-services/tacg-agent/plan-sanitizer.ts (НОВЫЙ): sanitizePlan вынесен из engine.ts в чистую функцию sanitizePlanData(json) → {nodes, certainty, notes[]}; SanitizeNote {code, message} — message готовая русская строка для журнала; семантика санитайза 1:1 (cleanId с дедупом, cleanDeps, ветки-цепочки, guard от ссылок вперёд, декларация ids, fallback при nodes<2); каждое усечение — заметка: a) узлы >12 (отброшенные перечислены «id «title»»), b) необъявленные/вперёд dependsOn, c) зависимостей >5 после дедупа (со списком отброшенных), d) варианты развилки >4, e) шаги ветки >3 (на вариант), f) деградация «развилки» с <2 валидных вариантов (+ пустые/битые учтены в f); certainty распарсен и клампится, возвращается в результате; заметки детерминированы (без Date/random в сообщениях)
+- engine.ts: planWithLLM → sanitizePlanData, certainty присваивается как раньше, КАЖДАЯ заметка → this.log(rt, 'limits', …) ДО записи «Планировщик LLM построил граф…» (порядок: provenance → лимиты → итог плана, до graph:init; fold log-события обрабатывает generically); insertDecision: усечение зависимостей >12 при перепривязке на хвосты веток → «Лимит адаптации: при перепривязке узла {id} зависимостей {M} — оставлены первые 12 (отброшены: …)»; maybeAdapt (ask-ветка): варианты >4 и шаги >3 → «Лимит адаптации: у вопроса супервайзера …»; title/label ≤60 и заголовок вопроса ≤40 НЕ журналируются (ADR-011 п. 5); приватный sanitizePlan удалён, импорт DecisionOption убран
+- kind 'limits' в LogEntry: mini-services/tacg-agent/types.ts + src/lib/tacg/types.ts (зеркало); event-log.tsx: [лимит] text-orange-300 (отличим от план zinc / адаптации violet / контроль amber); status-badge.tsx — легенды kinds нет (только статусы узлов), не тронут; MD-экспорт run-toolbar.tsx: журнал «Хронология» generic — [limits] попадает автоматически (проверено E2E); протокол RunEvent НЕ менялся (log с новым kind, новых типов событий нет)
+- scripts/test-tacg-truncation.ts (НОВЫЙ): A) юнит — сверхлимитная фикстура (15 узлов; развилка 6 вариантов × 5 шагов; узел с 7 валидными зависимостями; узел со ссылками вперёд/необъявленными; «развилка» 1 валидный + 1 пустой вариант) → все 6 типов a–f с точными N→M и id, граф 24 узла (12 top-level + 12 веток), dec2 деградировала, certainty 0.42 + клампинг 1.7→1, детерминированность повторным прогоном, компактный план → notes=[], план без nodes → null; B) интеграция — мок MOCK_MODE=oversized (свой in-process или внешний с проверкой режима), llm:config:save (sk-test-trunc-key-777), run:start «Тест усечений» auto → completion, в logs 8 записей kind='limits' («15 узлов…», «вариантов 6», «шагов 5»×4, деградация dec2, неизвестные n9), порядок provenance(#2)→первый лимит(#3)→«построил граф»(#11), граф 24 узла/n11–n13 нет, ключ не утёк (снапшот + runs.json), дефолт zai восстановлен — 31/31 ✅
+- Сервис :3003 перезапущен (kill → double-fork setsid, pid 24700), smoke: connected + прогон через тесты
+- Регрессия: test-tacg-decision — все сценарии ✅; test-tacg-clarity — 17/17 ✅; test-tacg-byok — 13/13 ✅; test-tacg-llm-auto — ✅ (реальный z-ai, 44.7 с, дефолтный конфиг); bun run lint — чисто; tsc — 25 ошибок = базовый уровень, новых нет
+- E2E agent-browser (:81): (1) чистая загрузка: 0 ошибок/0 варнингов консоли; (2) мок MOCK_MODE=oversized в фоне; настройки через UI (шестерёнка → «Свой OpenAI-compatible», baseUrl http://127.0.0.1:3099/v1, mock-model, тестовый ключ) → «Проверить подключение» → «подключение работает · 1 мс» → «Сохранить» (тост «Конфигурация LLM сохранена»); (3) LLM-прогон «Тест усечений: проверка аудита лимитов» (авто) → журнал: 8 записей «Лимит плана:» с бейджем [лимит] (text-orange-300), порядок «Запуск» → «Планировщик: …» → лимиты → «построил граф» — скриншот scripts/tacg-trunc-journal.png; (4) playback: кадр 1 — записей нет, кадр 15 — все лимит-записи видны (свёртка log-событий); (5) MD-отчёт (перехват Blob): 8× **[limits]** в «## Хронология (полный журнал)», артефакт scripts/tacg-trunc-report.md + скриншот tacg-trunc-report.png; (6) канва: 24 узла (n11/n12/n13 отсутствуют), инспектор dec1: «развилка · 4 варианта», опции A–D по 3 шага («дальше: 1…2…3»), бейдж «Модель: mock-model · openai-compatible»; (7) мобильная 390×844: hscroll=false, скриншот tacg-trunc-mobile.png; (8) ПОСЛЕ E2E дефолт zai восстановлен ЧЕРЕЗ UI (llm-config.json = {"default":{"adapter":"zai"}}); (9) мок остановлен; known-issue React Flow warning 004 — только при resize (как в 10-a), на чистой загрузке отсутствует
+- Безопасность (финальный аудит): ключа нет в runs.json, tacg.log, снапшотах, MD-отчёте, ответах API
+
+Stage Summary:
+- Реализован аудит усечений полностью по CR-008/ADR-013: ни одна структурная потеря не остаётся тихой — план (узлы >12 с перечислением отброшенных, зависимости >5, необъявленные dependsOn-ссылки, варианты >4, шаги ветки >3, деградация развилки <2 вариантов) и адаптация (перепривязка >12 зависимостей, ask-варианты >4, ask-шаги >3) логируются записями kind «limits» с N→M и id; семантика усечений не менялась — добавлена только видимость
+- Наследование без изменения протокола: live-журнал (бейдж [лимит], orange), playback (fold generic), MD-отчёт (Хронология), runs.json/replay
+- Артефакты: mini-services/tacg-agent/{plan-sanitizer.ts (новый), engine.ts, types.ts}, src/lib/tacg/types.ts, src/components/tacg/event-log.tsx, scripts/{test-tacg-truncation.ts (новый), tacg-trunc-{journal,report,mobile}.png, tacg-trunc-report.md}
+- Все регрессионные тесты зелёные (truncation 31/31, decision, clarity 17/17, byok 13/13, llm-auto), дефолт zai восстановлен, сервис :3003 работает (pid 24700, double-fork)
+
+---
+Task ID: 11
+Agent: Super Z (main agent, оркестратор)
+Task: Верификация задач 10-a/10-b, финализация документации, безопасность репозитория, коммит и пуш
+
+Work Log:
+- Запущены два агента последовательно (10-a BYOK-MVP, затем 10-b аудит усечений — на инфраструктуре
+  мок-провайдера от 10-a); каждый получил самодостаточную спеку + Task ID + протокол worklog
+- Верификация 10-a (независимо): test-tacg-byok 13/13, test-tacg-clarity 17/17, test-tacg-decision
+  — все сценарии; сервис :3003 (pid 21524→24700); права llm-config.json 600; grep: тестовый ключ
+  отсутствует в runs.json/снапшотах/артефактах; worklog-запись 10-a на месте
+- Верификация 10-b: test-tacg-truncation 31/31; сервис жив; ключ sk-test-trunc-key-777 в runs.json
+  отсутствует; скриншоты tacg-trunc-* существуют; worklog-запись 10-b на месте
+- Финализация docs: FR-901..906 → ✅ (CR-007), FR-603/604 → ✅ (CR-008), индекс fr (6/4 строки),
+  CR-007/CR-008 — секции «Результат (верифицировано независимо)» с числами и честными ограничениями
+- Безопасность репозитория: mini-services/tacg-agent/data/llm-config.json добавлен в .gitignore
+  (файл может содержать реальные ключи; git check-ignore подтверждает)
+- Git: commit (docs + код BYOK/усечений + тесты + скриншоты) и push в origin main
+
+Stage Summary:
+- Оба агентных изменения реализованы и независимо верифицированы: BYOK-MVP (роутер zai/
+  openai-compatible, ключи с маскированием и chmod 600, provenance ролей и узлов, модалка настроек)
+  и аудит усечений (plan-sanitizer с notes, kind 'limits', 6+3 типа потерь в журнале)
+- Документация согласована с реализацией: ADR-012/013 приняты, ADR-014 — задел; FR-9xx 6/7,
+  FR-6xx 4/4, FR-8xx 9+1 задел; CR-007/CR-008 с верифицированными результатами
+- Тестовый парк: test-tacg-byok 13/13, test-tacg-truncation 31/31 + прежние регрессии зелёные

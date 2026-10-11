@@ -9,6 +9,7 @@ import { useTacgStore } from '@/store/tacg-store'
 import { GraphCanvas } from '@/components/tacg/graph-canvas'
 import { NodeInspectorModal } from '@/components/tacg/node-inspector'
 import { DecisionModal } from '@/components/tacg/decision-modal'
+import { SettingsModal } from '@/components/tacg/settings-modal'
 import { EventLog } from '@/components/tacg/event-log'
 import { RunToolbar } from '@/components/tacg/run-toolbar'
 import { HistoryPanel } from '@/components/tacg/history-panel'
@@ -23,6 +24,7 @@ export default function Home() {
   const cursor = useTacgStore((s) => s.cursor)
   const selectedNodeId = useTacgStore((s) => s.selectedNodeId)
   const select = useTacgStore((s) => s.select)
+  const runLlm = useTacgStore((s) => s.runLlm)
 
   // ─── Подключение к движку агента (socket.io) ───
   useEffect(() => {
@@ -30,7 +32,11 @@ export default function Home() {
     const handlers: Array<[string, (...args: any[]) => void]> = [
       [
         'connect',
-        () => useTacgStore.getState().setConnected(true),
+        () => {
+          useTacgStore.getState().setConnected(true)
+          // BYOK: подтянить актуальную конфигурацию LLM (только маска ключа)
+          getSocket().emit('llm:config:get')
+        },
       ],
       [
         'disconnect',
@@ -50,7 +56,8 @@ export default function Home() {
               mode: data.mode,
               createdAt: data.createdAt,
             },
-            data.decisionMode
+            data.decisionMode,
+            data.llm
           )
         },
       ],
@@ -102,16 +109,59 @@ export default function Home() {
           }
         },
       ],
+      // ─── BYOK: конфигурация LLM (ответ всегда с маской ключа) ───
+      [
+        'llm:config',
+        (data: any) => {
+          useTacgStore.getState().setLlmConfig(data?.config ?? null)
+        },
+      ],
+      [
+        'llm:config:saved',
+        (data: any) => {
+          const st = useTacgStore.getState()
+          st.setLlmSaving(false)
+          if (data?.ok) {
+            st.setLlmConfig(data.config ?? null)
+            st.setLlmStatus({ ok: true, latencyMs: data.latencyMs })
+            import('sonner').then(({ toast }) =>
+              toast.success('Конфигурация LLM сохранена', {
+                description: 'Новые прогоны пойдут через выбранного провайдера',
+              })
+            )
+          } else {
+            st.setLlmStatus({ ok: false, error: data?.error })
+            import('sonner').then(({ toast }) =>
+              toast.error('Конфигурация не сохранена', {
+                description: data?.error || 'Проверка подключения не прошла',
+              })
+            )
+          }
+        },
+      ],
+      [
+        'llm:config:test:result',
+        (data: any) => {
+          useTacgStore.getState().setLlmTesting(false)
+          useTacgStore.getState().setLlmStatus({ ok: !!data?.ok, error: data?.error, latencyMs: data?.latencyMs })
+        },
+      ],
     ]
     handlers.forEach(([ev, fn]) => s.on(ev, fn))
-    if (s.connected) useTacgStore.getState().setConnected(true)
+    if (s.connected) {
+      useTacgStore.getState().setConnected(true)
+      getSocket().emit('llm:config:get')
+    }
     return () => {
       handlers.forEach(([ev, fn]) => s.off(ev, fn))
     }
   }, [])
 
   const isLive = cursor === null
-  const view = useMemo(() => foldEvents(isLive ? events : events.slice(0, cursor! + 1)), [events, cursor])
+  const view = useMemo(
+    () => foldEvents(isLive ? events : events.slice(0, cursor! + 1), { llm: runLlm ?? undefined }),
+    [events, cursor, runLlm]
+  )
   const offeredDecision = useMemo(
     () => (isLive ? findOfferedDecision(view.nodes) : undefined),
     [view.nodes, isLive]
@@ -205,6 +255,9 @@ export default function Home() {
 
         {/* Модалка выбора на развилке (авто-режим: агент решает сам) */}
         <DecisionModal />
+
+        {/* Модалка настроек LLM (BYOK: свои модели и ключи) */}
+        <SettingsModal />
       </div>
     </TooltipProvider>
   )

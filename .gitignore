@@ -52,3 +52,11 @@ prompt
 server.log
 # Skills directory
 /skills/
+# TACG BYOK: файл конфигурации LLM может содержать реальные ключи API — в репозиторий НИКОГДА
+mini-services/tacg-agent/data/llm-config.json
+
+# Служебные контексты агентов разработки (не артефакты репозитория)
+/agent-ctx/
+
+# Служебные артефакты инструментальных вызовов
+/tool-results/

@@ -3,7 +3,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, PenLine, RotateCcw, Copy, MousePointerClick, Sparkles, Clock3, GitBranch, GitFork, Hash, CheckCircle2, Bot, User } from 'lucide-react'
+import { AlertTriangle, PenLine, RotateCcw, Copy, MousePointerClick, Sparkles, Clock3, Cpu, GitBranch, GitFork, Hash, CheckCircle2, Bot, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
@@ -172,6 +172,16 @@ export function NodeInspectorModal() {
                   <Badge variant="outline" className="border-zinc-600 text-zinc-400">
                     <RotateCcw className="mr-1 size-3" />
                     выполнений: {node.runs}
+                  </Badge>
+                )}
+                {node.llm && (
+                  <Badge
+                    variant="outline"
+                    className="gap-1 border-teal-500/40 bg-teal-500/10 font-mono text-[10px] text-teal-300"
+                    title={`LLM-вызов узла выполнен через адаптер «${node.llm.adapter}» (provenance BYOK)`}
+                  >
+                    <Cpu className="size-3" />
+                    Модель: {node.llm.model} · {node.llm.adapter}
                   </Badge>
                 )}
               </div>

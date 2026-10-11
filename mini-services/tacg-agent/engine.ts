@@ -2,7 +2,7 @@
 // динамическая адаптация → вмешательство пользователя. Реальные вызовы LLM
 // выполняются через z-ai-web-dev-sdk (llm.ts), демо-режим — симуляция.
 import { Server } from 'socket.io'
-import { DecisionDomain, DecisionMode, DecisionOption, GraphNode, RunEvent, RunMode, RunSnapshot, RunStatus } from './types'
+import { DecisionDomain, DecisionMode, GraphNode, LlmProviderInfo, RunEvent, RunMode, RunSnapshot, RunStatus } from './types'
 import {
   DEMO_ADAPTATIONS,
   DEMO_AUTO_PICK,
@@ -18,6 +18,8 @@ import {
   sleep,
 } from './demo'
 import { chatJson, chatText, getZai } from './llm'
+import { loadConfig, providerInfoOf, resolveRole } from './llm-config'
+import { sanitizePlanData } from './plan-sanitizer'
 import { store } from './store'
 
 const now = () => Date.now()
@@ -136,20 +138,40 @@ export class AgentEngine {
     }
     this.runs.set(id, rt)
 
-    this.emit('run:created', { runId: id, task, mode, decisionMode, createdAt: run.createdAt })
+    // Provenance (ADR-012): роль → адаптер/модель фиксируются при старте LLM-прогона (без ключей)
+    if (mode === 'llm') {
+      const cfg = loadConfig()
+      run.llm = {
+        planner: providerInfoOf(resolveRole('planner', cfg)),
+        executor: providerInfoOf(resolveRole('executor', cfg)),
+        supervisor: providerInfoOf(resolveRole('supervisor', cfg)),
+        decider: providerInfoOf(resolveRole('decider', cfg)),
+      }
+    }
+
+    this.emit('run:created', { runId: id, task, mode, decisionMode, createdAt: run.createdAt, llm: run.llm })
     this.emitEvent(rt, { type: 'decision:mode', ts: now(), mode: decisionMode })
     this.pushStatus(rt, 'planning', 0)
-    this.log(rt, 'run', `Запуск агента · ${mode === 'demo' ? 'демо-режим (симуляция)' : 'LLM через z-ai-web-dev-sdk'} · задача: «${trunc(task, 90)}»`)
+    const llmLabel =
+      mode === 'llm'
+        ? run.llm!.planner.adapter === 'zai'
+          ? 'LLM через z-ai-web-dev-sdk'
+          : `LLM через ${run.llm!.planner.adapter} · ${run.llm!.planner.model}`
+        : 'демо-режим (симуляция)'
+    this.log(rt, 'run', `Запуск агента · ${llmLabel} · задача: «${trunc(task, 90)}»`)
 
     if (mode === 'llm') {
       this.log(rt, 'plan', 'Планировщик LLM анализирует задачу…')
-      try {
-        await getZai()
-      } catch (e: any) {
-        this.log(rt, 'run', `Ошибка инициализации SDK: ${e?.message || e}`)
-        this.pushStatus(rt, 'error', 0)
-        store.save(run)
-        return run
+      // инициализация SDK нужна только для адаптера zai
+      if (resolveRole('planner', loadConfig()).adapter === 'zai') {
+        try {
+          await getZai()
+        } catch (e: any) {
+          this.log(rt, 'run', `Ошибка инициализации SDK: ${e?.message || e}`)
+          this.pushStatus(rt, 'error', 0)
+          store.save(run)
+          return run
+        }
       }
     } else {
       this.log(rt, 'plan', 'Планировщик строит граф задачи…')
@@ -218,9 +240,15 @@ export class AgentEngine {
 - Итоговый узел зависит от хвостов ВСЕХ веток (перечисли их в dependsOn).
 - dependsOn ссылается только на id уже объявленных узлов. Массив nodes обязан быть закрыт перед концом объекта.`
     try {
-      const json = await chatJson(PLANNER_SYS, user, 60_000, 2)
-      const nodes = this.sanitizePlan(json, rt)
+      const json = await chatJson(PLANNER_SYS, user, 60_000, 2, 'planner')
+      const { nodes, certainty, notes } = sanitizePlanData(json)
+      if (certainty !== undefined) rt.snapshot.certainty = certainty
       if (nodes) {
+        const plannerInfo = providerInfoOf(resolveRole('planner', loadConfig()))
+        this.log(rt, 'plan', `Планировщик: ${plannerInfo.adapter} · ${plannerInfo.model}`)
+        // ADR-013 (аудит усечений): каждая структурная потеря плана — в журнал
+        // ДО итоговой записи о построенном графе (сначала лимиты, потом итог)
+        for (const note of notes) this.log(rt, 'limits', note.message)
         const decCount = nodes.filter((n) => n.kind === 'decision').length
         this.log(rt, 'plan', `Планировщик LLM построил граф из ${nodes.length} узлов${decCount ? ` · развилок: ${decCount}` : ''}`)
         return nodes
@@ -230,113 +258,6 @@ export class AgentEngine {
       this.log(rt, 'info', `Планировщик LLM недоступен (${trunc(e?.message || '', 80)}) — применён резервный план`)
     }
     return demoPlan()
-  }
-
-  /** Нормализация плана LLM: цепочки + узел-развилка с ветками вариантов + certainty */
-  private sanitizePlan(json: any, rt?: Runtime): GraphNode[] | null {
-    // стартовая самооценка «понимания задачи» от планировщика
-    if (rt) {
-      const c = Number(json?.certainty)
-      if (Number.isFinite(c)) rt.snapshot.certainty = Math.min(1, Math.max(0, c))
-    }
-    const rawNodes = Array.isArray(json?.nodes) ? json.nodes.slice(0, 12) : null
-    if (!rawNodes || rawNodes.length === 0) return null
-
-    const used = new Set<string>()
-    const cleanId = (v: any, fallback: string): string => {
-      let s = String(v ?? '').trim().toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 12)
-      if (!s) s = fallback
-      while (used.has(s)) s = (s.slice(0, 9) || 'n') + 'x' + Math.floor(Math.random() * 900 + 100)
-      used.add(s)
-      return s
-    }
-
-    const declared = new Set<string>()
-    const cleanDeps = (raw: any, exclude: Set<string>): string[] => {
-      const arr: any[] = Array.isArray(raw?.dependsOn) ? raw.dependsOn : []
-      const deps = arr
-        .map((d: any) => String(d ?? '').trim().toLowerCase().replace(/[^a-z0-9]/g, ''))
-        .filter((d: string) => d && declared.has(d) && !exclude.has(d))
-      return [...new Set(deps)].slice(0, 5)
-    }
-
-    const nodes: GraphNode[] = []
-    rawNodes.forEach((raw: any, i: number) => {
-      const id = cleanId(raw?.id, `n${i + 1}`)
-      const decisionRaw = raw?.decision
-      const optionsRaw = Array.isArray(decisionRaw?.options) ? decisionRaw.options.filter((o: any) => o).slice(0, 4) : []
-      const hasDecision = optionsRaw.length >= 2 && !!decisionRaw?.question
-
-      if (hasDecision) {
-        const branchIds = new Set<string>()
-        const selection: 'single' | 'mixed' = decisionRaw?.selection === 'mixed' ? 'mixed' : 'single'
-        const domain: DecisionDomain | undefined = DECISION_DOMAINS.includes(decisionRaw?.domain)
-          ? decisionRaw.domain
-          : undefined
-        const certaintyAfter = Number(decisionRaw?.certaintyAfter)
-        const options: DecisionOption[] = []
-        optionsRaw.forEach((ro: any, j: number) => {
-          const optId = ['a', 'b', 'c', 'd'][j]
-          const stepsRaw = Array.isArray(ro?.steps) ? ro.steps.filter((s: any) => s).slice(0, 3) : []
-          options.push({
-            id: optId,
-            label: String(ro?.label || `Вариант ${optId}`).slice(0, 60),
-            rationale: String(ro?.rationale || ''),
-            nextSteps: stepsRaw.map((s: any) => String(s?.title || 'шаг ветки').slice(0, 60)),
-          })
-          // шаги ветки: цепочка от развилки
-          let prev = id
-          stepsRaw.forEach((rs: any, k: number) => {
-            const bid = cleanId(rs?.id, `${id}${optId}${k + 1}`)
-            branchIds.add(bid)
-            declared.add(bid)
-            nodes.push({
-              id: bid,
-              title: String(rs?.title || `Шаг ветки ${optId}${k + 1}`).slice(0, 60),
-              description: String(rs?.description || ''),
-              status: 'pending',
-              dependsOn: [prev],
-              dynamic: false,
-              runs: 0,
-              branchOf: { decisionId: id, optionId: optId },
-            })
-            prev = bid
-          })
-        })
-        declared.add(id)
-        nodes.push({
-          id,
-          kind: 'decision',
-          title: String(raw?.title || 'Решение').slice(0, 60),
-          description: String(raw?.description || ''),
-          status: 'pending',
-          dependsOn: cleanDeps(raw, branchIds),
-          dynamic: false,
-          runs: 0,
-          decision: {
-            question: String(decisionRaw.question),
-            domain,
-            selection,
-            certaintyAfter: Number.isFinite(certaintyAfter) ? Math.min(1, Math.max(0, certaintyAfter)) : undefined,
-            options,
-            status: 'pending',
-          },
-        })
-      } else {
-        declared.add(id)
-        nodes.push({
-          id,
-          title: String(raw?.title || `Шаг ${i + 1}`).slice(0, 60),
-          description: String(raw?.description || ''),
-          status: 'pending',
-          dependsOn: cleanDeps(raw, new Set()),
-          dynamic: false,
-          runs: 0,
-        })
-      }
-    })
-    if (nodes.length < 2) return null
-    return nodes
   }
 
   // ─────────────────────── Цикл выполнения ───────────────────────
@@ -485,7 +406,9 @@ export class AgentEngine {
 ${trunc(node.input || `Задача: ${run.task}`, 12000)}
 
 Выполни текущий шаг и верни его результат.`
-    return chatText(EXECUTOR_SYS, user, 90_000, 1)
+    // provenance узла: адаптер/модель исполнителя (без ключей)
+    node.llm = providerInfoOf(resolveRole('executor', loadConfig()))
+    return chatText(EXECUTOR_SYS, user, 90_000, 1, 'executor')
   }
 
   // ───────────────────── Динамическая адаптация ─────────────────────
@@ -565,7 +488,7 @@ ${graphDesc}
 Домены: scope, specialization, product, architecture, tone, format, context, strategy. selection: single (один вариант) или mixed (смешанное решение из нескольких). Вариантов 2–4, шагов в ветке 1–3.`
 
     try {
-      const json = await chatJson(SUPERVISOR_SYS, user, 45_000, 0)
+      const json = await chatJson(SUPERVISOR_SYS, user, 45_000, 0, 'supervisor')
       if (typeof json?.certainty === 'number' && Number.isFinite(json.certainty)) {
         const c = Math.min(1, Math.max(0, json.certainty))
         if (Math.abs(c - (run.certainty ?? 0)) > 0.05) this.emitCertainty(rt, c)
@@ -580,23 +503,40 @@ ${graphDesc}
             description: String(json.node.description || ''),
             dependsOn: [finished.id],
           },
-          String(json.node.reason || 'Выявлен пробел в плане')
+          String(json.node.reason || 'Выявлен пробел в плане'),
+          providerInfoOf(resolveRole('supervisor', loadConfig()))
         )
       } else if (json?.decision === 'ask' && askAllowed) {
         const q = json.question
         if (q?.question && Array.isArray(q?.options) && q.options.length >= 2) {
-          const options = q.options
-            .filter((o: any) => o?.label)
+          const labeled = q.options.filter((o: any) => o?.label)
+          const qTitle = trunc(String(q.question), 80)
+          // ADR-013 (аудит усечений): варианты >4 и шаги >3 ask-вопроса — в журнал
+          if (labeled.length > 4) {
+            this.log(rt, 'limits', `Лимит адаптации: у вопроса супервайзера «${qTitle}» вариантов ${labeled.length} — оставлены 4`)
+          }
+          const options = labeled
             .slice(0, 4)
-            .map((o: any, j: number) => ({
-              id: ['a', 'b', 'c', 'd'][j],
-              label: String(o.label).slice(0, 60),
-              rationale: String(o.rationale || ''),
-              steps: (Array.isArray(o.steps) ? o.steps.filter((s: any) => s).slice(0, 3) : []).map((s: any) => ({
-                title: String(s?.title || 'шаг ветки').slice(0, 60),
-                description: String(s?.description || ''),
-              })),
-            }))
+            .map((o: any, j: number) => {
+              const optId = ['a', 'b', 'c', 'd'][j]
+              const stepsAll = Array.isArray(o.steps) ? o.steps.filter((s: any) => s) : []
+              if (stepsAll.length > 3) {
+                this.log(
+                  rt,
+                  'limits',
+                  `Лимит адаптации: у вопроса супервайзера «${qTitle}» шагов ${stepsAll.length} в ветке ${optId} — оставлены 3`
+                )
+              }
+              return {
+                id: optId,
+                label: String(o.label).slice(0, 60),
+                rationale: String(o.rationale || ''),
+                steps: stepsAll.slice(0, 3).map((s: any) => ({
+                  title: String(s?.title || 'шаг ветки').slice(0, 60),
+                  description: String(s?.description || ''),
+                })),
+              }
+            })
           if (options.length >= 2) {
             const certaintyAfter = Number(q.certaintyAfter)
             this.insertDecision(
@@ -624,7 +564,12 @@ ${graphDesc}
     }
   }
 
-  private insertNode(rt: Runtime, spec: { id: string; title: string; description: string; dependsOn: string[] }, reason: string) {
+  private insertNode(
+    rt: Runtime,
+    spec: { id: string; title: string; description: string; dependsOn: string[] },
+    reason: string,
+    llm?: LlmProviderInfo
+  ) {
     const run = rt.snapshot
     const newNode: GraphNode = {
       id: spec.id,
@@ -636,6 +581,7 @@ ${graphDesc}
       reason,
       addedAtVersion: run.version + 1,
       runs: 0,
+      llm,
     }
     const changed: GraphNode[] = [newNode]
     const anchor = spec.dependsOn[0]
@@ -740,7 +686,16 @@ ${graphDesc}
     // (невыбранные ветки станут discarded — зависимость удовлетворится автоматически)
     for (const n of run.nodes) {
       if (n.id !== decNode.id && n.status === 'pending' && n.dependsOn.includes(anchorId)) {
-        n.dependsOn = [...new Set(n.dependsOn.flatMap((d) => (d === anchorId ? (tails.length ? tails : [anchorId]) : [d])))].slice(0, 12)
+        const rebound = [...new Set(n.dependsOn.flatMap((d) => (d === anchorId ? (tails.length ? tails : [anchorId]) : [d])))]
+        // ADR-013 (аудит усечений): зависимостей после перепривязки >12 — в журнал
+        if (rebound.length > 12) {
+          this.log(
+            rt,
+            'limits',
+            `Лимит адаптации: при перепривязке узла ${n.id} зависимостей ${rebound.length} — оставлены первые 12 (отброшены: ${rebound.slice(12).join(', ')})`
+          )
+        }
+        n.dependsOn = rebound.slice(0, 12)
         changed.push({ ...n })
       }
     }
@@ -850,6 +805,10 @@ ${graphDesc}
       return { optionIds: [...DEMO_AUTO_PICK.optionIds], reasoning: DEMO_AUTO_PICK.reasoning }
     }
     const mixed = dec.selection === 'mixed'
+    // provenance узла-развилки: адаптер/модель решателя (без ключей)
+    if (rt.snapshot.mode === 'llm') {
+      node.llm = providerInfoOf(resolveRole('decider', loadConfig()))
+    }
     const user = `Задача: «${rt.snapshot.task}»
 
 Развилка: ${dec.question}
@@ -863,7 +822,7 @@ ${node.input || ''}
 ${mixed ? 'Выбери один или несколько вариантов (id из списка) и обоснуй состав.' : 'Выбери один вариант (id из списка) и обоснуй выбор.'} Ответ строго JSON:
 ${mixed ? '{"optionIds":["<id1>","<id2>"],"reasoning":"краткое, но исчерпывающее обоснование без воды"}' : '{"optionIds":["<id>"],"reasoning":"краткое, но исчерпывающее обоснование без воды"}'}`
     try {
-      const json = await chatJson(DECIDER_SYS, user, 45_000, 1)
+      const json = await chatJson(DECIDER_SYS, user, 45_000, 1, 'decider')
       const rawIds: any[] = Array.isArray(json?.optionIds)
         ? json.optionIds
         : Array.isArray(json?.options)

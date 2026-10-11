@@ -16,6 +16,9 @@
 | 009 | [ADR-009-mixed-selection-certainty.md](./ADR-009-mixed-selection-certainty.md) | Mixed-выбор + certainty (метр понимания) | CR-004 |
 | 010 | [ADR-010-emergent-decisions.md](./ADR-010-emergent-decisions.md) | Эмерджентные развилки по ходу выполнения | CR-004 |
 | 011 | [ADR-011-unbounded-questions-soft-volumes.md](./ADR-011-unbounded-questions-soft-volumes.md) | Без лимитов на вопросы и объёмы; дисциплина — в промптах | CR-006 |
+| 012 | [ADR-012-byok-llm-router.md](./ADR-012-byok-llm-router.md) | BYOK: LLM-роутер, адаптеры zai/openai-compatible, ключи, provenance | CR-007 |
+| 013 | [ADR-013-truncation-audit.md](./ADR-013-truncation-audit.md) | Аудит усечений структурных лимитов (конец «тихим потерям») | CR-008 |
+| 014 | [ADR-014-computable-certainty.md](./ADR-014-computable-certainty.md) | **задел**: вычислимая метрика понимания из состояния графа | — |
 | — | [tech-stack.md](./tech-stack.md) | Сводка технологического стека | — |
 
 ## Правила ведения
@@ -23,3 +26,5 @@
 - Новое решение = новый файл `ADR-NNN-slug.md` + строка в этой таблице.
 - ADR не переписывается задним числом; уточнения — блоком «**Обновление.**» в конце файла.
 - Если решение отменяет предыдущее — новый ADR со ссылкой на отменяемый.
+- Статус по умолчанию «принято»; «задел» — зафиксированное направление без обязательства
+  реализации (ADR-014).

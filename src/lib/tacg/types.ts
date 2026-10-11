@@ -47,6 +47,39 @@ export interface DecisionState {
   certaintyAfter?: number
 }
 
+/** Роль LLM движка (BYOK): точка вызова */
+export type LlmRole = 'planner' | 'executor' | 'supervisor' | 'decider'
+
+/** Provenance: адаптер/модель, выполнившие LLM-вызов (ключи сюда не попадают) */
+export interface LlmProviderInfo {
+  /** 'zai' | 'openai-compatible' (допускается произвольный идентификатор) */
+  adapter: string
+  model: string
+}
+
+/** Публичная (маскированная) конфигурация провайдера — apiKey здесь всегда маска */
+export interface LlmProviderConfigPublic {
+  adapter: string
+  baseUrl?: string
+  model?: string
+  /** Маска ключа (первые 3 + «…» + последние 4); полный ключ не покидает сервер */
+  apiKey?: string
+  temperature?: number
+}
+
+/** Публичная конфигурация LLM: дефолт + per-role переопределения */
+export interface LlmConfigPublic {
+  default?: LlmProviderConfigPublic
+  roles?: Partial<Record<LlmRole, Partial<LlmProviderConfigPublic>>>
+}
+
+export const LLM_ROLE_LABELS: Record<string, string> = {
+  planner: 'Планировщик',
+  executor: 'Исполнитель',
+  supervisor: 'Супервайзер',
+  decider: 'Решатель',
+}
+
 export interface GraphNode {
   id: string
   title: string
@@ -74,6 +107,8 @@ export interface GraphNode {
   decision?: DecisionState
   /** Принадлежность узла ветке варианта развилки */
   branchOf?: { decisionId: string; optionId: string }
+  /** Provenance: адаптер/модель, выполнившие LLM-вызов этого узла */
+  llm?: LlmProviderInfo
 }
 
 export interface LogEntry {
@@ -90,6 +125,8 @@ export interface LogEntry {
     | 'decision'
     | 'run'
     | 'info'
+    /** Аудит усечений структурных лимитов (ADR-013): «Лимит плана/адаптации: …» */
+    | 'limits'
   message: string
 }
 
@@ -120,6 +157,8 @@ export interface RunSnapshot {
   mode: RunMode
   /** Режим решений на развилках (можно менять на ходу) */
   decisionMode?: DecisionMode
+  /** Provenance: роль → адаптер/модель (фиксируется при старте LLM-прогона, без ключей) */
+  llm?: Record<string, LlmProviderInfo>
   status: RunStatus
   createdAt: number
   finishedAt?: number
@@ -159,6 +198,8 @@ export interface RunView {
   decisionMode: DecisionMode
   /** Оценка «понимания задачи» агентом на момент свёртки (0..1) */
   certainty?: number
+  /** Provenance LLM (роль → адаптер/модель) — прокидывается из снапшота */
+  llm?: Record<string, LlmProviderInfo>
 }
 
 /** Выбранные варианты развилки как массив (совместимость со старыми прогонами: chosen мог быть строкой) */

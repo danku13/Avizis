@@ -10,9 +10,10 @@
 | FR-3xx | [FR-300-node-inspector.md](./FR-300-node-inspector.md) | FR-301…309 (9) | ✅ 9/9 (FR-309 — в CR-005) |
 | FR-4xx | [FR-400-decisions.md](./FR-400-decisions.md) | FR-401…407 (7) | ✅ 7/7 |
 | FR-5xx | [FR-500-replay-and-versions.md](./FR-500-replay-and-versions.md) | FR-501…504 (4) | ✅ 4/4 |
-| FR-6xx | [FR-600-history-and-log.md](./FR-600-history-and-log.md) | FR-601…602 (2) | ✅ 2/2 |
+| FR-6xx | [FR-600-history-and-log.md](./FR-600-history-and-log.md) | FR-601…604 (4) | ✅ 4/4 (FR-603/604 — в CR-008) |
 | FR-7xx | [FR-700-nfr.md](./FR-700-nfr.md) | FR-701…705 (5) | ✅ 4 · ⬜ 1 (FR-705 задел) |
-| FR-8xx | [FR-800-clarity-agent.md](./FR-800-clarity-agent.md) | FR-801…809 (9) | ✅ 9/9 (FR-808/809 — в CR-006) |
+| FR-8xx | [FR-800-clarity-agent.md](./FR-800-clarity-agent.md) | FR-801…810 (10) | ✅ 9 · ⬜ 1 (FR-810 задел — ADR-014) |
+| FR-9xx | [FR-900-byok.md](./FR-900-byok.md) | FR-901…907 (7) | ✅ 6 · ⬜ 1 задел (FR-907) |
 
 ## Правила ведения
 

@@ -1,8 +1,9 @@
 // TACG — свёртка потока событий в состояние запуска (для live-вида и replay)
-import { DecisionMode, GraphEdge, GraphNode, LogEntry, RunEvent, RunStatus, RunView } from './types'
+import { DecisionMode, GraphEdge, GraphNode, LlmProviderInfo, LogEntry, RunEvent, RunStatus, RunView } from './types'
 
-/** Свёртка событий 0..n в состояние графа ( ядро режима «Воспроизведение» ) */
-export function foldEvents(events: RunEvent[]): RunView {
+/** Свёртка событий 0..n в состояние графа ( ядро режима «Воспроизведение» )
+ *  base.llm — provenance из снапшота (события его не несут, он приходит с run:created/run:snapshot) */
+export function foldEvents(events: RunEvent[], base?: { llm?: Record<string, LlmProviderInfo> }): RunView {
   const nodes = new Map<string, GraphNode>()
   let version = 0
   let status: RunStatus = 'planning'
@@ -48,7 +49,7 @@ export function foldEvents(events: RunEvent[]): RunView {
         break
     }
   }
-  return { nodes: [...nodes.values()], version, status, progress, logs, summary, decisionMode, certainty }
+  return { nodes: [...nodes.values()], version, status, progress, logs, summary, decisionMode, certainty, llm: base?.llm }
 }
 
 /** Рёбра графа выводятся из зависимостей узлов */

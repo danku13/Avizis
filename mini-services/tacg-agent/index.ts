@@ -4,6 +4,16 @@ import { Server } from 'socket.io'
 import { AgentEngine } from './engine'
 import { store } from './store'
 import { DecisionMode, RunMode } from './types'
+import {
+  LlmConfig,
+  loadConfig,
+  mergeSavedApiKey,
+  publicConfig,
+  resolveRole,
+  sanitizeConfigInput,
+  saveConfig,
+  validateProvider,
+} from './llm-config'
 
 const httpServer = createServer()
 const io = new Server(httpServer, {
@@ -82,6 +92,61 @@ io.on('connection', (socket) => {
 
   socket.on('run:delete', (data: any) => {
     engine.deleteRun(String(data?.runId || ''))
+  })
+
+  // ─────────────────────── BYOK: конфигурация LLM ───────────────────────
+
+  // Конфиг для клиента — ТОЛЬКО с маской ключа (полный ключ не покидает сервер)
+  socket.on('llm:config:get', () => {
+    socket.emit('llm:config', { config: publicConfig(loadConfig()) })
+  })
+
+  socket.on('llm:config:save', async (data: any) => {
+    try {
+      const incoming = sanitizeConfigInput(data?.config)
+      if (!incoming || (!incoming.default && !incoming.roles)) {
+        socket.emit('llm:config:saved', { ok: false, error: 'Некорректная конфигурация' })
+        return
+      }
+      // пустой apiKey в поле = «не менять»: сохраняем прежний ключ
+      const merged = mergeSavedApiKey(incoming, loadConfig())
+      // валидация пробным запросом (openai-compatible); zai — без пробы
+      let latencyMs: number | undefined
+      if (merged.default?.adapter === 'openai-compatible') {
+        const probe = await validateProvider(merged.default)
+        if (!probe.ok) {
+          socket.emit('llm:config:saved', { ok: false, error: probe.error })
+          return
+        }
+        latencyMs = probe.latencyMs
+      }
+      saveConfig(merged)
+      socket.emit('llm:config:saved', { ok: true, config: publicConfig(merged), latencyMs })
+    } catch (e: any) {
+      socket.emit('llm:config:saved', { ok: false, error: e?.message || 'Не удалось сохранить конфигурацию' })
+    }
+  })
+
+  socket.on('llm:config:test', async (data: any) => {
+    try {
+      let cfgToTest: LlmConfig['default']
+      if (data?.config) {
+        const incoming = sanitizeConfigInput(data.config)
+        if (!incoming) {
+          socket.emit('llm:config:test:result', { ok: false, error: 'Некорректная конфигурация' })
+          return
+        }
+        // пустой ключ при тесте = использовать сохранённый
+        const merged = mergeSavedApiKey(incoming, loadConfig())
+        cfgToTest = merged.default ?? resolveRole(undefined, merged)
+      } else {
+        cfgToTest = resolveRole(undefined, loadConfig())
+      }
+      const result = await validateProvider(cfgToTest)
+      socket.emit('llm:config:test:result', result)
+    } catch (e: any) {
+      socket.emit('llm:config:test:result', { ok: false, error: e?.message || 'Ошибка проверки' })
+    }
   })
 
   socket.on('disconnect', () => {

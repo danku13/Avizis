@@ -18,6 +18,7 @@ const KIND_STYLES: Record<LogEntry['kind'], string> = {
   decision: 'text-fuchsia-300',
   run: 'text-zinc-300',
   info: 'text-zinc-500',
+  limits: 'text-orange-300',
 }
 
 const KIND_LABELS: Record<LogEntry['kind'], string> = {
@@ -31,6 +32,7 @@ const KIND_LABELS: Record<LogEntry['kind'], string> = {
   decision: 'решение',
   run: 'запуск',
   info: 'инфо',
+  limits: 'лимит',
 }
 
 const fmtTime = (ts: number) =>

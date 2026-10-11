@@ -48,6 +48,13 @@ export interface DecisionState {
   certaintyAfter?: number
 }
 
+/** Провайдер LLM для provenance: каким адаптером/моделью выполнен вызов (без ключей) */
+export interface LlmProviderInfo {
+  /** 'zai' | 'openai-compatible' (допускается произвольный идентификатор адаптера) */
+  adapter: string
+  model: string
+}
+
 export interface GraphNode {
   id: string
   title: string
@@ -76,6 +83,8 @@ export interface GraphNode {
   decision?: DecisionState
   /** Принадлежность узла ветке варианта развилки */
   branchOf?: { decisionId: string; optionId: string }
+  /** Provenance: адаптер/модель, выполнившие LLM-вызов этого узла */
+  llm?: LlmProviderInfo
 }
 
 export interface GraphVersion {
@@ -99,6 +108,8 @@ export interface LogEntry {
     | 'decision'
     | 'run'
     | 'info'
+    /** Аудит усечений структурных лимитов (ADR-013): «Лимит плана/адаптации: …» */
+    | 'limits'
   message: string
 }
 
@@ -129,6 +140,8 @@ export interface RunSnapshot {
   mode: RunMode
   /** Режим решений на развилках (можно менять на ходу) */
   decisionMode: DecisionMode
+  /** Provenance: роль → адаптер/модель, зафиксировано при старте LLM-прогона (без ключей) */
+  llm?: Record<string, LlmProviderInfo>
   status: RunStatus
   createdAt: number
   finishedAt?: number

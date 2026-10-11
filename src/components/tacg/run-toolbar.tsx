@@ -2,17 +2,56 @@
 'use client'
 
 import { useMemo } from 'react'
-import { Pause, Play, Square, Download, Radio, Bot, Hand, GitFork, Compass } from 'lucide-react'
+import { Pause, Play, Square, Download, Radio, Bot, Hand, GitFork, Compass, Settings2, Cpu } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { RunStatusBadge, ModeBadge } from './status-badge'
 import { findOfferedDecision, foldEvents, versionMarkers } from '@/lib/tacg/fold'
-import { chosenIds, certaintyLabel, DECISION_DOMAIN_LABELS, DecisionMode, selectionMode } from '@/lib/tacg/types'
+import { chosenIds, certaintyLabel, DECISION_DOMAIN_LABELS, DecisionMode, LLM_ROLE_LABELS, LlmProviderInfo, selectionMode } from '@/lib/tacg/types'
 import { getSocket } from '@/lib/tacg/socket'
 import { useTacgStore } from '@/store/tacg-store'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+
+/** Чип активного провайдера + кнопка настроек (BYOK) */
+function LlmChip() {
+  const llmConfig = useTacgStore((s) => s.llmConfig)
+  const openSettings = useTacgStore((s) => s.openSettings)
+  const d = llmConfig?.default
+  const label =
+    d?.adapter === 'openai-compatible'
+      ? `LLM: ${d.adapter}${d.model ? ` · ${d.model}` : ''}`
+      : 'LLM: z-ai SDK'
+  return (
+    <>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            onClick={openSettings}
+            role="status"
+            aria-label={`Активный LLM-провайдер: ${label}. Открыть настройки`}
+            className="inline-flex h-8 max-w-[300px] items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-900/60 px-2.5 text-xs font-medium text-zinc-300 transition-colors hover:border-teal-500/50 hover:text-teal-300"
+          >
+            <Cpu className="size-3.5 shrink-0 text-teal-400" />
+            <span className="hidden truncate sm:inline">{label}</span>
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">
+          Активный провайдер: {label} — клик открывает настройки LLM (BYOK)
+        </TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant="outline" size="icon" className="size-8" onClick={openSettings} aria-label="Настройки LLM">
+            <Settings2 className="size-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Настройки LLM (BYOK: свои модели и ключи)</TooltipContent>
+      </Tooltip>
+    </>
+  )
+}
 
 export function RunToolbar() {
   const events = useTacgStore((s) => s.events)
@@ -23,9 +62,13 @@ export function RunToolbar() {
   const setPlaying = useTacgStore((s) => s.setPlaying)
   const decisionMode = useTacgStore((s) => s.decisionMode)
   const openDecision = useTacgStore((s) => s.openDecision)
+  const runLlm = useTacgStore((s) => s.runLlm)
 
   const isLive = cursor === null
-  const view = useMemo(() => foldEvents(isLive ? events : events.slice(0, cursor! + 1)), [events, cursor])
+  const view = useMemo(
+    () => foldEvents(isLive ? events : events.slice(0, cursor! + 1), { llm: runLlm ?? undefined }),
+    [events, cursor, runLlm]
+  )
   const markers = useMemo(() => versionMarkers(events), [events])
   const offered = useMemo(() => (isLive ? findOfferedDecision(view.nodes) : undefined), [view.nodes, isLive])
 
@@ -89,6 +132,18 @@ export function RunToolbar() {
     lines.push(`- **Событий записано:** ${events.length}`)
     if (elapsed != null) lines.push(`- **Длительность:** ${elapsed.toFixed(1)} с`)
     lines.push('')
+
+    // Provenance моделей (BYOK): роль → адаптер · модель
+    const llmRoles = Object.entries(view.llm ?? {}) as Array<[string, LlmProviderInfo]>
+    if (llmRoles.length) {
+      lines.push('## Модели (BYOK)')
+      lines.push('')
+      llmRoles.forEach(([role, info]) => {
+        lines.push(`- **${LLM_ROLE_LABELS[role] ?? role}:** ${info.adapter} · ${info.model}`)
+      })
+      lines.push('')
+    }
+
     lines.push('## Граф вычислений')
     lines.push('')
     lines.push('| # | Шаг | Статус | Зависимости | Длительность | Добавлен |')
@@ -168,9 +223,12 @@ export function RunToolbar() {
 
   if (!meta) {
     return (
-      <div className="flex items-center gap-3 rounded-lg border bg-secondary/40 px-4 py-3 text-sm text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-secondary/40 px-4 py-3 text-sm text-muted-foreground">
         <Radio className="size-4 text-emerald-400" />
-        Движок агента готов — задайте задачу в панели слева
+        <span className="min-w-0 flex-1">Движок агента готов — задайте задачу в панели слева</span>
+        <div className="flex shrink-0 items-center gap-2">
+          <LlmChip />
+        </div>
       </div>
     )
   }
@@ -253,6 +311,7 @@ export function RunToolbar() {
             </TooltipTrigger>
             <TooltipContent>Экспорт аудиторского отчёта (MD)</TooltipContent>
           </Tooltip>
+          <LlmChip />
         </div>
       </div>
 
