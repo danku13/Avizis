@@ -2,7 +2,7 @@
 'use client'
 
 import { create } from 'zustand'
-import { RunEvent, RunMeta, RunMode, RunSnapshot } from '@/lib/tacg/types'
+import { DecisionMode, RunEvent, RunMeta, RunMode, RunSnapshot } from '@/lib/tacg/types'
 
 export interface CurrentRunMeta {
   id: string
@@ -22,17 +22,24 @@ interface TacgStore {
   playing: boolean
   selectedNodeId: string | null
   starting: boolean
+  /** Актуальный режим решений live-запуска (null — до запуска) */
+  decisionMode: DecisionMode | null
+  /** id развилки, чью модалку пользователь закрыл вручную (до следующего предложения) */
+  decisionDismissed: string | null
 
   setConnected: (v: boolean) => void
   setRuns: (runs: RunMeta[]) => void
-  onRunCreated: (meta: CurrentRunMeta) => void
-  onRunStarted: (runId: string) => void
+  onRunCreated: (meta: CurrentRunMeta, decisionMode?: DecisionMode | null) => void
+  onRunStarted: () => void
   applyEvent: (ev: RunEvent) => void
   loadSnapshot: (run: RunSnapshot) => void
   setCursor: (i: number | null) => void
   setPlaying: (v: boolean) => void
   select: (nodeId: string | null) => void
   setStarting: (v: boolean) => void
+  setDecisionMode: (mode: DecisionMode | null) => void
+  dismissDecision: (nodeId: string) => void
+  openDecision: () => void
   clearRun: () => void
   removeRunLocal: (runId: string) => void
 }
@@ -47,12 +54,14 @@ export const useTacgStore = create<TacgStore>()((set, get) => ({
   playing: false,
   selectedNodeId: null,
   starting: false,
+  decisionMode: null,
+  decisionDismissed: null,
 
   setConnected: (v) => set({ connected: v }),
 
   setRuns: (runs) => set({ runs: runs ?? [] }),
 
-  onRunCreated: (meta) =>
+  onRunCreated: (meta, decisionMode) =>
     set({
       currentRunId: meta.id,
       currentMeta: meta,
@@ -61,18 +70,18 @@ export const useTacgStore = create<TacgStore>()((set, get) => ({
       playing: false,
       selectedNodeId: null,
       starting: false,
+      decisionMode: decisionMode ?? 'manual',
+      decisionDismissed: null,
     }),
 
   onRunStarted: () => set({ starting: false }),
 
   applyEvent: (ev) => {
     // события приходят только для текущего запуска (фильтр в слое socket)
-    if (get().cursor === null) {
-      set({ events: [...get().events, ev] })
-    } else {
-      // во время воспроизведения новые события накапливаются «в фоне»
-      set({ events: [...get().events, ev] })
-    }
+    set({ events: [...get().events, ev] })
+    // новое предложение развилки — модалка открывается заново
+    if (ev.type === 'decision:offer') set({ decisionDismissed: null })
+    if (ev.type === 'decision:mode') set({ decisionMode: ev.mode })
   },
 
   loadSnapshot: (run) =>
@@ -84,6 +93,8 @@ export const useTacgStore = create<TacgStore>()((set, get) => ({
       playing: false,
       selectedNodeId: null,
       starting: false,
+      decisionMode: run.decisionMode ?? null,
+      decisionDismissed: null,
     }),
 
   setCursor: (i) => set({ cursor: i }),
@@ -94,6 +105,12 @@ export const useTacgStore = create<TacgStore>()((set, get) => ({
 
   setStarting: (v) => set({ starting: v }),
 
+  setDecisionMode: (mode) => set({ decisionMode: mode }),
+
+  dismissDecision: (nodeId) => set({ decisionDismissed: nodeId }),
+
+  openDecision: () => set({ decisionDismissed: null }),
+
   clearRun: () =>
     set({
       currentRunId: null,
@@ -102,6 +119,8 @@ export const useTacgStore = create<TacgStore>()((set, get) => ({
       cursor: null,
       playing: false,
       selectedNodeId: null,
+      decisionMode: null,
+      decisionDismissed: null,
     }),
 
   removeRunLocal: (runId) => {

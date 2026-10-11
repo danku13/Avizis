@@ -1,4 +1,5 @@
 // TACG — граф вычислений агента на React Flow (@xyflow/react v12)
+// Поддержка развилок решений: карточка-развилка, ветки вариантов, гашение нереализованных веток
 'use client'
 
 import { useEffect, useMemo, useRef } from 'react'
@@ -19,9 +20,10 @@ import {
   type NodeTypes,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { Loader2, Network, PenLine, Plus } from 'lucide-react'
+import { CheckCircle2, GitFork, Loader2, Network, PenLine, Plus, X } from 'lucide-react'
 import { GraphNode } from '@/lib/tacg/types'
 import { computeEdges } from '@/lib/tacg/fold'
+import { useTacgStore } from '@/store/tacg-store'
 import { cn } from '@/lib/utils'
 
 const NODE_W = 248
@@ -37,6 +39,7 @@ const CARD_STYLES: Record<GraphNode['status'], string> = {
   done: 'border-emerald-500/70 bg-zinc-900/80',
   error: 'border-red-500 bg-zinc-900',
   skipped: 'border-zinc-600/60 bg-zinc-900/50',
+  discarded: 'border-zinc-600/40 bg-zinc-900/40',
 }
 
 const BAR_STYLES: Record<GraphNode['status'], string> = {
@@ -45,6 +48,7 @@ const BAR_STYLES: Record<GraphNode['status'], string> = {
   done: 'bg-emerald-400',
   error: 'bg-red-500',
   skipped: 'bg-zinc-600',
+  discarded: 'bg-zinc-600/60',
 }
 
 const MINIMAP_NODE_COLORS: Record<GraphNode['status'], string> = {
@@ -53,6 +57,14 @@ const MINIMAP_NODE_COLORS: Record<GraphNode['status'], string> = {
   done: '#34d399',
   error: '#ef4444',
   skipped: '#52525b',
+  discarded: '#3f3f46',
+}
+
+/** Цвет чипа ветки по id варианта */
+const OPTION_STYLES: Record<string, string> = {
+  a: 'bg-sky-500/25 text-sky-300',
+  b: 'bg-fuchsia-500/25 text-fuchsia-300',
+  c: 'bg-orange-500/25 text-orange-300',
 }
 
 /** Слоевой layout: колонка = глубина зависимости, узлы центрируются по вертикали */
@@ -92,17 +104,33 @@ function computeLayout(nodes: GraphNode[]) {
 
 /** ─── Кастомный узел React Flow ─── */
 function TacgNodeCard({ data: n, selected }: NodeProps<TacgFlowNode>) {
+  const decisionMode = useTacgStore((s) => s.decisionMode)
+  const isDecision = n.kind === 'decision' && !!n.decision
+  const dec = isDecision ? n.decision! : undefined
+  const offered = isDecision && dec?.status === 'offered' && !dec?.chosen
+  const waitingUser = offered && (decisionMode ?? 'manual') === 'manual'
+  const chosenOpt = dec?.options.find((o) => o.id === dec?.chosen)
+
   return (
     <div
       className={cn(
         'relative w-[248px] rounded-xl border pl-4 pr-3.5 shadow-md backdrop-blur-sm transition-all',
-        CARD_STYLES[n.status],
-        n.dynamic && 'border-dashed',
+        isDecision && offered
+          ? 'border-fuchsia-400 bg-zinc-900'
+          : CARD_STYLES[n.status],
+        n.dynamic && !isDecision && 'border-dashed',
+        n.status === 'discarded' && 'opacity-55',
         selected && 'ring-2 ring-zinc-300/70 ring-offset-2 ring-offset-zinc-950',
+        waitingUser && 'cursor-pointer hover:border-fuchsia-300',
       )}
     >
-      {n.status === 'running' && (
-        <div className="node-pulse pointer-events-none absolute -inset-1.5 rounded-2xl border border-cyan-400/50 bg-cyan-500/10" />
+      {(n.status === 'running' || offered) && (
+        <div
+          className={cn(
+            'node-pulse pointer-events-none absolute -inset-1.5 rounded-2xl border',
+            offered ? 'border-fuchsia-400/60 bg-fuchsia-500/10' : 'border-cyan-400/50 bg-cyan-500/10'
+          )}
+        />
       )}
 
       <Handle
@@ -120,8 +148,22 @@ function TacgNodeCard({ data: n, selected }: NodeProps<TacgFlowNode>) {
 
       <div className="flex h-[84px] flex-col justify-between py-3">
         <div className="flex items-start justify-between gap-1.5">
-          <div className="line-clamp-2 text-[13px] font-medium leading-tight text-zinc-100">{n.title}</div>
+          <div className="flex min-w-0 items-start gap-1.5">
+            {isDecision && <GitFork className={cn('mt-0.5 size-3.5 shrink-0', offered ? 'text-fuchsia-300' : 'text-fuchsia-400/80')} />}
+            <div className="line-clamp-2 text-[13px] font-medium leading-tight text-zinc-100">{n.title}</div>
+          </div>
           <div className="flex shrink-0 gap-1">
+            {n.branchOf && (
+              <span
+                className={cn(
+                  'rounded px-1.5 py-0.5 text-[10px] font-bold uppercase',
+                  OPTION_STYLES[n.branchOf.optionId] ?? 'bg-zinc-500/20 text-zinc-300'
+                )}
+                title={`Ветка варианта «${n.branchOf.optionId}» развилки ${n.branchOf.decisionId}`}
+              >
+                {n.branchOf.optionId}
+              </span>
+            )}
             {n.dynamic && (
               <span className="flex items-center gap-0.5 rounded bg-violet-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-violet-300">
                 <Plus className="size-2.5" />
@@ -136,11 +178,27 @@ function TacgNodeCard({ data: n, selected }: NodeProps<TacgFlowNode>) {
             )}
           </div>
         </div>
+
+        {/* строка состояния: у развилок — свой сюжет */}
         <div className="flex items-center gap-1.5 text-[11px] text-zinc-500">
-          {n.status === 'running' ? (
+          {isDecision ? (
+            <DecisionStatusRow
+              status={n.status}
+              decisionStatus={dec?.status ?? 'pending'}
+              waitingUser={!!waitingUser}
+              chosenLabel={chosenOpt?.label}
+              chosenBy={dec?.chosenBy}
+              optionsCount={dec?.options.length ?? 0}
+            />
+          ) : n.status === 'running' ? (
             <span className="flex items-center gap-1 text-cyan-300">
               <Loader2 className="size-3 animate-spin" />
               выполнение…
+            </span>
+          ) : n.status === 'discarded' ? (
+            <span className="flex items-center gap-1">
+              <X className="size-3" />
+              ветка не выбрана
             </span>
           ) : (
             <>
@@ -154,6 +212,7 @@ function TacgNodeCard({ data: n, selected }: NodeProps<TacgFlowNode>) {
                       error: 'ошибка',
                       skipped: 'пропущен',
                       running: 'выполняется',
+                      discarded: 'не реализовано',
                     }[n.status]}
               </span>
               {(n.runs ?? 0) > 1 && <span className="text-amber-400/80">·×{n.runs}</span>}
@@ -163,8 +222,67 @@ function TacgNodeCard({ data: n, selected }: NodeProps<TacgFlowNode>) {
       </div>
 
       {/* цветовая полоска статуса слева */}
-      <span className={cn('absolute bottom-2.5 left-1.5 top-2.5 w-1 rounded-full', BAR_STYLES[n.status])} />
+      <span
+        className={cn(
+          'absolute bottom-2.5 left-1.5 top-2.5 w-1 rounded-full',
+          isDecision && offered ? 'bg-fuchsia-400' : BAR_STYLES[n.status]
+        )}
+      />
     </div>
+  )
+}
+
+/** Нижняя строка карточки-развилки */
+function DecisionStatusRow({
+  status,
+  decisionStatus,
+  waitingUser,
+  chosenLabel,
+  chosenBy,
+  optionsCount,
+}: {
+  status: GraphNode['status']
+  decisionStatus: 'pending' | 'offered' | 'resolved'
+  waitingUser: boolean
+  chosenLabel?: string
+  chosenBy?: 'agent' | 'user'
+  optionsCount: number
+}) {
+  if (decisionStatus === 'resolved' && chosenLabel) {
+    return (
+      <span className="flex min-w-0 items-center gap-1.5 text-emerald-300">
+        <CheckCircle2 className="size-3 shrink-0" />
+        <span className="truncate">выбрано: {chosenLabel}</span>
+        <span className="shrink-0 text-zinc-500">· {chosenBy === 'user' ? 'вы' : 'агент'}</span>
+      </span>
+    )
+  }
+  if (decisionStatus === 'offered') {
+    return waitingUser ? (
+      <span className="flex animate-pulse items-center gap-1 text-fuchsia-300">
+        <GitFork className="size-3 shrink-0" />
+        ждёт вашего выбора
+      </span>
+    ) : (
+      <span className="flex items-center gap-1 text-fuchsia-300">
+        <Loader2 className="size-3 shrink-0 animate-spin" />
+        агент выбирает…
+      </span>
+    )
+  }
+  if (status === 'running') {
+    return (
+      <span className="flex items-center gap-1 text-cyan-300">
+        <Loader2 className="size-3 animate-spin" />
+        агент рассуждает…
+      </span>
+    )
+  }
+  return (
+    <span className="flex items-center gap-1">
+      <GitFork className="size-3" />
+      развилка · вариантов: {optionsCount}
+    </span>
   )
 }
 
@@ -175,10 +293,15 @@ function FlowStage({
   nodes,
   selectedNodeId,
   onSelect,
+  waitingDecisionId,
+  onOpenDecision,
 }: {
   nodes: GraphNode[]
   selectedNodeId: string | null
   onSelect: (id: string | null) => void
+  /** id развилки, ожидающей выбора (клик по ней открывает модалку выбора) */
+  waitingDecisionId: string | null
+  onOpenDecision: () => void
 }) {
   const rf = useReactFlow()
   const lastSig = useRef<string | null>(null)
@@ -199,7 +322,7 @@ function FlowStage({
         height: NODE_H,
         style: { width: NODE_W, height: NODE_H },
       })),
-    [nodes, layout, selectedNodeId],
+    [nodes, layout, selectedNodeId]
   )
 
   const rfEdges = useMemo<Edge[]>(() => {
@@ -210,7 +333,27 @@ function FlowStage({
         if (!from || !to) return null
         let stroke = 'rgba(82,82,91,0.75)'
         let animated = false
-        if (to.status === 'running') {
+        let dash: string | undefined
+
+        const isBranchEdge = from.kind === 'decision' && to.branchOf?.decisionId === from.id
+        const chosen = from.decision?.chosen
+        const deadBranch =
+          from.status === 'discarded' ||
+          to.status === 'discarded' ||
+          (isBranchEdge && chosen && to.branchOf?.optionId !== chosen)
+
+        if (deadBranch) {
+          // нереализованная ветка: тихое пунктирное ребро
+          stroke = 'rgba(63,63,70,0.45)'
+          dash = '3 4'
+        } else if (isBranchEdge) {
+          if (chosen) {
+            stroke = from.status === 'done' ? 'rgba(52,211,153,0.65)' : 'rgba(217,70,239,0.65)'
+          } else {
+            stroke = 'rgba(217,70,239,0.6)'
+            dash = '6 4'
+          }
+        } else if (to.status === 'running') {
           stroke = '#22d3ee'
           animated = true
         } else if (to.dynamic && from.status !== 'done') {
@@ -224,7 +367,7 @@ function FlowStage({
           target: e.to,
           type: 'smoothstep',
           animated,
-          style: { stroke, strokeWidth: 1.75 },
+          style: { stroke, strokeWidth: 1.75, ...(dash ? { strokeDasharray: dash } : {}) },
           pathOptions: { borderRadius: 18 },
           markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: stroke },
         } satisfies Edge
@@ -265,7 +408,11 @@ function FlowStage({
       deleteKeyCode={null}
       zoomOnDoubleClick={false}
       selectionOnDrag={false}
-      onNodeClick={(_, node) => onSelect(node.id)}
+      onNodeClick={(_, node) => {
+        // клик по развилке в ожидании открывает модалку выбора, остальные узлы — инспектор
+        if (node.id === waitingDecisionId) onOpenDecision()
+        else onSelect(node.id)
+      }}
       onPaneClick={() => onSelect(null)}
       className="bg-transparent"
     >
@@ -281,7 +428,11 @@ function FlowStage({
         className="hidden md:block"
         bgColor="#101013"
         maskColor="rgba(9,9,11,0.72)"
-        nodeColor={(n) => MINIMAP_NODE_COLORS[(n as TacgFlowNode).data?.status ?? 'pending'] ?? '#52525b'}
+        nodeColor={(n) =>
+          (n as TacgFlowNode).data?.kind === 'decision'
+            ? '#d946ef'
+            : MINIMAP_NODE_COLORS[(n as TacgFlowNode).data?.status ?? 'pending'] ?? '#52525b'
+        }
         nodeStrokeColor="#3f3f46"
         nodeStrokeWidth={2}
         nodeBorderRadius={6}
@@ -297,9 +448,11 @@ export interface GraphCanvasProps {
   nodes: GraphNode[]
   selectedNodeId: string | null
   onSelect: (id: string | null) => void
+  waitingDecisionId?: string | null
+  onOpenDecision?: () => void
 }
 
-export function GraphCanvas({ nodes, selectedNodeId, onSelect }: GraphCanvasProps) {
+export function GraphCanvas({ nodes, selectedNodeId, onSelect, waitingDecisionId, onOpenDecision }: GraphCanvasProps) {
   return (
     /* absolute inset-0: надёжнее h-full — проценты не резолвятся
        в flex-item, чья высота задана только min-height (мобильная раскладка) */
@@ -315,7 +468,13 @@ export function GraphCanvas({ nodes, selectedNodeId, onSelect }: GraphCanvasProp
         </div>
       ) : (
         <ReactFlowProvider>
-          <FlowStage nodes={nodes} selectedNodeId={selectedNodeId} onSelect={onSelect} />
+          <FlowStage
+            nodes={nodes}
+            selectedNodeId={selectedNodeId}
+            onSelect={onSelect}
+            waitingDecisionId={waitingDecisionId ?? null}
+            onOpenDecision={onOpenDecision ?? (() => {})}
+          />
         </ReactFlowProvider>
       )}
     </div>

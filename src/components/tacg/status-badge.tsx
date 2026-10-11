@@ -34,6 +34,7 @@ export const NODE_DOT: Record<NodeStatus, string> = {
   done: 'bg-emerald-400',
   error: 'bg-red-500',
   skipped: 'bg-zinc-500',
+  discarded: 'bg-zinc-600',
 }
 
 export function NodeStatusBadge({ status }: { status: NodeStatus }) {
@@ -64,7 +65,9 @@ const LEGEND: { color: string; label: string }[] = [
   { color: 'bg-amber-400', label: 'Ожидает' },
   { color: 'bg-red-500', label: 'Ошибка' },
   { color: 'bg-violet-400', label: 'Добавлено динамически' },
+  { color: 'bg-fuchsia-400', label: 'Развилка решения' },
   { color: 'bg-zinc-500', label: 'Пропущено' },
+  { color: 'bg-zinc-600', label: 'Ветка не выбрана' },
 ]
 
 export function GraphLegend({ className }: { className?: string }) {

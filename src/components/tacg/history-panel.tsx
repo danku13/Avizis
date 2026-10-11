@@ -2,12 +2,12 @@
 'use client'
 
 import { useState } from 'react'
-import { Play, Trash2, History, Zap, Cpu } from 'lucide-react'
+import { Play, Trash2, History, Zap, Cpu, GitFork, Bot, Hand } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
-import { RunMode } from '@/lib/tacg/types'
+import { DecisionMode, RunMode } from '@/lib/tacg/types'
 import { getSocket } from '@/lib/tacg/socket'
 import { useTacgStore } from '@/store/tacg-store'
 import { toast } from 'sonner'
@@ -34,11 +34,20 @@ export function HistoryPanel() {
   const setStarting = useTacgStore((s) => s.setStarting)
   const [task, setTask] = useState('Проанализируй данные о продажах за Q3 и найди аномалии')
   const [mode, setMode] = useState<RunMode>('demo')
+  const [decisionMode, setDecisionMode] = useState<DecisionMode>('manual')
 
   const start = () => {
-    getSocket().emit('run:start', { task, mode })
+    getSocket().emit('run:start', { task, mode, decisionMode })
     setStarting(true)
-    toast.info(mode === 'llm' ? 'Агент запущен: LLM строит план…' : 'Агент запущен в демо-режиме…')
+    toast.info(
+      mode === 'llm' ? 'Агент запущен: LLM строит план…' : 'Агент запущен в демо-режиме…',
+      {
+        description:
+          decisionMode === 'manual'
+            ? 'На развилках агент предложит варианты и будет ждать вашего выбора'
+            : 'На развилках агент будет принимать решения сам — с обоснованием',
+      }
+    )
     setTimeout(() => useTacgStore.getState().setStarting(false), 4000)
   }
 
@@ -87,13 +96,35 @@ export function HistoryPanel() {
             </SelectItem>
           </SelectContent>
         </Select>
+        <Select value={decisionMode} onValueChange={(v) => setDecisionMode(v as DecisionMode)}>
+          <SelectTrigger aria-label="Режим решений на развилках">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="manual">
+              <span className="flex items-center gap-2">
+                <Hand className="size-3.5 text-fuchsia-400" />
+                Решения: вручную
+              </span>
+            </SelectItem>
+            <SelectItem value="auto">
+              <span className="flex items-center gap-2">
+                <Bot className="size-3.5 text-fuchsia-400" />
+                Решения: авто
+              </span>
+            </SelectItem>
+          </SelectContent>
+        </Select>
         <Button className="w-full" onClick={start} disabled={starting || !task.trim()}>
           <Play className="mr-2 size-4" />
           {starting ? 'Агент стартует…' : 'Запустить агента'}
         </Button>
-        <p className="text-[11px] leading-relaxed text-muted-foreground">
-          Демо-режим всегда даёт сценарий с адаптацией графа. LLM-режим строит план, выполняет шаги и решает
-          о добавлении узлов — реальные вызовы SDK.
+        <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-muted-foreground">
+          <GitFork className="mt-0.5 size-3.5 shrink-0 text-fuchsia-400/70" />
+          <span>
+            Демо-режим даёт сценарий с адаптацией графа и развилкой из 3 вариантов. «Вручную» — агент предлагает
+            варианты и ждёт, «авто» — решает сам. LLM-режим строит план и решает через вызовы SDK.
+          </span>
         </p>
       </div>
 

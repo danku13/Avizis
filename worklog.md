@@ -69,3 +69,75 @@ Stage Summary:
 - Инспектор узла — модалка 55-64vw с 2-колоночной раскладкой (мета слева, вход/выход справа)
 - Вёрстка на всю ширину экрана: app-shell без прокрутки на десктопе, граф занимает всё свободное пространство
 - Все прежние сценарии работают: live-прогон, адаптация, override с пересчётом, playback, история
+
+---
+Task ID: 3
+Agent: Super Z (main agent)
+Task: Ветвления решений: развилки в рассуждениях агента с режимами «авто»/«ручной выбор» и мгновенной визуализацией веток
+
+Work Log:
+- Спроектирована концепция decision-узлов: узел-развилка (kind='decision') с вопросом и 2-3 вариантами
+  (label, rationale, nextSteps-превью); все ветки существуют в плане как параллельные цепочки (branchOf),
+  итоговый узел зависит от хвостов всех веток
+- Типы (types.ts, зеркало фронт/бэк): NodeStatus + 'discarded', DecisionOption, DecisionState
+  (question/options/status pending-offered-resolved/chosen/chosenBy/reasoning), GraphNode + kind/decision/branchOf,
+  LogEntry kind + 'decision', RunEvent + decision:offer/decision:resolved/decision:mode, RunSnapshot + decisionMode
+- Демо-сценарий (demo.ts): развилка «стратегия проверки аномалий» с 3 вариантами (A стат.проверка / B глубокое
+  расследование из 2 шагов / C запрос контекста у владельца), узлы b1a/b1b/b2b/b1c, итог n3 зависит от всех хвостов;
+  DEMO_AUTO_PICK (агент выбирает B с обоснованием); outputs веток и итога зависят от выбранной стратегии; d2-адаптация
+  убрана (роль проверки теперь у веток), d1 (валидация) сохранена
+- Движок (engine.ts):
+  - handleDecisionNode: фаза рассуждения (пауза с уважением stop/pause) → offer (node:update + decision:offer) →
+    manual: waitForDecision (promise в rt.pendingDecision, движок «замер»), auto: autoDecide → resolveDecision
+  - resolveDecision: узел done + output, decision.resolved (chosen/chosenBy/reasoning), МГНОВЕННОЕ гашение
+    sibling-веток (status='discarded', node:update на каждую), decision:resolved, лог аудита
+  - setDecisionMode: смена режима на ходу (decision:mode + лог); если ожидается выбор и включили «авто» —
+    агент решает немедленно (promise резолвится выбором агента); control stop/deleteRun разблокируют ожидание (null → rollback узла)
+  - nextReadyNode: зависимость от 'discarded' узла считается удовлетворённой; recalcProgress считает только активные узлы;
+    overrideNode не воскрешает погашенные ветки; rollbackDecision возвращает развилку в очередь при остановке
+  - LLM: планировщик просит ОДНУ развилку (JSON с decision.options[].steps), sanitizePlan нормализует ids/ветки
+    (cleanId/cleanDeps, ветки цепочками от развилки, guard от ссылок вперёд); DECIDER_SYS + autoDecide
+    (JSON {optionId, reasoning}, fallback на первый вариант)
+- Socket API (index.ts): run:start + decisionMode; decision:resolve (выбор пользователя), decision:mode (смена режима)
+- Фронтенд:
+  - fold.ts: RunView + decisionMode, обработка decision-событий, findOfferedDecision (развилка в ожидании),
+    timelineTicks + decision-события
+  - store: decisionMode (обновляется из decision:mode/run:created/run:snapshot), decisionDismissed (модалка
+    закрыта вручную — не авто-открывается до нового offer), openDecision/dismissDecision
+  - graph-canvas: карточка-развилка (GitFork, fuchsia-рамка+пульс в ожидании, статусные строки «агент
+    рассуждает…»/«ждёт вашего выбора»/«агент выбирает…»/«выбрано: label · агент|вы»), чипы веток A/B/C
+    (sky/fuchsia/orange), 'discarded' = полупрозрачная серая карта «ветка не выбрана», рёбра: к веткам —
+    пунктир fuchsia до выбора, emerald для выбранной, серый тихий пунктир для нереализованных; клик по
+    ожидающей развилке открывает модалку выбора (не инспектор); MiniMap развилки — fuchsia
+  - decision-modal.tsx (НОВЫЙ): Диалог 55-64vw (≥50%): вопрос, карточки вариантов (чип буквы, label,
+    rationale, превью «дальше: 1. … 2. …»), выбор+«Принять вариант», тумблер Вручную/Авто в подвале
+    (переключение в «авто» во время ожидания — агент решает за пользователя), auto-open на decision:offer,
+    закрытие скрывает окно не отменяя ожидание; lint-фиксы: derived-state вместо setState-in-effect, fold без memo
+  - run-toolbar: тумблер «Решения: вручную/Авто» (синхрон с движком через decision:mode), баннер
+    «Агент ждёт вашего решения — Открыть выбор» при ожидании, секция «Развилки и решения» в MD-отчёте
+  - node-inspector: секция развилки (вопрос, все варианты с chosen-выделением, «Решение принял: агент|пользователь»,
+    блок «Рассуждение агента»/«Обоснование»), бейджи «развилка · N варианта» и «ветка X», кнопка «Открыть выбор варианта»
+  - history-panel: селект «Решения: вручную/авто» при запуске; event-log: kind 'решение' (fuchsia);
+    status-badge: легенда + «Развилка решения» и «Ветка не выбрана»; page: DecisionModal, waitingDecisionId
+    для кликов по графу, обработчики decision:resolve:result/decision:mode:result; v0.3 в футере
+- Тест scripts/test-tacg-decision.ts — ПРОЙДЕН (3 сценария): ручной выбор (ветка a done, b/c discarded,
+  итог по быстрой стратегии), авто (агент выбрал b с reasoning), переключение в «авто» во время ожидания
+  (resolved by=agent)
+- E2E через Agent Browser (:81): рендер, авто-открытие модалки на развилке (64% ширины), выбор B →
+  2 ветки погашены («ветка не выбрана»), карточка «выбрано: Глубокое расследование · вы», инспектор
+  развилки (вопрос/варианты/выбран/обоснование), авто-режим («· агент»), playback v1: все ветки видны
+  как ожидающие (погашено 0), мобильная 390px без горизонтального скролла, 0 ошибок и 0 варнингов консоли,
+  bun run lint чисто
+- Инфраструктура: сервис tacg-agent перезапущен через double-fork (bash -c '(setsid … &)') — переживает
+  завершение команды Bash-инструмента
+
+Stage Summary:
+- Агент «рассуждая» доходит до развилок: предлагает варианты с обоснованием и превью шагов
+- Режим «авто»: агент выбирает сам (демо-скрипт или LLM-вызов DECIDER_SYS), обоснование видно
+  в карточке/инспекторе/журнале/отчёте; режим «ручной выбор»: модалка ≥50vw, движок ждёт
+- Переключение режима на ходу, в т.ч. прерывание ожидания переводом в «авто»
+- Выбор мгновенно меняет набор шагов: выбранная ветка активна, альтернативы гаснут («не реализовано»),
+  итог зависит от стратегии; всё в event-stream → playback показывает ветки до и после решения
+- Артефакты: mini-services/tacg-agent/{types,demo,engine,index}.ts, src/lib/tacg/{types,fold}.ts,
+  src/store/tacg-store.ts, src/components/tacg/{graph-canvas,decision-modal,run-toolbar,node-inspector,
+  event-log,status-badge,history-panel}.tsx, src/app/page.tsx, scripts/test-tacg-decision.ts

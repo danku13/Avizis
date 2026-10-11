@@ -1,8 +1,34 @@
 // TACG — общие типы клиентской части (зеркало mini-services/tacg-agent/types.ts)
 
-export type NodeStatus = 'pending' | 'running' | 'done' | 'error' | 'skipped'
+export type NodeStatus = 'pending' | 'running' | 'done' | 'error' | 'skipped' | 'discarded'
 export type RunStatus = 'planning' | 'running' | 'paused' | 'stopped' | 'completed' | 'error'
 export type RunMode = 'demo' | 'llm'
+
+/** Режим принятия решений на развилках */
+export type DecisionMode = 'auto' | 'manual'
+
+/** Вариант на развилке: обоснование + превью дальнейших шагов */
+export interface DecisionOption {
+  id: string
+  label: string
+  /** Обоснование: плюсы, минусы, цена выбора */
+  rationale: string
+  /** Названия шагов, которые выполнит эта ветка (превью последствий) */
+  nextSteps: string[]
+}
+
+/** Состояние развилки в узле-решении */
+export interface DecisionState {
+  question: string
+  options: DecisionOption[]
+  status: 'pending' | 'offered' | 'resolved'
+  /** Выбранный вариант (id из options) */
+  chosen?: string
+  /** Кто принял решение */
+  chosenBy?: 'agent' | 'user'
+  /** Обоснование выбора (в авто-режиме — рассуждение агента) */
+  reasoning?: string
+}
 
 export interface GraphNode {
   id: string
@@ -25,12 +51,28 @@ export interface GraphNode {
   /** Результат переопределён пользователем */
   overridden?: boolean
   runs?: number
+  /** Тип узла: обычный шаг или развилка (решение) */
+  kind?: 'step' | 'decision'
+  /** Присутствует у узлов-развилок */
+  decision?: DecisionState
+  /** Принадлежность узла ветке варианта развилки */
+  branchOf?: { decisionId: string; optionId: string }
 }
 
 export interface LogEntry {
   id: string
   ts: number
-  kind: 'plan' | 'node-start' | 'node-done' | 'node-error' | 'adapt' | 'control' | 'intervention' | 'run' | 'info'
+  kind:
+    | 'plan'
+    | 'node-start'
+    | 'node-done'
+    | 'node-error'
+    | 'adapt'
+    | 'control'
+    | 'intervention'
+    | 'decision'
+    | 'run'
+    | 'info'
   message: string
 }
 
@@ -41,11 +83,23 @@ export type RunEvent =
   | { type: 'run:status'; ts: number; status: RunStatus; progress: number }
   | { type: 'log'; ts: number; entry: LogEntry }
   | { type: 'run:summary'; ts: number; summary: string }
+  | { type: 'decision:offer'; ts: number; nodeId: string; question: string; options: DecisionOption[] }
+  | {
+      type: 'decision:resolved'
+      ts: number
+      nodeId: string
+      optionId: string
+      by: 'agent' | 'user'
+      reasoning?: string
+    }
+  | { type: 'decision:mode'; ts: number; mode: DecisionMode }
 
 export interface RunSnapshot {
   id: string
   task: string
   mode: RunMode
+  /** Режим решений на развилках (можно менять на ходу) */
+  decisionMode?: DecisionMode
   status: RunStatus
   createdAt: number
   finishedAt?: number
@@ -79,6 +133,8 @@ export interface RunView {
   progress: number
   logs: LogEntry[]
   summary?: string
+  /** Режим решений на момент свёртки (для playback) */
+  decisionMode: DecisionMode
 }
 
 export interface GraphEdge {
@@ -93,6 +149,7 @@ export const STATUS_LABELS: Record<NodeStatus, string> = {
   done: 'Выполнено',
   error: 'Ошибка',
   skipped: 'Пропущено',
+  discarded: 'Не реализовано',
 }
 
 export const RUN_STATUS_LABELS: Record<RunStatus, string> = {
@@ -102,4 +159,9 @@ export const RUN_STATUS_LABELS: Record<RunStatus, string> = {
   stopped: 'Остановлено',
   completed: 'Завершено',
   error: 'Ошибка',
+}
+
+export const DECISION_MODE_LABELS: Record<DecisionMode, string> = {
+  auto: 'Авто — агент решает сам',
+  manual: 'Вручную — агент предлагает и ждёт',
 }

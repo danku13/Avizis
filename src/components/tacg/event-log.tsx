@@ -15,6 +15,7 @@ const KIND_STYLES: Record<LogEntry['kind'], string> = {
   adapt: 'text-violet-300',
   control: 'text-amber-300',
   intervention: 'text-amber-300',
+  decision: 'text-fuchsia-300',
   run: 'text-zinc-300',
   info: 'text-zinc-500',
 }
@@ -27,6 +28,7 @@ const KIND_LABELS: Record<LogEntry['kind'], string> = {
   adapt: 'адаптация',
   control: 'управление',
   intervention: 'вмешательство',
+  decision: 'решение',
   run: 'запуск',
   info: 'инфо',
 }

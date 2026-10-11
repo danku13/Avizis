@@ -1,13 +1,14 @@
-// TACG — панель управления запуском: статус, прогресс, пауза/стоп, версии, экспорт
+// TACG — панель управления запуском: статус, прогресс, пауза/стоп, версии, режим решений, экспорт
 'use client'
 
 import { useMemo } from 'react'
-import { Pause, Play, Square, Download, Radio } from 'lucide-react'
+import { Pause, Play, Square, Download, Radio, Bot, Hand, GitFork } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { RunStatusBadge, ModeBadge } from './status-badge'
-import { foldEvents, versionMarkers } from '@/lib/tacg/fold'
+import { findOfferedDecision, foldEvents, versionMarkers } from '@/lib/tacg/fold'
+import { DecisionMode } from '@/lib/tacg/types'
 import { getSocket } from '@/lib/tacg/socket'
 import { useTacgStore } from '@/store/tacg-store'
 import { toast } from 'sonner'
@@ -20,10 +21,13 @@ export function RunToolbar() {
   const currentRunId = useTacgStore((s) => s.currentRunId)
   const setCursor = useTacgStore((s) => s.setCursor)
   const setPlaying = useTacgStore((s) => s.setPlaying)
+  const decisionMode = useTacgStore((s) => s.decisionMode)
+  const openDecision = useTacgStore((s) => s.openDecision)
 
   const isLive = cursor === null
   const view = useMemo(() => foldEvents(isLive ? events : events.slice(0, cursor! + 1)), [events, cursor])
   const markers = useMemo(() => versionMarkers(events), [events])
+  const offered = useMemo(() => (isLive ? findOfferedDecision(view.nodes) : undefined), [view.nodes, isLive])
 
   const canControl = isLive && currentRunId && ['planning', 'running', 'paused'].includes(view.status)
   const doneCount = view.nodes.filter((n) => n.status === 'done').length
@@ -38,6 +42,16 @@ export function RunToolbar() {
     if (!currentRunId) return
     getSocket().emit('run:control', { runId: currentRunId, action })
     if (action === 'stop') toast.info('Остановка применится после завершения текущего узла')
+  }
+
+  const setDecisionMode = (mode: DecisionMode) => {
+    if (!currentRunId || mode === (decisionMode ?? 'manual')) return
+    getSocket().emit('decision:mode', { runId: currentRunId, mode })
+    toast.info(
+      mode === 'auto'
+        ? 'Режим «авто»: агент будет решать развилки сам'
+        : 'Режим «ручной выбор»: агент будет предлагать варианты и ждать'
+    )
   }
 
   const exportReport = () => {
@@ -72,9 +86,35 @@ export function RunToolbar() {
     view.nodes.forEach((n, i) => {
       const dur = n.durationMs ? `${(n.durationMs / 1000).toFixed(1)} с` : '—'
       const added = n.dynamic ? `динамически (v${n.addedAtVersion})` : 'план (v1)'
-      lines.push(`| ${i + 1} | ${n.title} | ${n.status} | ${n.dependsOn.join(', ') || '—'} | ${dur} | ${added} |`)
+      lines.push(
+        `| ${i + 1} | ${n.title} | ${n.status} | ${n.dependsOn.join(', ') || '—'} | ${dur} | ${added} |`
+      )
     })
     lines.push('')
+    const decisions = view.nodes.filter((n) => n.kind === 'decision' && n.decision)
+    if (decisions.length) {
+      lines.push('## Развилки и решения')
+      lines.push('')
+      decisions.forEach((d) => {
+        const dec = d.decision!
+        lines.push(`### ${d.title}`)
+        lines.push(`- **Вопрос:** ${dec.question}`)
+        dec.options.forEach((o) => {
+          const mark = o.id === dec.chosen ? '✅ **ВЫБРАН**' : '—'
+          lines.push(`- ${mark} **Вариант «${o.id}» — ${o.label}:** ${o.rationale}`)
+          if (o.nextSteps.length) lines.push(`  - Дальнейшие шаги: ${o.nextSteps.join(' → ')}`)
+        })
+        if (dec.chosen) {
+          lines.push(
+            `- **Итог:** вариант «${dec.chosen}» · решение принял: ${dec.chosenBy === 'user' ? 'пользователь' : 'агент'}`
+          )
+          if (dec.reasoning) lines.push(`- **Обоснование:** ${dec.reasoning}`)
+        } else {
+          lines.push('- **Итог:** решение не принято (запуск остановлен до выбора)')
+        }
+        lines.push('')
+      })
+    }
     if (view.nodes.some((n) => n.reason)) {
       lines.push('## Причины динамических добавлений')
       lines.push('')
@@ -134,6 +174,46 @@ export function RunToolbar() {
           </TooltipContent>
         </Tooltip>
         <div className="ml-auto flex items-center gap-2">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div
+                className="flex items-center rounded-lg border border-zinc-700 p-0.5"
+                role="group"
+                aria-label="Режим решений на развилках"
+              >
+                <button
+                  onClick={() => setDecisionMode('manual')}
+                  disabled={!canControl}
+                  className={cn(
+                    'flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+                    (decisionMode ?? 'manual') === 'manual'
+                      ? 'bg-fuchsia-500/20 text-fuchsia-200'
+                      : 'text-zinc-400 hover:text-zinc-200'
+                  )}
+                >
+                  <Hand className="size-3.5" />
+                  <span className="hidden sm:inline">Решения: вручную</span>
+                  <span className="sm:hidden">Вручную</span>
+                </button>
+                <button
+                  onClick={() => setDecisionMode('auto')}
+                  disabled={!canControl}
+                  className={cn(
+                    'flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+                    decisionMode === 'auto'
+                      ? 'bg-fuchsia-500/20 text-fuchsia-200'
+                      : 'text-zinc-400 hover:text-zinc-200'
+                  )}
+                >
+                  <Bot className="size-3.5" />
+                  <span className="hidden sm:inline">Авто</span>
+                </button>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              Режим решений на развилках: «вручную» — агент предлагает варианты и ждёт, «авто» — решает сам
+            </TooltipContent>
+          </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="outline" size="icon" className="size-8" onClick={() => control(view.status === 'paused' ? 'resume' : 'pause')} disabled={!canControl} aria-label="Пауза">
@@ -209,6 +289,25 @@ export function RunToolbar() {
           </div>
         )}
       </div>
+
+      {/* Баннер ожидания выбора: агент замер на развилке */}
+      {offered && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-fuchsia-500/40 bg-fuchsia-500/10 px-3.5 py-2.5">
+          <GitFork className="size-4 shrink-0 animate-pulse text-fuchsia-300" />
+          <span className="min-w-0 flex-1 text-sm text-fuchsia-100">
+            {(decisionMode ?? 'manual') === 'manual'
+              ? 'Агент ждёт вашего решения на развилке'
+              : 'Агент принимает решение на развилке…'}
+            <span className="ml-2 hidden text-xs text-fuchsia-300/70 md:inline">{offered.title}</span>
+          </span>
+          {(decisionMode ?? 'manual') === 'manual' && (
+            <Button size="sm" variant="secondary" className="h-7 gap-1.5 border-fuchsia-500/40 bg-fuchsia-500/15 px-3 text-xs text-fuchsia-100 hover:bg-fuchsia-500/25" onClick={openDecision}>
+              <GitFork className="size-3" />
+              Открыть выбор
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   )
 }

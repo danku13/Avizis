@@ -1,5 +1,5 @@
 // TACG — свёртка потока событий в состояние запуска (для live-вида и replay)
-import { GraphEdge, GraphNode, LogEntry, RunEvent, RunStatus, RunView } from './types'
+import { DecisionMode, GraphEdge, GraphNode, LogEntry, RunEvent, RunStatus, RunView } from './types'
 
 /** Свёртка событий 0..n в состояние графа ( ядро режима «Воспроизведение» ) */
 export function foldEvents(events: RunEvent[]): RunView {
@@ -8,6 +8,7 @@ export function foldEvents(events: RunEvent[]): RunView {
   let status: RunStatus = 'planning'
   let progress = 0
   let summary: string | undefined
+  let decisionMode: DecisionMode = 'manual'
   const logs: LogEntry[] = []
 
   for (const ev of events) {
@@ -34,9 +35,16 @@ export function foldEvents(events: RunEvent[]): RunView {
       case 'run:summary':
         summary = ev.summary
         break
+      case 'decision:offer':
+      case 'decision:resolved':
+        // состояние развилки переносится через node:update; события — сигнал для UI
+        break
+      case 'decision:mode':
+        decisionMode = ev.mode
+        break
     }
   }
-  return { nodes: [...nodes.values()], version, status, progress, logs, summary }
+  return { nodes: [...nodes.values()], version, status, progress, logs, summary, decisionMode }
 }
 
 /** Рёбра графа выводятся из зависимостей узлов */
@@ -46,6 +54,13 @@ export function computeEdges(nodes: GraphNode[]): GraphEdge[] {
     n.dependsOn
       .filter((d) => ids.has(d))
       .map((d) => ({ id: `${d}->${n.id}`, from: d, to: n.id }))
+  )
+}
+
+/** Узел-развилка, ожидающая выбора прямо сейчас (в live-режиме — требует реакции) */
+export function findOfferedDecision(nodes: GraphNode[]): GraphNode | undefined {
+  return nodes.find(
+    (n) => n.kind === 'decision' && n.decision?.status === 'offered' && !n.decision?.chosen && n.status === 'running'
   )
 }
 
@@ -75,6 +90,7 @@ export function timelineTicks(events: RunEvent[]): number[] {
     if (ev.type === 'node:update' && (ev.node.status === 'done' || ev.node.status === 'error')) ticks.push(i)
     else if (ev.type === 'graph:adapt') ticks.push(i)
     else if (ev.type === 'run:summary') ticks.push(i)
+    else if (ev.type === 'decision:offer' || ev.type === 'decision:resolved') ticks.push(i)
   })
   return ticks
 }

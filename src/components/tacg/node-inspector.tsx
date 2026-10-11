@@ -1,8 +1,9 @@
 // TACG — инспектор узла: модальное окно (≥50% ширины экрана) для лучшей читаемости
+// Для узлов-развилок показывает вопрос, варианты и обоснование выбора; для веток — принадлежность
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, PenLine, RotateCcw, Copy, MousePointerClick, Sparkles, Clock3, GitBranch, Hash } from 'lucide-react'
+import { AlertTriangle, PenLine, RotateCcw, Copy, MousePointerClick, Sparkles, Clock3, GitBranch, GitFork, Hash, CheckCircle2, Bot, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
@@ -13,6 +14,13 @@ import { GraphNode, RunEvent } from '@/lib/tacg/types'
 import { getSocket } from '@/lib/tacg/socket'
 import { useTacgStore } from '@/store/tacg-store'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
+
+const OPTION_STYLES: Record<string, string> = {
+  a: 'bg-sky-500/25 text-sky-300',
+  b: 'bg-fuchsia-500/25 text-fuchsia-300',
+  c: 'bg-orange-500/25 text-orange-300',
+}
 
 /** Поиск состояния узла в потоке событий (учитывает курсор воспроизведения) */
 function findNode(events: RunEvent[], selectedNodeId: string, cursor: number | null): GraphNode | null {
@@ -48,11 +56,20 @@ export function NodeInspectorModal() {
   const cursor = useTacgStore((s) => s.cursor)
   const events = useTacgStore((s) => s.events)
   const currentRunId = useTacgStore((s) => s.currentRunId)
+  const decisionMode = useTacgStore((s) => s.decisionMode)
+  const openDecision = useTacgStore((s) => s.openDecision)
 
   const node = useMemo<GraphNode | null>(
     () => (selectedNodeId ? findNode(events, selectedNodeId, cursor) : null),
     [selectedNodeId, cursor, events],
   )
+
+  const isWaitingDecision =
+    !!node &&
+    node.kind === 'decision' &&
+    node.decision?.status === 'offered' &&
+    !node.decision?.chosen &&
+    node.status === 'running'
 
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
@@ -88,6 +105,8 @@ export function NodeInspectorModal() {
   }
 
   const isPlayback = cursor !== null
+  const dec = node?.kind === 'decision' ? node.decision : undefined
+  const branchOf = node?.branchOf
 
   return (
     <Dialog open={!!selectedNodeId} onOpenChange={close}>
@@ -125,6 +144,22 @@ export function NodeInspectorModal() {
                     добавлен динамически · v{node.addedAtVersion}
                   </Badge>
                 )}
+                {node.kind === 'decision' && (
+                  <Badge variant="outline" className="border-fuchsia-500/40 bg-fuchsia-500/10 text-fuchsia-300">
+                    <GitFork className="mr-1 size-3" />
+                    развилка · {node.decision?.options.length ?? 0} варианта
+                  </Badge>
+                )}
+                {branchOf && (
+                  <Badge
+                    variant="outline"
+                    className={cn('font-bold uppercase', branchOf.optionId === 'a' ? 'border-sky-500/40 text-sky-300' : branchOf.optionId === 'b' ? 'border-fuchsia-500/40 text-fuchsia-300' : 'border-orange-500/40 text-orange-300')}
+                    title={`Узел принадлежит ветке варианта «${branchOf.optionId}» развилки ${branchOf.decisionId}`}
+                  >
+                    <GitBranch className="mr-1 size-3" />
+                    ветка {branchOf.optionId}
+                  </Badge>
+                )}
                 {node.overridden && (
                   <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-300">
                     <PenLine className="mr-1 size-3" />
@@ -152,6 +187,94 @@ export function NodeInspectorModal() {
                   <div className="rounded-lg border border-violet-500/30 bg-violet-500/10 p-3 text-xs leading-relaxed text-violet-200">
                     <span className="font-semibold">Причина добавления: </span>
                     {node.reason}
+                  </div>
+                )}
+
+                {/* ─── Секция развилки: вопрос, варианты, обоснование выбора ─── */}
+                {dec && (
+                  <div className="space-y-3">
+                    <div className="rounded-lg border border-fuchsia-500/30 bg-fuchsia-500/10 p-3 text-xs leading-relaxed text-fuchsia-200">
+                      <span className="font-semibold">Вопрос развилки: </span>
+                      {dec.question}
+                    </div>
+
+                    <div className="space-y-2">
+                      <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Варианты агента</h4>
+                      {dec.options.map((o) => {
+                        const chosen = dec.chosen === o.id
+                        return (
+                          <div
+                            key={o.id}
+                            className={cn(
+                              'rounded-lg border p-3',
+                              chosen ? 'border-emerald-500/50 bg-emerald-500/10' : 'border-zinc-700/70 bg-zinc-900/60',
+                              !chosen && dec.chosen && 'opacity-60'
+                            )}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex min-w-0 items-center gap-2">
+                                <span
+                                  className={cn(
+                                    'flex size-6 shrink-0 items-center justify-center rounded-md text-xs font-bold uppercase',
+                                    OPTION_STYLES[o.id] ?? 'bg-zinc-500/25 text-zinc-300'
+                                  )}
+                                >
+                                  {o.id}
+                                </span>
+                                <span className="min-w-0 truncate text-xs font-semibold text-zinc-100">{o.label}</span>
+                              </div>
+                              {chosen && (
+                                <span className="flex shrink-0 items-center gap-1 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-300">
+                                  <CheckCircle2 className="size-3" />
+                                  выбран
+                                </span>
+                              )}
+                            </div>
+                            <p className="mt-1.5 text-[11px] leading-relaxed text-zinc-400">{o.rationale}</p>
+                            {o.nextSteps.length > 0 && (
+                              <p className="mt-1.5 text-[11px] text-zinc-500">
+                                дальше: {o.nextSteps.map((s, i) => `${i + 1}. ${s}`).join(' → ')}
+                              </p>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    {dec.status === 'offered' && (
+                      <div className="flex items-center gap-2 rounded-lg border border-fuchsia-500/40 bg-fuchsia-500/10 p-3 text-xs text-fuchsia-200">
+                        <GitFork className="size-3.5 shrink-0 animate-pulse" />
+                        {(decisionMode ?? 'manual') === 'manual'
+                          ? 'Развилка ожидает вашего выбора — график приостановлен'
+                          : 'Агент выбирает вариант самостоятельно…'}
+                      </div>
+                    )}
+
+                    {dec.chosen && (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-xs text-emerald-300">
+                          <CheckCircle2 className="size-3.5" />
+                          Решение принял: {dec.chosenBy === 'user' ? 'пользователь' : 'агент'}
+                          <span className="text-zinc-500">· вариант «{dec.chosen}»</span>
+                        </div>
+                        {dec.reasoning && (
+                          <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs leading-relaxed text-emerald-100">
+                            <span className="font-semibold">
+                              {dec.chosenBy === 'agent' ? (
+                                <span className="inline-flex items-center gap-1">
+                                  <Bot className="size-3" /> Рассуждение агента:{' '}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1">
+                                  <User className="size-3" /> Обоснование:{' '}
+                                </span>
+                              )}
+                            </span>
+                            {dec.reasoning}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -264,6 +387,25 @@ export function NodeInspectorModal() {
 
             {/* ─── Подвал: вмешательство ─── */}
             <footer className="flex flex-wrap items-center gap-2 border-t border-zinc-800/80 px-6 py-3.5">
+              {isWaitingDecision && (
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    select(null)
+                    openDecision()
+                  }}
+                  disabled={isPlayback || !currentRunId || (decisionMode ?? 'manual') !== 'manual'}
+                  title={
+                    (decisionMode ?? 'manual') !== 'manual'
+                      ? 'Режим «авто»: агент решает сам'
+                      : 'Открыть модалку выбора варианта'
+                  }
+                  className="border-fuchsia-500/40 bg-fuchsia-500/15 text-fuchsia-100 hover:bg-fuchsia-500/25"
+                >
+                  <GitFork className="mr-1.5 size-3.5" />
+                  Открыть выбор варианта
+                </Button>
+              )}
               {node.status === 'done' && !editing && (
                 <Button
                   variant="outline"

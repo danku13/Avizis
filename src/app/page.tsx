@@ -4,10 +4,11 @@
 import { useEffect, useMemo } from 'react'
 import { Activity, Wifi, WifiOff, Eye } from 'lucide-react'
 import { getSocket } from '@/lib/tacg/socket'
-import { foldEvents } from '@/lib/tacg/fold'
+import { findOfferedDecision, foldEvents } from '@/lib/tacg/fold'
 import { useTacgStore } from '@/store/tacg-store'
 import { GraphCanvas } from '@/components/tacg/graph-canvas'
 import { NodeInspectorModal } from '@/components/tacg/node-inspector'
+import { DecisionModal } from '@/components/tacg/decision-modal'
 import { EventLog } from '@/components/tacg/event-log'
 import { RunToolbar } from '@/components/tacg/run-toolbar'
 import { HistoryPanel } from '@/components/tacg/history-panel'
@@ -42,12 +43,15 @@ export default function Home() {
       [
         'run:created',
         (data: any) => {
-          useTacgStore.getState().onRunCreated({
-            id: data.runId,
-            task: data.task,
-            mode: data.mode,
-            createdAt: data.createdAt,
-          })
+          useTacgStore.getState().onRunCreated(
+            {
+              id: data.runId,
+              task: data.task,
+              mode: data.mode,
+              createdAt: data.createdAt,
+            },
+            data.decisionMode
+          )
         },
       ],
       [
@@ -80,6 +84,24 @@ export default function Home() {
           import('sonner').then(({ toast }) => toast.error(data?.message || 'Ошибка движка агента'))
         },
       ],
+      [
+        'decision:resolve:result',
+        (data: any) => {
+          if (data && data.ok === false) {
+            import('sonner').then(({ toast }) =>
+              toast.error(data?.error || 'Не удалось принять решение — возможно, оно уже принято')
+            )
+          }
+        },
+      ],
+      [
+        'decision:mode:result',
+        (data: any) => {
+          if (data && data.ok === false) {
+            import('sonner').then(({ toast }) => toast.error(data?.error || 'Не удалось изменить режим решений'))
+          }
+        },
+      ],
     ]
     handlers.forEach(([ev, fn]) => s.on(ev, fn))
     if (s.connected) useTacgStore.getState().setConnected(true)
@@ -90,6 +112,10 @@ export default function Home() {
 
   const isLive = cursor === null
   const view = useMemo(() => foldEvents(isLive ? events : events.slice(0, cursor! + 1)), [events, cursor])
+  const offeredDecision = useMemo(
+    () => (isLive ? findOfferedDecision(view.nodes) : undefined),
+    [view.nodes, isLive]
+  )
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -145,7 +171,13 @@ export default function Home() {
                 <GraphLegend />
               </div>
               <div className="relative min-h-[380px] flex-1 lg:min-h-0">
-                <GraphCanvas nodes={view.nodes} selectedNodeId={selectedNodeId} onSelect={select} />
+                <GraphCanvas
+                  nodes={view.nodes}
+                  selectedNodeId={selectedNodeId}
+                  onSelect={select}
+                  waitingDecisionId={offeredDecision?.id ?? null}
+                  onOpenDecision={() => useTacgStore.getState().openDecision()}
+                />
               </div>
             </div>
 
@@ -160,16 +192,19 @@ export default function Home() {
         {/* ─── Подвал ─── */}
         <footer className="mt-auto shrink-0 border-t border-zinc-800/80 bg-zinc-950/80">
           <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5 text-xs text-zinc-500">
-            <span>TACG Prototype v0.2 · прототип для тестирования концепции</span>
+            <span>TACG Prototype v0.3 · прототип для тестирования концепции</span>
             <span className="hidden sm:inline">·</span>
             <span className="hidden sm:inline">Движок: socket.io мини-сервис + z-ai-web-dev-sdk (LLM)</span>
             <span className="hidden md:inline">·</span>
-            <span className="hidden md:inline">React Flow · Прозрачность · Контроль · Воспроизводимость</span>
+            <span className="hidden md:inline">React Flow · Развилки решений · Прозрачность · Контроль</span>
           </div>
         </footer>
 
         {/* Инспектор узла — модалка ≥50% ширины экрана */}
         <NodeInspectorModal />
+
+        {/* Модалка выбора на развилке (авто-режим: агент решает сам) */}
+        <DecisionModal />
       </div>
     </TooltipProvider>
   )

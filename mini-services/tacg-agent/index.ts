@@ -3,7 +3,7 @@ import { createServer } from 'node:http'
 import { Server } from 'socket.io'
 import { AgentEngine } from './engine'
 import { store } from './store'
-import { RunMode } from './types'
+import { DecisionMode, RunMode } from './types'
 
 const httpServer = createServer()
 const io = new Server(httpServer, {
@@ -25,7 +25,8 @@ io.on('connection', (socket) => {
     try {
       const task = typeof data?.task === 'string' ? data.task : ''
       const mode: RunMode = data?.mode === 'llm' ? 'llm' : 'demo'
-      const run = await engine.start(task, mode)
+      const decisionMode: DecisionMode = data?.decisionMode === 'auto' ? 'auto' : 'manual'
+      const run = await engine.start(task, mode, decisionMode)
       socket.emit('run:started', { runId: run.id })
     } catch (e: any) {
       console.error('[tacg] ошибка запуска:', e)
@@ -48,6 +49,21 @@ io.on('connection', (socket) => {
   socket.on('node:retry', (data: any) => {
     const result = engine.retryNode(String(data?.runId || ''), String(data?.nodeId || ''))
     socket.emit('node:retry:result', result)
+  })
+
+  socket.on('decision:resolve', (data: any) => {
+    const result = engine.resolveDecisionFromUser(
+      String(data?.runId || ''),
+      String(data?.nodeId || ''),
+      String(data?.optionId || '')
+    )
+    socket.emit('decision:resolve:result', result)
+  })
+
+  socket.on('decision:mode', (data: any) => {
+    const mode: DecisionMode = data?.mode === 'auto' ? 'auto' : 'manual'
+    const result = engine.setDecisionMode(String(data?.runId || ''), mode)
+    socket.emit('decision:mode:result', result)
   })
 
   socket.on('history:list', () => {
