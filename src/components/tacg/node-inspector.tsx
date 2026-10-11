@@ -344,7 +344,8 @@ export function NodeInspectorModal() {
                       </Button>
                     )}
                   </div>
-                  <pre className="max-h-52 overflow-y-auto whitespace-pre-wrap break-words rounded-md border bg-zinc-900/70 p-3 font-mono text-xs leading-relaxed text-zinc-300">
+                  {/* Полный текст без обрезки: прокрутка — на уровне колонки */}
+                  <pre className="whitespace-pre-wrap break-words rounded-md border bg-zinc-900/70 p-3 font-mono text-xs leading-relaxed text-zinc-300">
                     {node.input ?? '— (узел ещё не стартовал)'}
                   </pre>
                 </section>
@@ -387,7 +388,7 @@ export function NodeInspectorModal() {
                       </div>
                     </div>
                   ) : node.status === 'done' ? (
-                    <pre className="max-h-[38vh] overflow-y-auto whitespace-pre-wrap break-words rounded-md border bg-zinc-900/70 p-3 font-mono text-xs leading-relaxed text-zinc-300">
+                    <pre className="whitespace-pre-wrap break-words rounded-md border bg-zinc-900/70 p-3 font-mono text-xs leading-relaxed text-zinc-300">
                       {node.output}
                     </pre>
                   ) : (

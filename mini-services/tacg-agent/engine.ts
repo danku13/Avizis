@@ -281,7 +281,7 @@ export class AgentEngine {
           options.push({
             id: optId,
             label: String(ro?.label || `Вариант ${optId}`).slice(0, 60),
-            rationale: String(ro?.rationale || '').slice(0, 320),
+            rationale: String(ro?.rationale || '').slice(0, 800),
             nextSteps: stepsRaw.map((s: any) => String(s?.title || 'шаг ветки').slice(0, 60)),
           })
           // шаги ветки: цепочка от развилки
@@ -293,7 +293,7 @@ export class AgentEngine {
             nodes.push({
               id: bid,
               title: String(rs?.title || `Шаг ветки ${optId}${k + 1}`).slice(0, 60),
-              description: String(rs?.description || '').slice(0, 240),
+              description: String(rs?.description || '').slice(0, 800),
               status: 'pending',
               dependsOn: [prev],
               dynamic: false,
@@ -308,13 +308,13 @@ export class AgentEngine {
           id,
           kind: 'decision',
           title: String(raw?.title || 'Решение').slice(0, 60),
-          description: String(raw?.description || '').slice(0, 240),
+          description: String(raw?.description || '').slice(0, 800),
           status: 'pending',
           dependsOn: cleanDeps(raw, branchIds),
           dynamic: false,
           runs: 0,
           decision: {
-            question: String(decisionRaw.question).slice(0, 300),
+            question: String(decisionRaw.question).slice(0, 800),
             domain,
             selection,
             certaintyAfter: Number.isFinite(certaintyAfter) ? Math.min(1, Math.max(0, certaintyAfter)) : undefined,
@@ -327,7 +327,7 @@ export class AgentEngine {
         nodes.push({
           id,
           title: String(raw?.title || `Шаг ${i + 1}`).slice(0, 60),
-          description: String(raw?.description || '').slice(0, 240),
+          description: String(raw?.description || '').slice(0, 800),
           status: 'pending',
           dependsOn: cleanDeps(raw, new Set()),
           dynamic: false,
@@ -446,9 +446,11 @@ export class AgentEngine {
     const deps = node.dependsOn
       .map((id) => run.nodes.find((n) => n.id === id))
       .filter((n): n is GraphNode => !!n && n.status === 'done')
+    // Полные тексты без обрезки: node.input — это данные инспектора (Вход),
+    // а не только промпт. Обрезка промптов — отдельно в llmExecute/decider.
     if (!deps.length) return `Задача: ${run.task}`
     return `Задача: ${run.task}\n\nРезультаты предыдущих шагов:\n${deps
-      .map((d) => `• «${d.title}»: ${trunc(d.output || '—', 260)}`)
+      .map((d) => `• «${d.title}»: ${d.output || '—'}`)
       .join('\n')}`
   }
 
@@ -480,7 +482,7 @@ export class AgentEngine {
 Текущий шаг: «${node.title}»
 Описание шага: ${node.description || '—'}
 
-${node.input || `Задача: ${run.task}`}
+${trunc(node.input || `Задача: ${run.task}`, 12000)}
 
 Выполни текущий шаг и верни его результат.`
     return chatText(EXECUTOR_SYS, user, 90_000, 1)
@@ -528,7 +530,7 @@ ${node.input || `Задача: ${run.task}`}
     const askAllowed = rt.emergentAdded < 2 && !hasOpenDecision
 
     const graphDesc = run.nodes
-      .map((n) => `- ${n.id} «${n.title}» [${n.status}]${n.output ? ': ' + trunc(n.output, 110) : ''}`)
+      .map((n) => `- ${n.id} «${n.title}» [${n.status}]${n.output ? ': ' + trunc(n.output, 400) : ''}`)
       .join('\n')
     const openQuestions = run.nodes
       .filter((n) => n.kind === 'decision')
@@ -542,7 +544,7 @@ ${graphDesc}
 
 Заданные ранее вопросы-развилки: ${openQuestions || '—'}
 
-Только что завершён узел «${finished.title}»: ${trunc(finished.output || '', 300)}
+Только что завершён узел «${finished.title}»: ${trunc(finished.output || '', 2000)}
 
 Проанализируй входящие данные завершённого шага и реши:
 1) add_node — если есть ЯВНЫЙ пробел, закрываемый обычным шагом (например, данные требуют валидации);
@@ -574,10 +576,10 @@ ${graphDesc}
           {
             id,
             title: String(json.node.title).slice(0, 60),
-            description: String(json.node.description || '').slice(0, 240),
+            description: String(json.node.description || '').slice(0, 800),
             dependsOn: [finished.id],
           },
-          String(json.node.reason || 'Выявлен пробел в плане').slice(0, 240)
+          String(json.node.reason || 'Выявлен пробел в плане').slice(0, 800)
         )
       } else if (json?.decision === 'ask' && askAllowed) {
         const q = json.question
@@ -588,10 +590,10 @@ ${graphDesc}
             .map((o: any, j: number) => ({
               id: ['a', 'b', 'c', 'd'][j],
               label: String(o.label).slice(0, 60),
-              rationale: String(o.rationale || '').slice(0, 320),
+              rationale: String(o.rationale || '').slice(0, 800),
               steps: (Array.isArray(o.steps) ? o.steps.filter((s: any) => s).slice(0, 3) : []).map((s: any) => ({
                 title: String(s?.title || 'шаг ветки').slice(0, 60),
-                description: String(s?.description || '').slice(0, 240),
+                description: String(s?.description || '').slice(0, 800),
               })),
             }))
           if (options.length >= 2) {
@@ -602,8 +604,8 @@ ${graphDesc}
               {
                 id: `decq${rt.emergentAdded + 1}`,
                 title: `Вопрос: ${String(q.question).slice(0, 40)}`,
-                description: String(q.reason || 'Выявлена неоднозначность, влияющая на итог').slice(0, 240),
-                question: String(q.question).slice(0, 300),
+                description: String(q.reason || 'Выявлена неоднозначность, влияющая на итог').slice(0, 800),
+                question: String(q.question).slice(0, 800),
                 domain: DECISION_DOMAINS.includes(q.domain) ? q.domain : 'context',
                 selection: q.selection === 'mixed' ? 'mixed' : 'single',
                 certaintyAfter: Number.isFinite(certaintyAfter)
@@ -611,7 +613,7 @@ ${graphDesc}
                   : Math.min(0.95, (run.certainty ?? 0.4) + 0.2),
                 options,
               },
-              String(q.reason || 'Агент обнаружил неоднозначность, влияющую на итог').slice(0, 240)
+              String(q.reason || 'Агент обнаружил неоднозначность, влияющую на итог').slice(0, 800)
             )
           }
         }
@@ -874,7 +876,7 @@ ${mixed ? '{"optionIds":["<id1>","<id2>"],"reasoning":"обоснование в
       const unique = [...new Set(valid)]
       if (unique.length && json?.reasoning) {
         const picked = mixed ? unique : unique.slice(0, 1)
-        return { optionIds: picked, reasoning: String(json.reasoning).slice(0, 400) }
+        return { optionIds: picked, reasoning: String(json.reasoning).slice(0, 800) }
       }
     } catch {
       /* fallback ниже */
