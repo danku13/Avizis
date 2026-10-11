@@ -31,3 +31,41 @@ Stage Summary:
 - Движок агента на z-ai-web-dev-sdk: планировщик, исполнитель, супервайзер (3 LLM-роли) + демо-режим
 - Все режимы из концепции проверены E2E: прозрачность (инспектор), контроль (пауза/стоп/override), воспроизводимость (timeline, версии, экспорт аудита)
 - Артефакты: mini-services/tacg-agent/*, src/lib/tacg/*, src/store/tacg-store.ts, src/components/tacg/*, src/app/page.tsx; скриншоты scripts/tacg-*.png
+
+---
+Task ID: 2
+Agent: Super Z (main agent)
+Task: Правка вёрстки на ширину экрана + перевод графа на React Flow + Инспектор узла как модалка ≥50% ширины экрана
+
+Work Log:
+- Установлен @xyflow/react@12.12.0 (React Flow v12, совместим с React 19)
+- Переписан src/components/tacg/graph-canvas.tsx на React Flow:
+  - кастомный узел 'tacg' (HTML-карточка: цветовая полоска статуса, бейджи v2/изм., пульсация running, dashed-рамка для динамических)
+  - слоевой layout (колонка = глубина зависимости) → позиции RF-узлов, сигнатура формы для авто-fitView при добавлении узлов
+  - рёбра smoothstep с маркерами и цветовой кодировкой (cyan+animated для running, violet для динамических, emerald для done)
+  - Controls (Zoom In/Out/Fit View) + MiniMap (тёмная, pannable/zoomable) + Background Dots
+  - выделение через store (selected), клик по узлу → onSelect → модалка, клик по фону → снятие выделения
+  - nodesDraggable/nodesConnectable=false, deleteKeyCode=null (защита от удаления узлов)
+- node-inspector.tsx → NodeInspectorModal (shadcn Dialog):
+  - ширина sm:55vw / lg:58vw / xl:64vw (≥50% экрана), высота 86dvh, на мобиле ~92vw
+  - 2 колонки: слева мета (описание, причина, ошибка, тайминги, чипы зависимостей-ссылок), справа Вход/Выход
+  - подвал: Переопределить результат / Повторить узел / подсказка Esc
+- page.tsx: вёрстка на всю ширину экрана (убран max-w-[1600px]):
+  - app-shell: lg:h-dvh + overflow-hidden, header/footer на всю ширину, без прокрутки страницы на десктопе
+  - граф занимает всё доступное пространство по ширине и высоте (flex-1 + absolute inset-0)
+  - правая колонка инспектора удалена (теперь модалка), EventLog зафиксирован h-[260px]
+- globals.css: тёмная тема React Flow (Controls, MiniMap, атрибуция), удалён edge-flow (RF animated)
+- Найденные и исправленные баги:
+  1. Radix ScrollArea в HistoryPanel: display:table-обёртка раздувалась до 591px из-за nowrap truncate-текста → клики по карточкам истории попадали в область графа. Заменён на обычный div overflow-y-auto
+  2. EventLog растянулся до 525px (ScrollArea h-52 flex-1 без ограничения высоты в app-shell) → канва графа сжималась до 227px. Фикс: обёртка flex h-[260px] flex-col
+  3. Мобильная раскладка: канва схлопывалась до 2px (h-full не резолвится в flex-item с высотой только от min-height) → GraphCanvas корень absolute inset-0 + relative на обёртке
+  4. SelectTrigger (w-fit + whitespace-nowrap) переполнял 390px: сокращены подписи режимов («Демо · симуляция», «LLM · z-ai-web-dev-sdk»)
+  5. Radix Dialog warning «Missing Description» → убран ручной aria-describedby, оставлен sr-only DialogDescription
+  6. Attribution React Flow: показывается (лицензионно корректно), стилизована в тёмной палитре, MiniMap поднята на bottom:34
+- E2E через Agent Browser (порт :81): рендер RF (5 узлов/4 ребра), открытие прогона из истории, модалка 64% ширины (≥50%), Esc/клик-по-фону закрывают, override через модалку (1 узел «изм.», 2 потомка ×2 пересчитаны), playback v1/v2/v3 (4 узла на v2), notice о недоступности вмешательства, zoom-кнопки, мобильная 390px (без горизонтального скролла, канва 380px, модалка 92vw), 0 ошибок и 0 варнингов в консоли после чистой загрузки, bun run lint чисто
+
+Stage Summary:
+- Граф переведён на React Flow v12: пан/зум/fitView/MiniMap/Controls из коробки, кастомные узлы сохраняют визуальный язык прототипа
+- Инспектор узла — модалка 55-64vw с 2-колоночной раскладкой (мета слева, вход/выход справа)
+- Вёрстка на всю ширину экрана: app-shell без прокрутки на десктопе, граф занимает всё свободное пространство
+- Все прежние сценарии работают: live-прогон, адаптация, override с пересчётом, playback, история

@@ -6,7 +6,6 @@ import { Play, Trash2, History, Zap, Cpu } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { RunMode } from '@/lib/tacg/types'
 import { getSocket } from '@/lib/tacg/socket'
@@ -77,13 +76,13 @@ export function HistoryPanel() {
             <SelectItem value="demo">
               <span className="flex items-center gap-2">
                 <Cpu className="size-3.5 text-violet-400" />
-                Демо — детерминированная симуляция
+                Демо · симуляция
               </span>
             </SelectItem>
             <SelectItem value="llm">
               <span className="flex items-center gap-2">
                 <Zap className="size-3.5 text-teal-400" />
-                LLM — реальные вызовы z-ai-web-dev-sdk
+                LLM · z-ai-web-dev-sdk
               </span>
             </SelectItem>
           </SelectContent>
@@ -106,7 +105,9 @@ export function HistoryPanel() {
         <span className="ml-auto text-xs font-normal text-muted-foreground">{runs.length}</span>
       </h3>
 
-      <ScrollArea className="-mr-2 h-0 flex-1 pr-2">
+      {/* обычный div вместо Radix ScrollArea: display:table-обёртка ScrollArea
+          раздувалась по ширине из-за nowrap-текста с truncate */}
+      <div className="-mr-2 h-0 min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-2">
         <div className="space-y-1.5">
           {runs.length === 0 && (
             <p className="rounded-md border border-dashed p-3 text-center text-xs text-muted-foreground">
@@ -146,7 +147,7 @@ export function HistoryPanel() {
             </div>
           ))}
         </div>
-      </ScrollArea>
+      </div>
     </div>
   )
 }

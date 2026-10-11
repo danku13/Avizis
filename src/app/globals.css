@@ -131,12 +131,54 @@
   animation: node-pulse 1.7s ease-in-out infinite;
 }
 
-@keyframes dash-flow {
-  to { stroke-dashoffset: -20; }
+/* ─── React Flow (@xyflow/react) — тёмная тема ─── */
+.react-flow__controls {
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(63, 63, 70, 0.9);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
 }
-.edge-flow {
-  stroke-dasharray: 6 4;
-  animation: dash-flow 0.9s linear infinite;
+.react-flow__controls-button {
+  background: rgba(24, 24, 27, 0.92);
+  border-bottom: 1px solid rgba(63, 63, 70, 0.9);
+  color: #d4d4d8;
+  width: 26px;
+  height: 26px;
+}
+.react-flow__controls-button:hover {
+  background: #27272a;
+}
+.react-flow__controls-button svg {
+  fill: currentColor;
+}
+.react-flow__controls-button:disabled {
+  background: rgba(24, 24, 27, 0.92);
+}
+.react-flow__edge-path {
+  stroke-linecap: round;
+}
+.react-flow__node {
+  cursor: pointer;
+}
+.react-flow__node.tacg {
+  font-family: inherit;
+}
+.react-flow__handle {
+  opacity: 0;
+}
+.react-flow__minimap {
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+/* атрибуция React Flow — видимая, но в тёмной палитре (под MiniMap) */
+.react-flow__attribution {
+  background: rgba(24, 24, 27, 0.85);
+  border-radius: 6px 0 0 0;
+  padding: 2px 5px;
+}
+.react-flow__attribution a {
+  color: #71717a;
+  font-size: 9px;
+  text-decoration: none;
 }
 
 /* аккуратные скроллбары */
@@ -155,3 +197,5 @@
 *::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* trigger recompile */

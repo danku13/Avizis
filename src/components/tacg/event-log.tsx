@@ -62,7 +62,7 @@ export function EventLog() {
         </h4>
         <span className="text-xs tabular-foreground text-muted-foreground">{logs.length}</span>
       </div>
-      <ScrollArea className="h-52 flex-1 rounded-md border bg-zinc-950/50 p-2">
+      <ScrollArea className="h-0 flex-1 rounded-md border bg-zinc-950/50 p-2">
         <div className="space-y-1.5 pr-1">
           {logs.length === 0 && <p className="px-1 py-2 text-xs text-muted-foreground">События появятся во время выполнения…</p>}
           {logs.map((l) => (

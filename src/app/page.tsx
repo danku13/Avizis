@@ -1,13 +1,13 @@
-// TACG Playground — живой граф вычислений агента
+// TACG Playground — живой граф вычислений агента (вёрстка на всю ширину экрана)
 'use client'
 
 import { useEffect, useMemo } from 'react'
-import { Activity, Wifi, WifiOff, Eye, SlidersHorizontal } from 'lucide-react'
+import { Activity, Wifi, WifiOff, Eye } from 'lucide-react'
 import { getSocket } from '@/lib/tacg/socket'
 import { foldEvents } from '@/lib/tacg/fold'
 import { useTacgStore } from '@/store/tacg-store'
 import { GraphCanvas } from '@/components/tacg/graph-canvas'
-import { NodeInspector } from '@/components/tacg/node-inspector'
+import { NodeInspectorModal } from '@/components/tacg/node-inspector'
 import { EventLog } from '@/components/tacg/event-log'
 import { RunToolbar } from '@/components/tacg/run-toolbar'
 import { HistoryPanel } from '@/components/tacg/history-panel'
@@ -93,16 +93,18 @@ export default function Home() {
 
   return (
     <TooltipProvider delayDuration={200}>
-      <div className="flex min-h-screen flex-col bg-zinc-950 text-zinc-100">
+      {/* app-shell: на десктопе занимает весь экран без прокрутки страницы,
+          на мобиле — обычная вертикальная прокрутка */}
+      <div className="flex min-h-dvh w-full flex-col bg-zinc-950 text-zinc-100 lg:h-dvh lg:overflow-hidden">
         {/* ─── Шапка ─── */}
-        <header className="sticky top-0 z-20 border-b border-zinc-800/80 bg-zinc-950/80 backdrop-blur">
-          <div className="mx-auto flex max-w-[1600px] items-center gap-3 px-4 py-3">
-            <div className="flex size-9 items-center justify-center rounded-xl bg-gradient-to-br from-teal-400 to-emerald-600 text-zinc-950">
+        <header className="z-20 shrink-0 border-b border-zinc-800/80 bg-zinc-950/80 backdrop-blur">
+          <div className="flex w-full items-center gap-3 px-4 py-3">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-teal-400 to-emerald-600 text-zinc-950">
               <Activity className="size-5" />
             </div>
             <div className="min-w-0">
               <h1 className="truncate text-base font-bold leading-tight">TACG Playground</h1>
-              <p className="hidden truncate text-xs text-zinc-500 sm:block">
+              <p className="hidden truncate text-xs text-zinc-500 xl:block">
                 Transparent Agent Computation Graph · живая карта мышления агента
               </p>
             </div>
@@ -120,21 +122,21 @@ export default function Home() {
           </div>
         </header>
 
-        {/* ─── Основная область ─── */}
-        <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-4 p-4 lg:flex-row">
+        {/* ─── Основная область на всю ширину экрана ─── */}
+        <main className="flex w-full min-h-0 flex-1 flex-col gap-3 p-3 lg:flex-row lg:overflow-hidden">
           {/* Левая колонка: запуск + история */}
-          <aside className="w-full shrink-0 lg:w-80">
-            <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-4 lg:sticky lg:top-[76px] lg:max-h-[calc(100vh-100px)]">
+          <aside className="w-full shrink-0 lg:w-[288px] lg:min-h-0 lg:overflow-y-auto">
+            <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-3.5 lg:flex lg:h-full lg:min-h-0 lg:flex-col">
               <HistoryPanel />
             </div>
           </aside>
 
-          {/* Центр: тулбар + граф + таймлайн + журнал */}
-          <section className="flex min-w-0 flex-1 flex-col gap-4">
+          {/* Центр на всё оставшееся пространство: тулбар + граф + таймлайн + журнал */}
+          <section className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
             <RunToolbar />
 
-            <div className="flex min-h-[440px] flex-1 flex-col">
-              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex min-h-[420px] flex-1 flex-col gap-2 lg:min-h-0">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <h2 className="flex items-center gap-2 text-sm font-semibold">
                   <Eye className="size-4 text-zinc-400" />
                   Граф выполнения
@@ -142,42 +144,32 @@ export default function Home() {
                 </h2>
                 <GraphLegend />
               </div>
-              <div className="min-h-[380px] flex-1">
+              <div className="relative min-h-[380px] flex-1 lg:min-h-0">
                 <GraphCanvas nodes={view.nodes} selectedNodeId={selectedNodeId} onSelect={select} />
               </div>
             </div>
 
             <Timeline />
 
-            <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-4">
+            <div className="flex h-[260px] shrink-0 flex-col rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-3.5">
               <EventLog />
             </div>
           </section>
-
-          {/* Правая колонка: инспектор */}
-          <aside className="w-full shrink-0 lg:w-[380px]">
-            <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-4 lg:sticky lg:top-[76px] lg:max-h-[calc(100vh-100px)] lg:overflow-hidden">
-              <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
-                <SlidersHorizontal className="size-4 text-zinc-400" />
-                Инспектор узла
-              </h2>
-              <div className="lg:max-h-[calc(100vh-190px)] lg:overflow-y-auto lg:pr-1">
-                <NodeInspector />
-              </div>
-            </div>
-          </aside>
         </main>
 
         {/* ─── Подвал ─── */}
-        <footer className="mt-auto border-t border-zinc-800/80 bg-zinc-950/80">
-          <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-xs text-zinc-500">
-            <span>TACG Prototype v0.1 · прототип для тестирования концепции</span>
+        <footer className="mt-auto shrink-0 border-t border-zinc-800/80 bg-zinc-950/80">
+          <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5 text-xs text-zinc-500">
+            <span>TACG Prototype v0.2 · прототип для тестирования концепции</span>
             <span className="hidden sm:inline">·</span>
             <span className="hidden sm:inline">Движок: socket.io мини-сервис + z-ai-web-dev-sdk (LLM)</span>
             <span className="hidden md:inline">·</span>
-            <span className="hidden md:inline">Прозрачность · Контроль · Воспроизводимость</span>
+            <span className="hidden md:inline">React Flow · Прозрачность · Контроль · Воспроизводимость</span>
           </div>
         </footer>
+
+        {/* Инспектор узла — модалка ≥50% ширины экрана */}
+        <NodeInspectorModal />
       </div>
     </TooltipProvider>
   )
