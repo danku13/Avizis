@@ -1,0 +1,12 @@
+{
+  "name": "tacg-agent",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "bun --hot index.ts"
+  },
+  "dependencies": {
+    "socket.io": "^4.8.4",
+    "z-ai-web-dev-sdk": "^0.0.18"
+  }
+}
