@@ -4,7 +4,7 @@
 #   push тега v*  → сборка + автоматическое создание GitHub Release с установщиком
 #   workflow_dispatch → ручной запуск проверочной сборки
 #
-# Конвейер: bun install → сайдкар движка (bun build --compile, кросс-таргет) →
+# Конвейер: bun install → сайдкар движка (bun build --compile) →
 # статический экспорт UI (out/) → cargo/tauri build → NSIS-установщик + портативный zip.
 name: Desktop (Tauri)
 
@@ -49,7 +49,7 @@ jobs:
       - name: Tauri build (NSIS-установщик)
         run: bunx tauri build
 
-      - name: Портативная сборка (zip: оболочка + сайдкар)
+      - name: Портативная сборка (zip с оболочкой и сайдкаром)
         shell: pwsh
         run: |
           $files = @('src-tauri/target/release/tacg.exe')
