@@ -10,8 +10,9 @@ import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { NodeStatusBadge } from './status-badge'
-import { chosenIds, convertUsd, DECISION_DOMAIN_LABELS, fmtCurrency, fmtUsd, GraphNode, RunEvent, selectionMode } from '@/lib/tacg/types'
+import { chosenIds, convertUsd, decisionDomainLabel, fmtCurrency, fmtUsd, GraphNode, RunEvent, selectionMode } from '@/lib/tacg/types'
 import { getSocket } from '@/lib/tacg/socket'
+import { useI18nStore, useT } from '@/lib/tacg/i18n'
 import { useTacgStore } from '@/store/tacg-store'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -64,6 +65,9 @@ export function NodeInspectorModal() {
   const currentRunId = useTacgStore((s) => s.currentRunId)
   const decisionMode = useTacgStore((s) => s.decisionMode)
   const openDecision = useTacgStore((s) => s.openDecision)
+  const t = useT()
+  const locale = useI18nStore((s) => s.locale)
+  const num = (v: number) => v.toLocaleString(locale === 'en' ? 'en-US' : 'ru-RU')
 
   const node = useMemo<GraphNode | null>(
     () => (selectedNodeId ? findNode(events, selectedNodeId, cursor) : null),
@@ -89,7 +93,7 @@ export function NodeInspectorModal() {
   }
 
   const copy = (text?: string) => {
-    if (text) navigator.clipboard?.writeText(text).then(() => toast.success('Скопировано в буфер'))
+    if (text) navigator.clipboard?.writeText(text).then(() => toast.success(t('inspector.copied')))
   }
 
   const startEdit = () => {
@@ -101,13 +105,13 @@ export function NodeInspectorModal() {
     if (!currentRunId || !draft.trim() || !node) return
     getSocket().emit('node:override', { runId: currentRunId, nodeId: node.id, output: draft })
     setEditing(false)
-    toast.success('Результат узла переопределён — потомки будут пересчитаны')
+    toast.success(t('inspector.overriddenToast'))
   }
 
   const retry = () => {
     if (!currentRunId || !node) return
     getSocket().emit('node:retry', { runId: currentRunId, nodeId: node.id })
-    toast.info('Узел поставлен в очередь на повторное выполнение')
+    toast.info(t('inspector.retryToast'))
   }
 
   const isPlayback = cursor !== null
@@ -121,17 +125,12 @@ export function NodeInspectorModal() {
       <DialogContent
         className="flex h-[86dvh] max-h-[86dvh] w-[calc(100vw-1.5rem)] flex-col gap-0 overflow-hidden border-zinc-200 bg-white/95 p-0 backdrop-blur-md sm:max-w-none sm:w-[55vw] lg:w-[58vw] xl:w-[64vw] dark:border-zinc-800 dark:bg-zinc-950/95"
       >
-        <DialogDescription className="sr-only">
-          Детали узла графа вычислений: вход, выход, причина добавления и инструменты вмешательства
-        </DialogDescription>
+        <DialogDescription className="sr-only">{t('inspector.description')}</DialogDescription>
 
         {!node ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-muted-foreground">
             <MousePointerClick className="size-8" />
-            <p className="max-w-sm text-center text-sm">
-              Состояние узла не найдено в этом кадре истории. Возможно, узел появился позже — переместите курсор
-              воспроизведения вперёд или вернитесь в live-режим.
-            </p>
+            <p className="max-w-sm text-center text-sm">{t('inspector.nodeNotFound')}</p>
           </div>
         ) : (
           <>
@@ -149,45 +148,45 @@ export function NodeInspectorModal() {
                 {node.dynamic && (
                   <Badge variant="outline" className="border-violet-500/40 bg-violet-500/10 text-violet-700 dark:text-violet-300">
                     <Sparkles className="mr-1 size-3" />
-                    добавлен динамически · v{node.addedAtVersion}
+                    {t('inspector.addedDynamic', { v: node.addedAtVersion ?? 0 })}
                   </Badge>
                 )}
                 {node.kind === 'decision' && (
                   <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300">
                     <GitFork className="mr-1 size-3" />
-                    развилка · {node.decision?.options.length ?? 0} варианта
+                    {t('inspector.forkBadge', { n: node.decision?.options.length ?? 0 })}
                   </Badge>
                 )}
                 {branchOf && (
                   <Badge
                     variant="outline"
                     className={cn('font-bold uppercase', branchOf.optionId === 'a' ? 'border-sky-500/40 text-sky-700 dark:text-sky-300' : branchOf.optionId === 'b' ? 'border-fuchsia-500/40 text-fuchsia-700 dark:text-fuchsia-300' : 'border-orange-500/40 text-orange-700 dark:text-orange-300')}
-                    title={`Узел принадлежит ветке варианта «${branchOf.optionId}» развилки ${branchOf.decisionId}`}
+                    title={t('inspector.branchBadgeTitle', { option: branchOf.optionId, decision: branchOf.decisionId })}
                   >
                     <GitBranch className="mr-1 size-3" />
-                    ветка {branchOf.optionId}
+                    {t('inspector.branchBadge', { option: branchOf.optionId })}
                   </Badge>
                 )}
                 {node.overridden && (
                   <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300">
                     <PenLine className="mr-1 size-3" />
-                    переопределён пользователем
+                    {t('inspector.overriddenBadge')}
                   </Badge>
                 )}
                 {(node.runs ?? 0) > 1 && (
                   <Badge variant="outline" className="border-zinc-400 text-zinc-500 dark:border-zinc-600 dark:text-zinc-400">
                     <RotateCcw className="mr-1 size-3" />
-                    выполнений: {node.runs}
+                    {t('inspector.runsBadge', { n: node.runs ?? 0 })}
                   </Badge>
                 )}
                 {node.llm && (
                   <Badge
                     variant="outline"
                     className="gap-1 border-teal-500/40 bg-teal-500/10 font-mono text-[10px] text-teal-700 dark:text-teal-300"
-                    title={`LLM-вызов узла выполнен через адаптер «${node.llm.adapter}» (provenance BYOK)`}
+                    title={t('inspector.llmBadgeTitle', { adapter: node.llm.adapter })}
                   >
                     <Cpu className="size-3" />
-                    Модель: {node.llm.model} · {node.llm.adapter}
+                    {t('inspector.llmBadge', { model: node.llm.model, adapter: node.llm.adapter })}
                   </Badge>
                 )}
               </div>
@@ -203,7 +202,7 @@ export function NodeInspectorModal() {
 
                 {node.reason && (
                   <div className="rounded-lg border border-violet-500/30 bg-violet-500/10 p-3 text-xs leading-relaxed text-violet-800 dark:text-violet-200">
-                    <span className="font-semibold">Причина добавления: </span>
+                    <span className="font-semibold">{t('inspector.reasonLabel')} </span>
                     {node.reason}
                   </div>
                 )}
@@ -212,19 +211,19 @@ export function NodeInspectorModal() {
                 {dec && (
                   <div className="space-y-3">
                     <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-800 dark:text-amber-200">
-                      <span className="font-semibold">Вопрос развилки: </span>
+                      <span className="font-semibold">{t('inspector.forkQuestionLabel')} </span>
                       {dec.question}
                       {(dec.domain || decMixed) && (
                         <span className="mt-1.5 block text-[11px] text-amber-700/80 dark:text-amber-300/70">
-                          {dec.domain ? `Домен уточнения: ${DECISION_DOMAIN_LABELS[dec.domain]}` : ''}
+                          {dec.domain ? `${t('inspector.domainLabel')} ${decisionDomainLabel(dec.domain, locale)}` : ''}
                           {dec.domain && decMixed ? ' · ' : ''}
-                          {decMixed ? 'допустимо смешанное решение' : ''}
+                          {decMixed ? t('inspector.mixedAllowed') : ''}
                         </span>
                       )}
                     </div>
 
                     <div className="space-y-2">
-                      <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Варианты агента</h4>
+                      <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{t('inspector.agentOptions')}</h4>
                       {dec.options.map((o) => {
                         const chosen = pickedIds.includes(o.id)
                         return (
@@ -253,14 +252,14 @@ export function NodeInspectorModal() {
                               {chosen && (
                                 <span className="flex shrink-0 items-center gap-1 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-300">
                                   <CheckCircle2 className="size-3" />
-                                  {pickedIds.length > 1 ? 'в составе' : 'выбран'}
+                                  {pickedIds.length > 1 ? t('inspector.inCombo') : t('inspector.chosen')}
                                 </span>
                               )}
                             </div>
                             <p className="mt-1.5 text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-400">{o.rationale}</p>
                             {o.nextSteps.length > 0 && (
                               <p className="mt-1.5 text-[11px] text-zinc-500 dark:text-zinc-500">
-                                дальше: {o.nextSteps.map((s, i) => `${i + 1}. ${s}`).join(' → ')}
+                                {t('inspector.nextSteps')} {o.nextSteps.map((s, i) => `${i + 1}. ${s}`).join(' → ')}
                               </p>
                             )}
                           </div>
@@ -271,9 +270,7 @@ export function NodeInspectorModal() {
                     {dec.status === 'offered' && (
                       <div className="flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">
                         <GitFork className="size-3.5 shrink-0 animate-pulse" />
-                        {(decisionMode ?? 'manual') === 'manual'
-                          ? 'Развилка ожидает вашего выбора — график приостановлен'
-                          : 'Агент выбирает вариант самостоятельно…'}
+                        {(decisionMode ?? 'manual') === 'manual' ? t('inspector.forkWaitsUser') : t('inspector.forkAgentDecides')}
                       </div>
                     )}
 
@@ -281,12 +278,12 @@ export function NodeInspectorModal() {
                       <div className="space-y-2">
                         <div className="flex items-center gap-2 text-xs text-emerald-300">
                           <CheckCircle2 className="size-3.5" />
-                          Решение принял: {dec.chosenBy === 'user' ? 'пользователь' : 'агент'}
+                          {t('inspector.decidedBy')} {dec.chosenBy === 'user' ? t('inspector.byUser') : t('inspector.byAgent')}
                           <span className="text-zinc-500">
                             ·{' '}
                             {pickedIds.length > 1
-                              ? `смешанное решение «${pickedIds.join(' + ')}»`
-                              : `вариант «${pickedIds[0]}»`}
+                              ? t('inspector.mixedOutcome', { ids: pickedIds.join(' + ') })
+                              : t('inspector.singleOutcome', { id: pickedIds[0] })}
                           </span>
                         </div>
                         {dec.reasoning && (
@@ -294,11 +291,11 @@ export function NodeInspectorModal() {
                             <span className="font-semibold">
                               {dec.chosenBy === 'agent' ? (
                                 <span className="inline-flex items-center gap-1">
-                                  <Bot className="size-3" /> Рассуждение агента:{' '}
+                                  <Bot className="size-3" /> {t('inspector.agentReasoning')}{' '}
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center gap-1">
-                                  <User className="size-3" /> Обоснование:{' '}
+                                  <User className="size-3" /> {t('inspector.userRationale')}{' '}
                                 </span>
                               )}
                             </span>
@@ -321,28 +318,28 @@ export function NodeInspectorModal() {
                   <div className="flex items-center gap-1.5">
                     <Clock3 className="size-3.5" />
                     {node.status === 'done' && node.durationMs
-                      ? `${(node.durationMs / 1000).toFixed(1)} с`
+                      ? `${(node.durationMs / 1000).toFixed(1)} s`
                       : node.status === 'running' && node.startedAt
-                        ? `${((Date.now() - node.startedAt) / 1000).toFixed(1)} с…`
+                        ? `${((Date.now() - node.startedAt) / 1000).toFixed(1)} s…`
                         : '—'}
                   </div>
                   <div className="flex items-center gap-1.5">
                     <GitBranch className="size-3.5" />
-                    Зависимостей: {node.dependsOn.length}
+                    {t('inspector.depsCount', { n: node.dependsOn.length })}
                   </div>
                   {/* Аудит токенов и стоимости (ADR-015/016 + FR-910): затраты LLM-вызовов узла */}
                   {node.usage && (node.usage.input > 0 || node.usage.output > 0) && (
                     <div
                       className="col-span-2 flex items-center gap-1.5 tabular-nums"
-                      title="Токены LLM-вызовов узла: вход/выход (данные провайдера, повторные запуски суммируются); стоимость — оценка по динамическому прайсу, конвертация — по текущему курсу"
+                      title={t('inspector.usageTitle')}
                     >
                       <Coins className="size-3.5 text-teal-500 dark:text-teal-400" />
-                      Токены: ↑ {node.usage.input.toLocaleString('ru-RU')} · ↓ {node.usage.output.toLocaleString('ru-RU')}
+                      {t('inspector.tokens', { input: num(node.usage.input), output: num(node.usage.output) })}
                       {node.usage.costUsd ? (
                         <span className="font-medium text-teal-600 dark:text-teal-300">
-                          · ≈{fmtUsd(node.usage.costUsd)}
+                          · ≈{fmtUsd(node.usage.costUsd, locale)}
                           {curEntry
-                            ? ` · ${fmtCurrency(convertUsd(node.usage.costUsd, curEntry.rate) ?? 0, curEntry.code)}`
+                            ? ` · ${fmtCurrency(convertUsd(node.usage.costUsd, curEntry.rate) ?? 0, curEntry.code, locale)}`
                             : ''}
                         </span>
                       ) : null}
@@ -352,14 +349,14 @@ export function NodeInspectorModal() {
 
                 {node.dependsOn.length > 0 && (
                   <div className="space-y-1.5">
-                    <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Входы (зависимости)</h4>
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{t('inspector.inputsSection')}</h4>
                     <div className="flex flex-wrap gap-1.5">
                       {node.dependsOn.map((d) => (
                         <button
                           key={d}
                           onClick={() => select(d)}
                           className="rounded border border-zinc-300 bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] text-zinc-600 transition-colors hover:border-cyan-500/50 hover:text-cyan-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:text-cyan-300"
-                          title="Перейти к узлу-зависимости"
+                          title={t('inspector.gotoDep')}
                         >
                           {d}
                         </button>
@@ -373,16 +370,16 @@ export function NodeInspectorModal() {
               <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
                 <section>
                   <div className="mb-2 flex items-center justify-between">
-                    <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Вход</h4>
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{t('inspector.inputSection')}</h4>
                     {node.input && (
-                      <Button variant="ghost" size="icon" className="size-6" onClick={() => copy(node.input)} aria-label="Копировать вход">
+                      <Button variant="ghost" size="icon" className="size-6" onClick={() => copy(node.input)} aria-label={t('inspector.copyInputAria')}>
                         <Copy className="size-3" />
                       </Button>
                     )}
                   </div>
                   {/* Полный текст без обрезки: прокрутка — на уровне колонки */}
                   <pre className="whitespace-pre-wrap break-words rounded-md border bg-zinc-100 p-3 font-mono text-xs leading-relaxed text-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-300">
-                    {node.input ?? '— (узел ещё не стартовал)'}
+                    {node.input ?? t('inspector.notStarted')}
                   </pre>
                 </section>
 
@@ -390,20 +387,20 @@ export function NodeInspectorModal() {
 
                 <section>
                   <div className="mb-2 flex items-center justify-between">
-                    <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Выход</h4>
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{t('inspector.outputSection')}</h4>
                     {!editing && node.output && (
-                      <Button variant="ghost" size="icon" className="size-6" onClick={() => copy(node.output)} aria-label="Копировать выход">
+                      <Button variant="ghost" size="icon" className="size-6" onClick={() => copy(node.output)} aria-label={t('inspector.copyOutputAria')}>
                         <Copy className="size-3" />
                       </Button>
                     )}
                   </div>
                   {node.status === 'error' ? (
                     <div className="rounded-md border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-700 dark:text-red-200">
-                      Узел завершился ошибкой. См. сообщение в левой колонке.
+                      {t('inspector.nodeFailed')}
                     </div>
                   ) : node.status === 'running' ? (
                     <div className="animate-pulse rounded-md border bg-zinc-100 p-3 font-mono text-xs text-zinc-500 dark:bg-zinc-900/70 dark:text-zinc-500">
-                      узел выполняется, результат появится здесь…
+                      {t('inspector.nodeRunning')}
                     </div>
                   ) : editing ? (
                     <div className="space-y-2.5">
@@ -411,15 +408,15 @@ export function NodeInspectorModal() {
                         value={draft}
                         onChange={(e) => setDraft(e.target.value)}
                         className="min-h-[160px] font-mono text-xs"
-                        placeholder="Новый результат узла…"
+                        placeholder={t('inspector.overridePlaceholder')}
                       />
                       <div className="flex gap-2">
                         <Button size="sm" onClick={saveOverride} disabled={!draft.trim()}>
                           <PenLine className="mr-1.5 size-3.5" />
-                          Сохранить и пересчитать потомков
+                          {t('inspector.saveAndRecompute')}
                         </Button>
                         <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
-                          Отмена
+                          {t('common.cancel')}
                         </Button>
                       </div>
                     </div>
@@ -429,7 +426,7 @@ export function NodeInspectorModal() {
                     </pre>
                   ) : (
                     <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
-                      — (узел ещё не выполнялся)
+                      {t('inspector.notRunYet')}
                     </div>
                   )}
                 </section>
@@ -448,13 +445,13 @@ export function NodeInspectorModal() {
                   disabled={isPlayback || !currentRunId || (decisionMode ?? 'manual') !== 'manual'}
                   title={
                     (decisionMode ?? 'manual') !== 'manual'
-                      ? 'Режим «авто»: агент решает сам'
-                      : 'Открыть модалку выбора варианта'
+                      ? t('inspector.autoDecides')
+                      : t('inspector.openChoiceTitle')
                   }
                   className="border-amber-500/40 bg-amber-500/15 text-amber-900 hover:bg-amber-500/25 dark:text-amber-100"
                 >
                   <GitFork className="mr-1.5 size-3.5" />
-                  Открыть выбор варианта
+                  {t('inspector.openChoice')}
                 </Button>
               )}
               {node.status === 'done' && !editing && (
@@ -463,10 +460,10 @@ export function NodeInspectorModal() {
                   size="sm"
                   onClick={startEdit}
                   disabled={isPlayback || !currentRunId}
-                  title={isPlayback ? 'Вернитесь в live-режим, чтобы вмешиваться' : 'Заменить результат узла и пересчитать потомков'}
+                  title={isPlayback ? t('inspector.playbackHint') : t('inspector.overrideTitle')}
                 >
                   <PenLine className="mr-1.5 size-3.5" />
-                  Переопределить результат
+                  {t('inspector.overrideResult')}
                 </Button>
               )}
               {node.status === 'error' && (
@@ -475,19 +472,17 @@ export function NodeInspectorModal() {
                   size="sm"
                   onClick={retry}
                   disabled={isPlayback || !currentRunId}
-                  title={isPlayback ? 'Вернитесь в live-режим, чтобы вмешиваться' : 'Перезапустить ошибочный узел'}
+                  title={isPlayback ? t('inspector.playbackHint') : t('inspector.retryTitle')}
                 >
                   <RotateCcw className="mr-1.5 size-3.5" />
-                  Повторить узел
+                  {t('inspector.retryNode')}
                 </Button>
               )}
               {isPlayback && (
-                <p className="text-xs text-muted-foreground">
-                  Режим воспроизведения: вмешательство недоступно. Нажмите «Live» на таймлайне.
-                </p>
+                <p className="text-xs text-muted-foreground">{t('inspector.playbackNote')}</p>
               )}
               <span className="ml-auto text-[11px] text-zinc-400 dark:text-zinc-600">
-                Esc — закрыть · клик по фону графа — снять выделение
+                {t('inspector.footerHint')}
               </span>
             </footer>
           </>

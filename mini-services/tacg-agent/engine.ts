@@ -3,6 +3,7 @@
 // выполняются через z-ai-web-dev-sdk (llm.ts), демо-режим — симуляция.
 import { Server } from 'socket.io'
 import { DecisionDomain, DecisionMode, GraphNode, LlmProviderInfo, RunEvent, RunMode, RunSnapshot, RunStatus } from './types'
+import { detectLang, L, Lang, promptLangSuffix } from './i18n'
 import {
   DEMO_ADAPTATIONS,
   DEMO_AUTO_PICK,
@@ -40,9 +41,9 @@ export const fmtUsd = (v: number): string => {
 }
 
 /** Хвост «· токены: ↑N / ↓M · ≈$X» для записей журнала (только если провайдер сообщил usage) */
-const usageNote = (u: LlmUsage | undefined, costUsd?: number | null) =>
+const usageNote = (u: LlmUsage | undefined, costUsd?: number | null, lang: 'ru' | 'en' = 'ru') =>
   u && ((u.promptTokens ?? 0) > 0 || (u.completionTokens ?? 0) > 0)
-    ? ` · токены: ↑${fmtK(u.promptTokens ?? 0)} / ↓${fmtK(u.completionTokens ?? 0)}${
+    ? ` · ${lang === 'en' ? 'tokens' : 'токены'}: ↑${fmtK(u.promptTokens ?? 0)} / ↓${fmtK(u.completionTokens ?? 0)}${
         typeof costUsd === 'number' && costUsd > 0 ? ` · ≈${fmtUsd(costUsd)}` : ''
       }`
     : ''
@@ -73,6 +74,8 @@ interface Runtime {
   demoInsertionsDone: Set<number>
   /** Сколько эмерджентных развилок добавлено супервайзером (LLM-режим) */
   emergentAdded: number
+  /** Язык прогона (ADR-022): определяется по задаче, управляет промптами и журналом */
+  lang: Lang
   /** Текущий режим решений (зеркало snapshot.decisionMode) */
   decisionMode: DecisionMode
   /** Ожидаемое решение пользователя на развилке (null — ожидания нет) */
@@ -88,6 +91,16 @@ const SUPERVISOR_SYS = `Ты — супервайзер вычислительн
 const DECIDER_SYS = `Ты — модуль принятия решений ИИ-агента на развилке вычислительного графа. Взвесь варианты с учётом задачи и контекста. На развилке типа single выбери один вариант; на развилке типа mixed допустимо смешанное решение из нескольких вариантов. Отвечай ТОЛЬКО валидным JSON без markdown-обёрток.`
 
 const DECISION_DOMAINS: DecisionDomain[] = ['scope', 'specialization', 'product', 'architecture', 'tone', 'format', 'context', 'strategy']
+
+/** Системные промпты — на языке задачи (адаптеры по умолчанию русскоязычные,
+ *  en-прогоны получают англоязычные варианты через i18n-модуль) */
+const PLANNER_SYS_EN = `You are the planning module of an AI agent. Break the user request into a computation graph of steps and assess how well you understand the task. Reply with VALID JSON ONLY, no markdown wrapping or explanations.`
+
+const EXECUTOR_SYS_EN = `You are the executor module of an AI agent inside a computation graph. Execute the requested step and return its result. Answer in English, to the point, without markdown headings. Length is not hard-capped — keep it minimally sufficient for a complete step result: do not bloat context, avoid filler and repetition, make every sentence useful for the next steps and the user.`
+
+const SUPERVISOR_SYS_EN = `You are the supervisor of an AI agent's computation graph. After each step you analyze the incoming data and decide: add a new step to the plan, ask a clarifying question-fork (if the ambiguity affects the outcome) or change nothing. You also assess how narrow the solution vector is. Reply with VALID JSON ONLY.`
+
+const DECIDER_SYS_EN = `You are the decision module of an AI agent at a fork of the computation graph. Weigh the options given the task and context. At a single fork pick one option; at a mixed fork a combined decision of several options is allowed. Reply with VALID JSON ONLY, no markdown wrapping.`
 
 export class AgentEngine {
   private runs = new Map<string, Runtime>()
@@ -204,6 +217,7 @@ export class AgentEngine {
       scenario,
       demoInsertionsDone: new Set(),
       emergentAdded: 0,
+      lang: detectLang(task),
       decisionMode,
       pendingDecision: null,
     }
@@ -230,26 +244,26 @@ export class AgentEngine {
     const llmLabel =
       mode === 'llm'
         ? run.llm!.planner.adapter === 'zai'
-          ? 'LLM через z-ai-web-dev-sdk'
-          : `LLM через ${run.llm!.planner.adapter} · ${run.llm!.planner.model}`
-        : 'демо-режим (симуляция)'
-    this.log(rt, 'run', `Запуск агента · ${llmLabel} · задача: «${trunc(task, 90)}»`)
+          ? L(rt.lang, 'LLM через z-ai-web-dev-sdk', 'LLM via z-ai-web-dev-sdk')
+          : `LLM ${rt.lang === 'en' ? 'via' : 'через'} ${run.llm!.planner.adapter} · ${run.llm!.planner.model}`
+        : L(rt.lang, 'демо-режим (симуляция)', 'demo mode (simulation)')
+    this.log(rt, 'run', L(rt.lang, `Запуск агента · ${llmLabel} · задача: «${trunc(task, 90)}»`, `Agent started · ${llmLabel} · task: “${trunc(task, 90)}”`))
 
     if (mode === 'llm') {
-      this.log(rt, 'plan', 'Планировщик LLM анализирует задачу…')
+      this.log(rt, 'plan', L(rt.lang, 'Планировщик LLM анализирует задачу…', 'The LLM planner is analyzing the task…'))
       // инициализация SDK нужна только для адаптера zai
       if (resolveRole('planner', loadConfig()).adapter === 'zai') {
         try {
           await getZai()
         } catch (e: any) {
-          this.log(rt, 'run', `Ошибка инициализации SDK: ${e?.message || e}`)
-          this.pushStatus(rt, 'error', 0, `Ошибка инициализации SDK: ${trunc(e?.message || '', 120)}`)
+          this.log(rt, 'run', L(rt.lang, `Ошибка инициализации SDK: ${e?.message || e}`, `SDK init error: ${e?.message || e}`))
+          this.pushStatus(rt, 'error', 0, L(rt.lang, `Ошибка инициализации SDK: ${trunc(e?.message || '', 120)}`, `SDK init error: ${trunc(e?.message || '', 120)}`))
           store.save(run)
           return run
         }
       }
     } else {
-      this.log(rt, 'plan', 'Планировщик строит граф задачи…')
+      this.log(rt, 'plan', L(rt.lang, 'Планировщик строит граф задачи…', 'The planner is building the task graph…'))
       await sleep(900)
     }
 
@@ -266,8 +280,8 @@ export class AgentEngine {
     this.emitEvent(rt, { type: 'graph:init', ts: now(), nodes })
     run.nodes = nodes.map((n) => ({ ...n }))
     run.version = 1
-    run.versions.push({ version: 1, createdAt: now(), description: 'Исходный план агента', nodeIds: nodes.map((n) => n.id) })
-    this.log(rt, 'plan', `План готов: ${nodes.length} узлов · версия графа v1`)
+    run.versions.push({ version: 1, createdAt: now(), description: L(rt.lang, 'Исходный план агента', "Agent's initial plan"), nodeIds: nodes.map((n) => n.id) })
+    this.log(rt, 'plan', L(rt.lang, `План готов: ${nodes.length} узлов · версия графа v1`, `Plan ready: ${nodes.length} nodes · graph version v1`))
 
     // стартовая самооценка «понимания задачи»: насколько узкий вектор решения
     const initialCertainty = mode === 'llm' ? (rt.snapshot.certainty ?? 0.4) : DEMO_INITIAL_CERTAINTY[scenario]
@@ -275,11 +289,11 @@ export class AgentEngine {
     this.emitCertainty(rt, initialCertainty, initialNote)
 
     this.pushStatus(rt, 'running', 0)
-    this.log(rt, 'run', 'Выполнение графа началось')
+    this.log(rt, 'run', L(rt.lang, 'Выполнение графа началось', 'Graph execution started'))
     store.save(run)
 
     this.runLoop(rt).catch((err: any) => {
-      this.log(rt, 'run', `Внутренняя ошибка цикла выполнения: ${err?.message || err}`)
+      this.log(rt, 'run', L(rt.lang, `Внутренняя ошибка цикла выполнения: ${err?.message || err}`, `Execution loop internal error: ${err?.message || err}`))
       this.pushStatus(rt, 'error', run.progress, `Внутренняя ошибка цикла: ${trunc(err?.message || '', 120)}`)
     })
     return run
@@ -307,7 +321,7 @@ export class AgentEngine {
 ]}
 
 Правила:
-- Названия и описания — на русском языке. Первый узел имеет пустой dependsOn.
+- Названия и описания — на языке задачи. Первый узел имеет пустой dependsOn.
 - certainty — число 0..1: твоя оценка понимания задачи ДО уточнений (размытый запрос → 0.2-0.4, конкретный → 0.6-0.8).
 - Развилок не больше двух; вариантов 2–4; шагов в каждой ветке 1–3. Первый шаг ветки выполняется вместо шагов других веток.
 - domain — один из: scope, specialization, product, architecture, tone, format, context, strategy.
@@ -315,27 +329,27 @@ export class AgentEngine {
 - Итоговый узел зависит от хвостов ВСЕХ веток (перечисли их в dependsOn).
 - dependsOn ссылается только на id уже объявленных узлов. Массив nodes обязан быть закрыт перед концом объекта.`
     try {
-      const { json, usage } = await chatJsonDetailed(PLANNER_SYS, user, 60_000, 2, 'planner')
+      const { json, usage } = await chatJsonDetailed(rt.lang === 'en' ? PLANNER_SYS_EN : PLANNER_SYS, user + promptLangSuffix(rt.lang), 60_000, 2, 'planner')
       const planCost = this.addUsage(rt, 'planner', usage)
       const { nodes, certainty, notes } = sanitizePlanData(json)
       if (certainty !== undefined) rt.snapshot.certainty = certainty
       if (nodes) {
         const plannerInfo = providerInfoOf(resolveRole('planner', loadConfig()))
-        this.log(rt, 'plan', `Планировщик: ${plannerInfo.adapter} · ${plannerInfo.model}${usageNote(usage, planCost)}`)
+        this.log(rt, 'plan', L(rt.lang, `Планировщик: ${plannerInfo.adapter} · ${plannerInfo.model}${usageNote(usage, planCost, rt.lang)}`, `Planner: ${plannerInfo.adapter} · ${plannerInfo.model}${usageNote(usage, planCost, rt.lang)}`))
         // ADR-013 (аудит усечений): каждая структурная потеря плана — в журнал
         // ДО итоговой записи о построенном графе (сначала лимиты, потом итог)
-        for (const note of notes) this.log(rt, 'limits', note.message)
+        for (const note of notes) this.log(rt, 'limits', L(rt.lang, note.message, note.messageEn ?? note.message))
         const decCount = nodes.filter((n) => n.kind === 'decision').length
         this.log(
           rt,
           'plan',
-          `Планировщик LLM построил граф из ${nodes.length} узлов${decCount ? ` · развилок: ${decCount}` : ''}`
+          L(rt.lang, `Планировщик LLM построил граф из ${nodes.length} узлов${decCount ? ` · развилок: ${decCount}` : ''}`, `The LLM planner built a graph of ${nodes.length} nodes${decCount ? ` · forks: ${decCount}` : ''}`)
         )
         return nodes
       }
-      this.log(rt, 'info', 'Не удалось разобрать JSON плана — применён резервный план')
+      this.log(rt, 'info', L(rt.lang, 'Не удалось разобрать JSON плана — применён резервный план', 'Failed to parse the plan JSON — a fallback plan was applied'))
     } catch (e: any) {
-      this.log(rt, 'info', `Планировщик LLM недоступен (${trunc(e?.message || '', 80)}) — применён резервный план`)
+      this.log(rt, 'info', L(rt.lang, `Планировщик LLM недоступен (${trunc(e?.message || '', 80)}) — применён резервный план`, `The LLM planner is unavailable (${trunc(e?.message || '', 80)}) — a fallback plan was applied`))
     }
     return demoPlan()
   }
@@ -356,7 +370,7 @@ export class AgentEngine {
         if (!node) {
           const errored = run.nodes.find((n) => n.status === 'error')
           if (errored) {
-            this.log(rt, 'node-error', `Узел «${errored.title}» завершился ошибкой — выполнение остановлено. Доступно вмешательство: «Повторить узел».`)
+            this.log(rt, 'node-error', L(rt.lang, `Узел «${errored.title}» завершился ошибкой — выполнение остановлено. Доступно вмешательство: «Повторить узел».`, `Node “${errored.title}” failed — execution stopped. Intervention available: “Retry node”.`))
             this.pushStatus(rt, 'error', run.progress, `Узел «${errored.title}» упал: ${trunc(errored.error || 'ошибка выполнения', 140)}`)
             run.finishedAt = now()
             store.save(run)
@@ -364,7 +378,7 @@ export class AgentEngine {
           }
           const pending = run.nodes.filter((n) => n.status === 'pending')
           if (pending.length) {
-            this.log(rt, 'run', 'Обнаружена циклическая зависимость — оставшиеся узлы пропущены')
+            this.log(rt, 'run', L(rt.lang, 'Обнаружена циклическая зависимость — оставшиеся узлы пропущены', 'A cyclic dependency was detected — the remaining nodes were skipped'))
             pending.forEach((n) => {
               n.status = 'skipped'
               this.emitEvent(rt, { type: 'node:update', ts: now(), node: { ...n } })
@@ -383,7 +397,7 @@ export class AgentEngine {
         node.runs = (node.runs ?? 0) + 1
         node.error = undefined
         this.emitEvent(rt, { type: 'node:update', ts: now(), node: { ...node } })
-        this.log(rt, 'node-start', `▶ «${node.title}» — выполнение`)
+        this.log(rt, 'node-start', L(rt.lang, `▶ «${node.title}» — выполнение`, `▶ “${node.title}” — executing`))
 
         // ─── Узел-развилка: рассуждение → предложение вариантов → выбор → гашение веток ───
         if (node.kind === 'decision' && node.decision) {
@@ -399,7 +413,7 @@ export class AgentEngine {
           const result =
             run.mode === 'demo'
               ? { output: await this.demoExecute(node, rt), usage: undefined as LlmUsage | undefined }
-              : await this.llmExecute(run, node)
+              : await this.llmExecute(run, node, rt)
           node.status = 'done'
           node.output = result.output
           node.finishedAt = now()
@@ -411,7 +425,11 @@ export class AgentEngine {
           this.log(
             rt,
             'node-done',
-            `✓ «${node.title}» — завершён за ${((node.durationMs ?? 0) / 1000).toFixed(1)} с${usageNote(result.usage, stepCost)}`
+            L(
+              rt.lang,
+              `✓ «${node.title}» — завершён за ${((node.durationMs ?? 0) / 1000).toFixed(1)} с${usageNote(result.usage, stepCost, rt.lang)}`,
+              `✓ “${node.title}” — done in ${((node.durationMs ?? 0) / 1000).toFixed(1)} s${usageNote(result.usage, stepCost, rt.lang)}`
+            )
           )
         } catch (err: any) {
           if (err instanceof StoppedError) {
@@ -427,7 +445,7 @@ export class AgentEngine {
           node.finishedAt = now()
           node.durationMs = node.finishedAt - (node.startedAt ?? node.finishedAt)
           this.emitEvent(rt, { type: 'node:update', ts: now(), node: { ...node } })
-          this.log(rt, 'node-error', `✗ «${node.title}» — ошибка: ${trunc(node.error ?? '', 140)}`)
+          this.log(rt, 'node-error', L(rt.lang, `✗ «${node.title}» — ошибка: ${trunc(node.error ?? '', 140)}`, `✗ “${node.title}” — error: ${trunc(node.error ?? '', 140)}`))
           continue
         }
 
@@ -486,8 +504,17 @@ export class AgentEngine {
     return text
   }
 
-  private async llmExecute(run: RunSnapshot, node: GraphNode): Promise<{ output: string; usage?: LlmUsage }> {
-    const user = `Задача пользователя: «${run.task}»
+  private async llmExecute(run: RunSnapshot, node: GraphNode, rt: Runtime): Promise<{ output: string; usage?: LlmUsage }> {
+    const user = rt.lang === 'en'
+      ? `User task: “${run.task}”
+
+Current step: “${node.title}”
+Step description: ${node.description || '—'}
+
+${trunc(node.input || `Task: ${run.task}`, 12000)}
+
+Execute the current step and return its result.`
+      : `Задача пользователя: «${run.task}»
 
 Текущий шаг: «${node.title}»
 Описание шага: ${node.description || '—'}
@@ -497,7 +524,7 @@ ${trunc(node.input || `Задача: ${run.task}`, 12000)}
 Выполни текущий шаг и верни его результат.`
     // provenance узла: адаптер/модель исполнителя (без ключей)
     node.llm = providerInfoOf(resolveRole('executor', loadConfig()))
-    const res = await chatTextDetailed(EXECUTOR_SYS, user, 90_000, 1, 'executor')
+    const res = await chatTextDetailed(rt.lang === 'en' ? EXECUTOR_SYS_EN : EXECUTOR_SYS, user, 90_000, 1, 'executor')
     return { output: res.content, usage: res.usage }
   }
 
@@ -578,7 +605,7 @@ ${graphDesc}
 Домены: scope, specialization, product, architecture, tone, format, context, strategy. selection: single (один вариант) или mixed (смешанное решение из нескольких). Вариантов 2–4, шагов в ветке 1–3.`
 
     try {
-      const { json, usage } = await chatJsonDetailed(SUPERVISOR_SYS, user, 45_000, 0, 'supervisor')
+      const { json, usage } = await chatJsonDetailed(rt.lang === 'en' ? SUPERVISOR_SYS_EN : SUPERVISOR_SYS, user + promptLangSuffix(rt.lang), 45_000, 0, 'supervisor')
       // Аудит токенов (ADR-015): супервайзер вызывается после каждого шага —
       // без записи в журнал (иначе шум), но с полным учётом в сводке запуска
       this.addUsage(rt, 'supervisor', usage)
@@ -606,7 +633,7 @@ ${graphDesc}
           const qTitle = trunc(String(q.question), 80)
           // ADR-013 (аудит усечений): варианты >4 и шаги >3 ask-вопроса — в журнал
           if (labeled.length > 4) {
-            this.log(rt, 'limits', `Лимит адаптации: у вопроса супервайзера «${qTitle}» вариантов ${labeled.length} — оставлены 4`)
+            this.log(rt, 'limits', L(rt.lang, `Лимит адаптации: у вопроса супервайзера «${qTitle}» вариантов ${labeled.length} — оставлены 4`, `Adaptation limit: the supervisor question “${qTitle}” has ${labeled.length} options — kept 4`))
           }
           const options = labeled
             .slice(0, 4)
@@ -690,7 +717,7 @@ ${graphDesc}
     rt.dynamicAdded += 1
     run.versions.push({ version: run.version, createdAt: now(), description: reason, nodeIds: run.nodes.map((n) => n.id) })
     this.emitEvent(rt, { type: 'graph:adapt', ts: now(), reason, version: run.version, nodes: changed.map((n) => ({ ...n })) })
-    this.log(rt, 'adapt', `＋ Граф адаптирован (v${run.version}): добавлен узел «${newNode.title}». Причина: ${reason}`)
+    this.log(rt, 'adapt', L(rt.lang, `＋ Граф адаптирован (v${run.version}): добавлен узел «${newNode.title}». Причина: ${reason}`, `＋ Graph adapted (v${run.version}): node “${newNode.title}” added. Reason: ${reason}`))
     store.save(run)
   }
 
@@ -814,7 +841,7 @@ ${graphDesc}
     rt.snapshot.certainty = c
     this.emitEvent(rt, { type: 'run:certainty', ts: now(), certainty: c, note })
     const pct = Math.round(c * 100)
-    this.log(rt, 'decision', `◎ Понимание задачи: ${pct}% — ${note || 'агент переоценил вектор решения'}`)
+    this.log(rt, 'decision', L(rt.lang, `◎ Понимание задачи: ${pct}% — ${note || 'агент переоценил вектор решения'}`, `◎ Task understanding: ${pct}% — ${note || 'the agent re-estimated the solution vector'}`))
   }
 
   // ───────────────────── Развилки: предложения и выбор ─────────────────────
@@ -822,7 +849,7 @@ ${graphDesc}
   /** Жизненный цикл узла-развилки: рассуждение → предложение вариантов → выбор → активация ветки */
   private async handleDecisionNode(rt: Runtime, node: GraphNode): Promise<boolean> {
     const dec = node.decision!
-    this.log(rt, 'decision', `⎇ Развилка «${node.title}»: ${dec.question}`)
+    this.log(rt, 'decision', L(rt.lang, `⎇ Развилка «${node.title}»: ${dec.question}`, `⎇ Fork “${node.title}”: ${dec.question}`))
     try {
       await this.decisionThinkDelay(rt)
     } catch {
@@ -852,7 +879,7 @@ ${graphDesc}
       if (!choice) return this.rollbackDecision(rt, node)
       this.resolveDecision(rt, node, choice.optionIds, choice.by, choice.reasoning)
     } else {
-      this.log(rt, 'decision', '⎇ Режим «авто»: агент взвешивает варианты и принимает решение самостоятельно')
+      this.log(rt, 'decision', L(rt.lang, '⎇ Режим «авто»: агент взвешивает варианты и принимает решение самостоятельно', '⎇ “Auto” mode: the agent weighs the options and decides on its own'))
       const picked = await this.autoDecide(rt, node)
       if (rt.stopped) return this.rollbackDecision(rt, node)
       this.resolveDecision(rt, node, picked.optionIds, 'agent', picked.reasoning)
@@ -915,7 +942,7 @@ ${node.input || ''}
 ${mixed ? 'Выбери один или несколько вариантов (id из списка) и обоснуй состав.' : 'Выбери один вариант (id из списка) и обоснуй выбор.'} Ответ строго JSON:
 ${mixed ? '{"optionIds":["<id1>","<id2>"],"reasoning":"краткое, но исчерпывающее обоснование без воды"}' : '{"optionIds":["<id>"],"reasoning":"краткое, но исчерпывающее обоснование без воды"}'}`
     try {
-      const { json, usage } = await chatJsonDetailed(DECIDER_SYS, user, 45_000, 1, 'decider')
+      const { json, usage } = await chatJsonDetailed(rt.lang === 'en' ? DECIDER_SYS_EN : DECIDER_SYS, user + promptLangSuffix(rt.lang), 45_000, 1, 'decider')
       // Аудит токенов (ADR-015): вызовы решателя атрибутируются узлу-развилке
       this.addUsage(rt, 'decider', usage, node.id)
       const rawIds: any[] = Array.isArray(json?.optionIds)
@@ -1021,7 +1048,7 @@ ${mixed ? '{"optionIds":["<id1>","<id2>"],"reasoning":"краткое, но ис
       rt.pendingDecision = null
       const node = rt.snapshot.nodes.find((n) => n.id === pd.nodeId)
       if (node?.decision) {
-        this.log(rt, 'decision', '⎇ Ожидание выбора прервано: агент принимает решение вместо пользователя')
+        this.log(rt, 'decision', L(rt.lang, '⎇ Ожидание выбора прервано: агент принимает решение вместо пользователя', '⎇ Waiting for the choice was interrupted: the agent decides instead of the user'))
         this.autoDecide(rt, node)
           .then((picked) => pd.resolve({ optionIds: picked.optionIds, by: 'agent', reasoning: picked.reasoning }))
           .catch(() => pd.resolve(null))
@@ -1058,12 +1085,12 @@ ${mixed ? '{"optionIds":["<id1>","<id2>"],"reasoning":"краткое, но ис
       if (!rt.paused && !rt.stopped && rt.snapshot.status === 'running') {
         rt.paused = true
         this.pushStatus(rt, 'paused', rt.snapshot.progress)
-        this.log(rt, 'control', '⏸ Пауза: текущий узел завершится, новые не стартуют')
+        this.log(rt, 'control', L(rt.lang, '⏸ Пауза: текущий узел завершится, новые не стартуют', '⏸ Paused: the current node will finish, no new ones start'))
       }
     } else if (action === 'resume') {
       if (rt.paused) {
         rt.paused = false
-        this.log(rt, 'control', '▶ Выполнение возобновлено')
+        this.log(rt, 'control', L(rt.lang, '▶ Выполнение возобновлено', '▶ Execution resumed'))
         if (rt.snapshot.status === 'paused') {
           this.pushStatus(rt, 'running', rt.snapshot.progress)
         }
@@ -1079,7 +1106,7 @@ ${mixed ? '{"optionIds":["<id1>","<id2>"],"reasoning":"краткое, но ис
         rt.pendingDecision = null
         pd.resolve(null)
       }
-      this.log(rt, 'control', '⏹ Остановка запрошена — применится после завершения текущего узла')
+      this.log(rt, 'control', L(rt.lang, '⏹ Остановка запрошена — применится после завершения текущего узла', '⏹ Stop requested — will apply after the current node finishes'))
     }
   }
 
@@ -1106,7 +1133,7 @@ ${mixed ? '{"optionIds":["<id1>","<id2>"],"reasoning":"краткое, но ис
           u.costUsd ? ` · ≈${fmtUsd(u.costUsd)}` : ''
         }`
       : ''
-    this.log(rt, 'run', `Выполнение остановлено пользователем · выполнено узлов: ${doneCount}, пропущено: ${skipped}${usageTotal}`)
+    this.log(rt, 'run', L(rt.lang, `Выполнение остановлено пользователем · выполнено узлов: ${doneCount}, пропущено: ${skipped}${usageTotal}`, `Execution stopped by the user · nodes done: ${doneCount}, skipped: ${skipped}${usageTotal}`))
     run.finishedAt = now()
     store.save(run)
   }
@@ -1130,7 +1157,7 @@ ${mixed ? '{"optionIds":["<id1>","<id2>"],"reasoning":"краткое, но ис
     const summary = `Готово за ${durS} с: ${run.nodes.length} узлов, ${dynamic} добавлено динамически, версий графа — ${run.version}${usageTotal}. Итог: ${trunc(last?.output || '—', 220)}`
     run.summary = summary
     this.emitEvent(rt, { type: 'run:summary', ts: now(), summary })
-    this.log(rt, 'run', `✓ Задача выполнена за ${durS} с${usageTotal}`)
+    this.log(rt, 'run', L(rt.lang, `✓ Задача выполнена за ${durS} с${usageTotal}`, `✓ Task completed in ${durS} s${usageTotal}`))
     store.save(run)
   }
 
@@ -1172,7 +1199,7 @@ ${mixed ? '{"optionIds":["<id1>","<id2>"],"reasoning":"краткое, но ис
     node.output = trimmed
     node.overridden = true
     this.emitEvent(rt, { type: 'node:update', ts: now(), node: { ...node } })
-    this.log(rt, 'intervention', `✎ Вмешательство: результат узла «${node.title}» переопределён пользователем`)
+    this.log(rt, 'intervention', L(rt.lang, `✎ Вмешательство: результат узла «${node.title}» переопределён пользователем`, `✎ Intervention: the result of node “${node.title}” was overridden by the user`))
 
     // нереализованные ветки не восстанавливаем — выбор на развилке остаётся в силе
     const down = this.downstreamOf(run, nodeId).filter((d) => d.status !== 'discarded')
@@ -1187,7 +1214,7 @@ ${mixed ? '{"optionIds":["<id1>","<id2>"],"reasoning":"краткое, но ис
       this.emitEvent(rt, { type: 'node:update', ts: now(), node: { ...d } })
     }
     if (down.length) {
-      this.log(rt, 'intervention', `↓ Пересчёт: ${down.length} зависимых узлов сброшены и будут выполнены заново`)
+      this.log(rt, 'intervention', L(rt.lang, `↓ Пересчёт: ${down.length} зависимых узлов сброшены и будут выполнены заново`, `↓ Recompute: ${down.length} dependent nodes reset and will re-run`))
       this.recalcProgress(rt)
     }
     if (down.length && !rt.loopActive) {
@@ -1210,7 +1237,7 @@ ${mixed ? '{"optionIds":["<id1>","<id2>"],"reasoning":"краткое, но ис
     node.finishedAt = undefined
     node.durationMs = undefined
     this.emitEvent(rt, { type: 'node:update', ts: now(), node: { ...node } })
-    this.log(rt, 'intervention', `↻ Повтор узла «${node.title}» по запросу пользователя`)
+    this.log(rt, 'intervention', L(rt.lang, `↻ Повтор узла «${node.title}» по запросу пользователя`, `↻ Retry of node “${node.title}” requested by the user`))
     if (!rt.loopActive) {
       this.pushStatus(rt, 'running', rt.snapshot.progress)
       this.runLoop(rt).catch(() => {})

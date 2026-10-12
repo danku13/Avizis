@@ -16,6 +16,7 @@ import {
   saveConfig,
 } from './llm-config'
 import { validateProvider } from './openai-client'
+import { Lang, L } from './i18n'
 
 const httpServer = createServer()
 
@@ -42,6 +43,8 @@ currency.init()
 
 io.on('connection', (socket) => {
   console.log(`[tacg] клиент подключился: ${socket.id}`)
+  // Язык интерфейса клиента (ADR-022): ошибки конфигурации отвечаются на нём
+  const clientLang: Lang = socket.handshake?.query?.locale === 'en' ? 'en' : 'ru'
   socket.emit('connected', { ok: true, ts: Date.now(), service: 'tacg-agent' })
   socket.emit('history:list', { runs: store.history() })
   socket.emit('pricing:status', pricing.status())
@@ -56,7 +59,7 @@ io.on('connection', (socket) => {
       socket.emit('run:started', { runId: run.id })
     } catch (e: any) {
       console.error('[tacg] ошибка запуска:', e)
-      socket.emit('error:server', { message: e?.message || 'Не удалось запустить агента' })
+      socket.emit('error:server', { message: e?.message || L(clientLang, 'Не удалось запустить агента', 'Failed to start the agent') })
     }
   })
 
@@ -139,7 +142,7 @@ io.on('connection', (socket) => {
       saveConfig(merged)
       socket.emit('llm:config:saved', { ok: true, config: publicConfig(merged), latencyMs })
     } catch (e: any) {
-      socket.emit('llm:config:saved', { ok: false, error: e?.message || 'Не удалось сохранить конфигурацию' })
+      socket.emit('llm:config:saved', { ok: false, error: e?.message || L(clientLang, 'Не удалось сохранить конфигурацию', 'Failed to save the configuration') })
     }
   })
 
@@ -161,7 +164,7 @@ io.on('connection', (socket) => {
       const result = await validateProvider(cfgToTest)
       socket.emit('llm:config:test:result', result)
     } catch (e: any) {
-      socket.emit('llm:config:test:result', { ok: false, error: e?.message || 'Ошибка проверки' })
+      socket.emit('llm:config:test:result', { ok: false, error: e?.message || L(clientLang, 'Ошибка проверки', 'Test error') })
     }
   })
 
@@ -177,7 +180,7 @@ io.on('connection', (socket) => {
       socket.emit('pricing:refresh:result', result)
       io.emit('pricing:status', pricing.status())
     } catch (e: any) {
-      socket.emit('pricing:refresh:result', { ok: false, error: e?.message || 'Ошибка обновления прайсов' })
+      socket.emit('pricing:refresh:result', { ok: false, error: e?.message || L(clientLang, 'Ошибка обновления прайсов', 'Failed to refresh prices') })
     }
   })
 
@@ -193,7 +196,7 @@ io.on('connection', (socket) => {
       socket.emit('currency:refresh:result', result)
       io.emit('currency:status', currency.status())
     } catch (e: any) {
-      socket.emit('currency:refresh:result', { ok: false, error: e?.message || 'Ошибка обновления курсов' })
+      socket.emit('currency:refresh:result', { ok: false, error: e?.message || L(clientLang, 'Ошибка обновления курсов', 'Failed to refresh rates') })
     }
   })
 

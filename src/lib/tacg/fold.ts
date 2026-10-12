@@ -101,12 +101,13 @@ export interface VersionMarker {
   description: string
 }
 
-/** Точки «срезов версий» графа: v1 = исходный план, далее — адаптации */
-export function versionMarkers(events: RunEvent[]): VersionMarker[] {
+/** Точки «срезов версий» графа: v1 = исходный план, далее — адаптации
+ *  (описание v1 — через переводчик: строка живёт в UI-словаре) */
+export function versionMarkers(events: RunEvent[], v1Label: string = 'Исходный план агента'): VersionMarker[] {
   const out: VersionMarker[] = []
   events.forEach((ev, i) => {
     if (ev.type === 'graph:init') {
-      out.push({ version: 1, eventIndex: i, description: 'Исходный план агента' })
+      out.push({ version: 1, eventIndex: i, description: v1Label })
     } else if (ev.type === 'graph:adapt') {
       out.push({ version: ev.version, eventIndex: i, description: ev.reason })
     }

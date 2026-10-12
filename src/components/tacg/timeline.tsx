@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import { timelineTicks } from '@/lib/tacg/fold'
 import { useTacgStore } from '@/store/tacg-store'
+import { useT } from '@/lib/tacg/i18n'
 import { cn } from '@/lib/utils'
 
 export function Timeline() {
@@ -15,6 +16,7 @@ export function Timeline() {
   const playing = useTacgStore((s) => s.playing)
   const setCursor = useTacgStore((s) => s.setCursor)
   const setPlaying = useTacgStore((s) => s.setPlaying)
+  const t = useT()
 
   const total = events.length
   const isLive = cursor === null
@@ -56,13 +58,13 @@ export function Timeline() {
   return (
     <div className="flex flex-col gap-1.5 rounded-lg border bg-secondary/40 p-3">
       <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" className="size-7" onClick={() => { setPlaying(false); setCursor(Math.max(0, position - 1)) }} disabled={disabled || position === 0} aria-label="Назад на событие">
+        <Button variant="ghost" size="icon" className="size-7" onClick={() => { setPlaying(false); setCursor(Math.max(0, position - 1)) }} disabled={disabled || position === 0} aria-label={t('timeline.backAria')}>
           <SkipBack className="size-3.5" />
         </Button>
-        <Button variant="secondary" size="icon" className="size-7" onClick={togglePlay} disabled={disabled} aria-label={playing ? 'Пауза воспроизведения' : 'Воспроизвести историю'}>
+        <Button variant="secondary" size="icon" className="size-7" onClick={togglePlay} disabled={disabled} aria-label={playing ? t('timeline.pauseAria') : t('timeline.playAria')}>
           {playing ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
         </Button>
-        <Button variant="ghost" size="icon" className="size-7" onClick={() => { setPlaying(false); setCursor(Math.min(total - 1, position + 1)) }} disabled={disabled || position >= total - 1} aria-label="Вперёд на событие">
+        <Button variant="ghost" size="icon" className="size-7" onClick={() => { setPlaying(false); setCursor(Math.min(total - 1, position + 1)) }} disabled={disabled || position >= total - 1} aria-label={t('timeline.forwardAria')}>
           <SkipForward className="size-3.5" />
         </Button>
 
@@ -77,7 +79,7 @@ export function Timeline() {
               setCursor(v)
             }}
             disabled={disabled}
-            aria-label="Позиция воспроизведения"
+            aria-label={t('timeline.positionAria')}
           />
           {total > 1 && (
             <div className="pointer-events-none absolute inset-x-0 top-[7px] h-0">
@@ -112,12 +114,11 @@ export function Timeline() {
       </div>
       {!isLive && (
         <p className="pl-[52px] text-[11px] text-muted-foreground">
-          Режим воспроизведения: показано состояние графа на событии #{cursor! + 1}. Нажмите «Live», чтобы вернуться
-          к текущему состоянию.
+          {t('timeline.playbackNote', { n: cursor! + 1 })}
         </p>
       )}
       {isLive && playing && (
-        <p className="pl-[52px] text-[11px] text-muted-foreground">Воспроизведение запущено с начала истории…</p>
+        <p className="pl-[52px] text-[11px] text-muted-foreground">{t('timeline.playingFromStart')}</p>
       )}
     </div>
   )

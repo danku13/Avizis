@@ -8,6 +8,7 @@ import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { LogEntry } from '@/lib/tacg/types'
+import { useI18nStore, useT } from '@/lib/tacg/i18n'
 import { cn } from '@/lib/utils'
 import { useTacgStore } from '@/store/tacg-store'
 
@@ -50,27 +51,30 @@ const KIND_STYLES: Record<LogEntry['kind'], string> = {
 }
 
 const KIND_LABELS: Record<LogEntry['kind'], string> = {
-  plan: 'план',
-  'node-start': 'шаг',
-  'node-done': 'шаг',
-  'node-error': 'ошибка',
-  adapt: 'адаптация',
-  control: 'управление',
-  intervention: 'вмешательство',
-  decision: 'решение',
-  run: 'запуск',
-  info: 'инфо',
-  limits: 'лимит',
+  plan: 'log.plan',
+  'node-start': 'log.step',
+  'node-done': 'log.step',
+  'node-error': 'log.error',
+  adapt: 'log.adaptation',
+  control: 'log.control',
+  intervention: 'log.intervention',
+  decision: 'log.decision',
+  run: 'log.run',
+  info: 'log.info',
+  limits: 'log.limit',
 }
-
-const fmtTime = (ts: number) =>
-  new Date(ts).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
 export function EventLog() {
   const cursor = useTacgStore((s) => s.cursor)
   const events = useTacgStore((s) => s.events)
   const logsRef = useRef<HTMLDivElement>(null)
   const isLive = cursor === null
+  const t = useT()
+  const locale = useI18nStore((s) => s.locale)
+
+  const fmtTime = (ts: number) =>
+    new Date(ts).toLocaleTimeString(locale === 'en' ? 'en-US' : 'ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  const kindLabel = (kind: LogEntry['kind']) => t(KIND_LABELS[kind])
 
   // ─── Сворачивание (CR-010): выбор в localStorage, дефолт — развёрнут ───
   const collapsed = useSyncExternalStore(subscribeCollapsed, readCollapsed, () => false)
@@ -113,21 +117,21 @@ export function EventLog() {
         onClick={toggleCollapsed}
         aria-expanded={!collapsed}
         aria-controls="tacg-event-log-body"
-        title={collapsed ? 'Развернуть журнал событий' : 'Свернуть журнал — освободить место под граф'}
+        title={collapsed ? t('log.expandTitle') : t('log.collapseTitle')}
         className="flex h-11 w-full shrink-0 items-center gap-2 px-3.5 text-left transition-colors hover:bg-zinc-100/70 dark:hover:bg-zinc-800/40"
       >
         <ChevronDown
           className={cn('size-3.5 shrink-0 text-zinc-400 transition-transform duration-200', collapsed && '-rotate-90')}
         />
         <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-          Журнал событий
+          {t('log.title')}
         </span>
-        <span className="shrink-0 text-xs text-zinc-500 dark:text-zinc-400">· {isLive ? 'live' : `кадр ${cursor! + 1}`}</span>
+        <span className="shrink-0 text-xs text-zinc-500 dark:text-zinc-400">· {isLive ? 'live' : t('log.frame', { n: cursor! + 1 })}</span>
 
         {/* превью последней записи в свёрнутом виде — информация не теряется */}
         {collapsed && last && (
           <span className="ml-1 hidden min-w-0 items-center gap-1.5 text-xs md:flex">
-            <span className={cn('shrink-0 font-medium', KIND_STYLES[last.kind])}>[{KIND_LABELS[last.kind]}]</span>
+            <span className={cn('shrink-0 font-medium', KIND_STYLES[last.kind])}>[{kindLabel(last.kind)}]</span>
             <span className="truncate text-zinc-500 dark:text-zinc-400" title={last.message}>
               {last.message}
             </span>
@@ -145,11 +149,11 @@ export function EventLog() {
         className="mt-1.5 h-0 flex-1 rounded-md border bg-white/60 p-2 dark:bg-zinc-950/50"
       >
         <div className="space-y-1.5 pr-1">
-          {logs.length === 0 && <p className="px-1 py-2 text-xs text-muted-foreground">События появятся во время выполнения…</p>}
+          {logs.length === 0 && <p className="px-1 py-2 text-xs text-muted-foreground">{t('log.empty')}</p>}
           {logs.map((l) => (
             <div key={l.id} className="flex items-start gap-2 text-xs leading-relaxed">
               <span className="shrink-0 tabular-nums text-zinc-400 dark:text-zinc-600">{fmtTime(l.ts)}</span>
-              <span className={cn('shrink-0 font-medium', KIND_STYLES[l.kind])}>[{KIND_LABELS[l.kind]}]</span>
+              <span className={cn('shrink-0 font-medium', KIND_STYLES[l.kind])}>[{kindLabel(l.kind)}]</span>
               <span className="min-w-0 break-words text-zinc-700 dark:text-zinc-300">{l.message}</span>
             </div>
           ))}

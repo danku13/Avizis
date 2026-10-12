@@ -21,6 +21,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { CURRENCY_SYMBOLS, LlmConfigPublic, LlmRole } from '@/lib/tacg/types'
 import { getSocket } from '@/lib/tacg/socket'
+import { useI18nStore, useT } from '@/lib/tacg/i18n'
 import { useTacgStore } from '@/store/tacg-store'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -40,20 +41,20 @@ interface FormState {
   currencyRate: string
 }
 
-const PRESETS: { id: PresetId; label: string; baseUrl: string; modelHint: string }[] = [
-  { id: 'zai', label: 'Дефолт: z-ai SDK', baseUrl: '', modelHint: '' },
-  { id: 'openai', label: 'OpenAI', baseUrl: 'https://api.openai.com/v1', modelHint: 'gpt-4o-mini' },
-  { id: 'deepseek', label: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', modelHint: 'deepseek-chat' },
-  { id: 'openrouter', label: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', modelHint: 'deepseek/deepseek-chat' },
-  { id: 'ollama', label: 'Ollama (локально)', baseUrl: 'http://localhost:11434/v1', modelHint: 'llama3.1' },
-  { id: 'custom', label: 'Свой OpenAI-compatible', baseUrl: '', modelHint: 'модель провайдера' },
+const PRESETS: { id: PresetId; labelKey: string; baseUrl: string; modelHint: string }[] = [
+  { id: 'zai', labelKey: 'sm.presetZai', baseUrl: '', modelHint: '' },
+  { id: 'openai', labelKey: 'OpenAI', baseUrl: 'https://api.openai.com/v1', modelHint: 'gpt-4o-mini' },
+  { id: 'deepseek', labelKey: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', modelHint: 'deepseek-chat' },
+  { id: 'openrouter', labelKey: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', modelHint: 'deepseek/deepseek-chat' },
+  { id: 'ollama', labelKey: 'sm.presetOllama', baseUrl: 'http://localhost:11434/v1', modelHint: 'llama3.1' },
+  { id: 'custom', labelKey: 'sm.presetCustom', baseUrl: '', modelHint: 'sm.providerModelHint' },
 ]
 
-const ROLES: { role: LlmRole; label: string; hint: string }[] = [
-  { role: 'planner', label: 'Планировщик', hint: 'строит граф задачи' },
-  { role: 'executor', label: 'Исполнитель', hint: 'выполняет шаги графа' },
-  { role: 'supervisor', label: 'Супервайзер', hint: 'адаптирует план по ходу' },
-  { role: 'decider', label: 'Решатель', hint: 'выбирает варианты на развилках' },
+const ROLES: { role: LlmRole; labelKey: string; hintKey: string }[] = [
+  { role: 'planner', labelKey: 'role.planner', hintKey: 'role.plannerHint' },
+  { role: 'executor', labelKey: 'role.executor', hintKey: 'role.executorHint' },
+  { role: 'supervisor', labelKey: 'role.supervisor', hintKey: 'role.supervisorHint' },
+  { role: 'decider', labelKey: 'role.decider', hintKey: 'role.deciderHint' },
 ]
 
 function detectPreset(cfg: LlmConfigPublic | null): PresetId {
@@ -106,6 +107,7 @@ function PriceFields({
   onChange: (key: 'priceIn' | 'priceOut', v: string) => void
   hint: string
 }) {
+  const t = useT()
   return (
     <div className="space-y-2">
       <Label className="flex items-center gap-1.5 text-xs">
@@ -114,12 +116,12 @@ function PriceFields({
       </Label>
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-1">
-          <Label htmlFor="llm-price-in" className="text-[11px] font-normal text-zinc-500">Вход (промпт)</Label>
+          <Label htmlFor="llm-price-in" className="text-[11px] font-normal text-zinc-500">{t('sm.priceIn')}</Label>
           <Input
             id="llm-price-in"
             value={priceIn}
             onChange={(e) => onChange('priceIn', e.target.value)}
-            placeholder="из каталога"
+            placeholder={t('sm.fromCatalog')}
             inputMode="decimal"
             className="font-mono text-xs tabular-nums"
             autoComplete="off"
@@ -127,12 +129,12 @@ function PriceFields({
           />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="llm-price-out" className="text-[11px] font-normal text-zinc-500">Выход (ответ)</Label>
+          <Label htmlFor="llm-price-out" className="text-[11px] font-normal text-zinc-500">{t('sm.priceOut')}</Label>
           <Input
             id="llm-price-out"
             value={priceOut}
             onChange={(e) => onChange('priceOut', e.target.value)}
-            placeholder="из каталога"
+            placeholder={t('sm.fromCatalog')}
             inputMode="decimal"
             className="font-mono text-xs tabular-nums"
             autoComplete="off"
@@ -148,6 +150,8 @@ function PriceFields({
 export function SettingsModal() {
   const open = useTacgStore((s) => s.settingsOpen)
   const closeSettings = useTacgStore((s) => s.closeSettings)
+  const t = useT()
+  const locale = useI18nStore((s) => s.locale)
   const llmConfig = useTacgStore((s) => s.llmConfig)
   const llmStatus = useTacgStore((s) => s.llmStatus)
   const llmSaving = useTacgStore((s) => s.llmSaving)
@@ -269,7 +273,7 @@ export function SettingsModal() {
 
   const save = () => {
     if (!isZai && (!baseUrl.trim() || !model.trim())) {
-      toast.error('Укажите baseUrl и модель провайдера')
+      toast.error(t('sm.baseUrlModelError'))
       return
     }
     setLlmSaving(true)
@@ -286,9 +290,7 @@ export function SettingsModal() {
       <DialogContent
         className="flex max-h-[86dvh] w-[calc(100vw-1.5rem)] flex-col gap-0 overflow-hidden border-zinc-200 bg-white/95 dark:border-zinc-800 dark:bg-zinc-950/95 p-0 backdrop-blur-md sm:max-w-none sm:w-[55vw] lg:w-[58vw] xl:w-[64vw]"
       >
-        <DialogDescription className="sr-only">
-          Настройки LLM-провайдеров (BYOK): пресет, адрес, модель, ключ с маской, проверка подключения и модели по ролям
-        </DialogDescription>
+        <DialogDescription className="sr-only">{t('sm.description')}</DialogDescription>
 
         {/* ─── Шапка ─── */}
         <DialogHeader className="border-b border-zinc-200/80 dark:border-zinc-800/80 px-6 py-4 text-left">
@@ -296,26 +298,23 @@ export function SettingsModal() {
             <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-teal-500/15 text-teal-700 dark:text-teal-300">
               <Settings2 className="size-4.5" />
             </span>
-            Настройки LLM · BYOK
+            {t('sm.title')}
           </DialogTitle>
-          <p className="mt-1.5 max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
-            Свои модели и ключи для агента: планировщика, исполнителя, супервайзера и решателя. Ключ хранится только на
-            сервере и отображается маской.
-          </p>
+          <p className="mt-1.5 max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">{t('sm.subtitle')}</p>
         </DialogHeader>
 
         {/* ─── Тело ─── */}
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
           <div className="space-y-2">
-            <Label htmlFor="llm-preset">Провайдер</Label>
+            <Label htmlFor="llm-preset">{t('sm.providerLabel')}</Label>
             <Select value={preset} onValueChange={(v) => applyPreset(v as PresetId)}>
-              <SelectTrigger id="llm-preset" aria-label="Провайдер LLM" className="w-full">
+              <SelectTrigger id="llm-preset" aria-label={t('sm.providerAria')} className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {PRESETS.map((p) => (
                   <SelectItem key={p.id} value={p.id}>
-                    {p.label}
+                    {p.labelKey.includes('.') ? t(p.labelKey) : p.labelKey}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -326,19 +325,15 @@ export function SettingsModal() {
             <>
             <div className="flex items-start gap-2.5 rounded-lg border border-teal-500/30 bg-teal-500/10 p-3.5 text-xs leading-relaxed text-teal-900 dark:text-teal-100">
               <Cpu className="mt-0.5 size-4 shrink-0" />
-              <span>
-                z-ai SDK — встроенный провайдер стенда: работает без конфигурации и ключей. Выберите другой пресет, чтобы
-                подключить свою модель (OpenAI, DeepSeek, OpenRouter, локальный Ollama или любой OpenAI-compatible
-                эндпоинт).
-              </span>
+              <span>{t('sm.zaiNote')}</span>
             </div>
             {/* Цена z-ai SDK (ADR-016): у встроенного провайдера нет публичного прайса — можно задать вручную */}
             <PriceFields
-              label="Цена z-ai SDK за 1M токенов, $"
+              label={t('sm.zaiPriceLabel')}
               priceIn={priceIn}
               priceOut={priceOut}
               onChange={(k, v) => setField(k, v)}
-              hint="У встроенного провайдера нет публичного прайса — задайте свою цену, чтобы видеть стоимость прогонов"
+              hint={t('sm.zaiPriceHint')}
             />
             </>
           ) : (
@@ -355,19 +350,16 @@ export function SettingsModal() {
                   autoComplete="off"
                   spellCheck={false}
                 />
-                <p className="text-[11px] text-zinc-500">
-                  Запросы идут в <span className="font-mono">{'{baseUrl}/chat/completions'}</span> от имени движка
-                  агента.
-                </p>
+                <p className="text-[11px] text-zinc-500">{t('sm.baseUrlHint')}</p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="llm-model">Модель</Label>
+                <Label htmlFor="llm-model">{t('sm.modelLabel')}</Label>
                 <Input
                   id="llm-model"
                   value={model}
                   onChange={(e) => setField('model', e.target.value)}
-                  placeholder={presetMeta.modelHint}
+                  placeholder={presetMeta.modelHint.includes('.') ? t(presetMeta.modelHint) : presetMeta.modelHint}
                   className="font-mono text-xs"
                   autoComplete="off"
                   spellCheck={false}
@@ -376,17 +368,17 @@ export function SettingsModal() {
 
               {/* Ручная цена модели (ADR-016): USD за 1M токенов; пусто — прайс из каталогов */}
               <PriceFields
-                label="Цена модели за 1M токенов, $"
+                label={t('sm.modelPriceLabel')}
                 priceIn={priceIn}
                 priceOut={priceOut}
                 onChange={(k, v) => setField(k, v)}
-                hint="Пусто — цена подтягивается с OpenRouter / из каталога LiteLLM; вручную — приоритет выше (z-ai, Ollama, свой тариф)"
+                hint={t('sm.modelPriceHint')}
               />
 
               <div className="space-y-2">
                 <Label htmlFor="llm-key" className="flex items-center gap-1.5">
                   <KeyRound className="size-3.5" />
-                  API-ключ
+                  {t('sm.apiKeyLabel')}
                 </Label>
                 <div className="relative">
                   <Input
@@ -394,7 +386,7 @@ export function SettingsModal() {
                     type={showKey ? 'text' : 'password'}
                     value={apiKey}
                     onChange={(e) => setField('apiKey', e.target.value)}
-                    placeholder={keyMask ? `${keyMask} — пусто = не менять` : 'Ключ API (Bearer)'}
+                    placeholder={keyMask ? t('sm.keyMaskPlaceholder', { mask: keyMask }) : t('sm.keyPlaceholder')}
                     className="pr-10 font-mono text-xs"
                     autoComplete="off"
                     spellCheck={false}
@@ -402,7 +394,7 @@ export function SettingsModal() {
                   <button
                     type="button"
                     onClick={() => setShowKey((v) => !v)}
-                    aria-label={showKey ? 'Скрыть ключ' : 'Показать ключ'}
+                    aria-label={showKey ? t('sm.hideKeyAria') : t('sm.showKeyAria')}
                     className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-zinc-500 transition-colors hover:text-zinc-700 dark:hover:text-zinc-300"
                   >
                     {showKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
@@ -410,14 +402,14 @@ export function SettingsModal() {
                 </div>
                 <p className="flex items-center gap-1.5 text-[11px] text-zinc-500">
                   <ShieldCheck className="size-3.5 shrink-0 text-emerald-500/70" />
-                  Хранится на сервере (файл с правами 600), в прогоны и отчёты не попадает.
+                  {t('sm.keySecurityNote')}
                 </p>
               </div>
 
               <div className="flex flex-wrap items-center gap-2.5">
                 <Button variant="outline" size="sm" onClick={testConnection} disabled={llmTesting} className="gap-1.5">
                   {llmTesting ? <Loader2 className="size-3.5 animate-spin" /> : <Plug className="size-3.5" />}
-                  {llmTesting ? 'Проверяю…' : 'Проверить подключение'}
+                  {llmTesting ? t('sm.testing') : t('sm.testConnection')}
                 </Button>
                 {llmStatus && (
                   <Badge
@@ -431,8 +423,8 @@ export function SettingsModal() {
                   >
                     {llmStatus.ok ? <Plug className="size-3" /> : <AlertTriangle className="size-3" />}
                     {llmStatus.ok
-                      ? `подключение работает · ${llmStatus.latencyMs ?? '—'} мс`
-                      : llmStatus.error || 'ошибка проверки'}
+                      ? t('sm.connectionOk', { ms: llmStatus.latencyMs ?? '—' })
+                      : llmStatus.error || t('sm.testFailed')}
                   </Badge>
                 )}
               </div>
@@ -443,21 +435,21 @@ export function SettingsModal() {
           <Collapsible open={rolesOpen} onOpenChange={setRolesOpen} className="rounded-lg border border-zinc-200 dark:border-zinc-800">
             <CollapsibleTrigger className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-900/60">
               <ChevronRight className={cn('size-4 shrink-0 text-zinc-500 transition-transform', rolesOpen && 'rotate-90')} />
-              Роли: своя модель на каждую точку вызова
-              <span className="ml-auto text-xs font-normal text-zinc-500">пусто = наследовать дефолт</span>
+              {t('sm.rolesSection')}
+              <span className="ml-auto text-xs font-normal text-zinc-500">{t('sm.rolesInheritHint')}</span>
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-3 border-t border-zinc-200 dark:border-zinc-800 px-3.5 py-3">
-              {ROLES.map(({ role, label, hint }) => (
+              {ROLES.map(({ role, labelKey, hintKey }) => (
                 <div key={role} className="space-y-1.5">
                   <Label htmlFor={`llm-role-${role}`} className="flex items-baseline gap-2">
-                    {label}
-                    <span className="text-[11px] font-normal text-zinc-500">{hint}</span>
+                    {t(labelKey)}
+                    <span className="text-[11px] font-normal text-zinc-500">{t(hintKey)}</span>
                   </Label>
                   <Input
                     id={`llm-role-${role}`}
                     value={roleModels[role]}
                     onChange={(e) => setField('roleModels', { ...roleModels, [role]: e.target.value })}
-                    placeholder={isZai ? 'наследует z-ai SDK' : model.trim() || presetMeta.modelHint}
+                    placeholder={isZai ? t('sm.inheritsZai') : model.trim() || (presetMeta.modelHint.includes('.') ? t(presetMeta.modelHint) : presetMeta.modelHint)}
                     className="font-mono text-xs"
                     autoComplete="off"
                     spellCheck={false}
@@ -471,7 +463,7 @@ export function SettingsModal() {
           <div className="space-y-2.5 rounded-lg border border-zinc-200 dark:border-zinc-800 p-3.5">
             <div className="flex flex-wrap items-center gap-2">
               <DollarSign className="size-4 shrink-0 text-teal-500 dark:text-teal-400" />
-              <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">Прайсинг моделей (динамический)</span>
+              <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">{t('sm.pricingSection')}</span>
               <Button
                 variant="outline"
                 size="sm"
@@ -480,14 +472,11 @@ export function SettingsModal() {
                 className="ml-auto h-7 gap-1.5"
               >
                 {pricingRefreshing ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
-                {pricingRefreshing ? 'Обновляю…' : 'Обновить прайсы'}
+                {pricingRefreshing ? t('sm.refreshing') : t('sm.refreshPricing')}
               </Button>
             </div>
             {pricingStatus?.disabled ? (
-              <p className="text-[11px] leading-relaxed text-zinc-500">
-                Сетевые источники выключены (TACG_PRICING_DISABLED=1) — стоимость считается только по ценам, заданным
-                вручную.
-              </p>
+              <p className="text-[11px] leading-relaxed text-zinc-500">{t('sm.pricingDisabledNote')}</p>
             ) : (
               <div className="space-y-1">
                 {(pricingStatus?.sources ?? []).map((s) => (
@@ -502,16 +491,14 @@ export function SettingsModal() {
                       {s.label}:
                     </span>
                     <span className="text-zinc-500">
-                      {s.models} моделей
-                      {s.fetchedAt ? ` · обновлён ${new Date(s.fetchedAt).toLocaleString('ru-RU')}` : ''}
-                      {s.ok === false ? ` · ${s.error ?? 'недоступен'}` : ''}
+                      {t('sm.modelsCount', { n: s.models })}
+                      {s.fetchedAt ? ` · ${t('sm.updated')} ${new Date(s.fetchedAt).toLocaleString(locale === 'en' ? 'en-US' : 'ru-RU')}` : ''}
+                      {s.ok === false ? ` · ${s.error ?? t('sm.unavailable')}` : ''}
                     </span>
                   </div>
                 ))}
                 <p className="pt-0.5 text-[11px] leading-relaxed text-zinc-500">
-                  Цены подтягиваются с провайдеров в рантайме (не захардкожены), кэшируются на диске, обновление — при
-                  старте и раз в {pricingStatus?.ttlHours ?? 24} ч. Стоимость в тулбаре, инспекторе и отчётах — оценка
-                  (≈) по этим ценам.
+                  {t('sm.pricingNote', { hours: pricingStatus?.ttlHours ?? 24 })}
                 </p>
               </div>
             )}
@@ -521,16 +508,16 @@ export function SettingsModal() {
           <div className="space-y-2.5 rounded-lg border border-zinc-200 dark:border-zinc-800 p-3.5">
             <div className="flex flex-wrap items-center gap-2">
               <Banknote className="size-4 shrink-0 text-teal-500 dark:text-teal-400" />
-              <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">Валюта стоимости</span>
+              <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">{t('sm.currencySection')}</span>
               <Select value={displayCurrency} onValueChange={(v) => setDisplayCurrency(v)}>
-                <SelectTrigger aria-label="Валюта отображения стоимости" className="ml-auto h-8 w-[150px] text-xs">
+                <SelectTrigger aria-label={t('sm.currencyAria')} className="ml-auto h-8 w-[150px] text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {(currencyStatus?.entries ?? [{ code: 'USD', rate: 1, source: 'manual' }]).map((e) => (
                     <SelectItem key={e.code} value={e.code} disabled={e.code !== 'USD' && !(e.rate > 0)}>
                       {CURRENCY_SYMBOLS[e.code] ?? e.code} · {e.code}
-                      {e.rate > 0 ? '' : ' — нет курса'}
+                      {e.rate > 0 ? '' : ` — ${t('sm.noRate')}`}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -543,14 +530,14 @@ export function SettingsModal() {
                 className="h-7 gap-1.5"
               >
                 {currencyRefreshing ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
-                {currencyRefreshing ? 'Обновляю…' : 'Курсы'}
+                {currencyRefreshing ? t('sm.refreshing') : t('sm.refreshRates')}
               </Button>
             </div>
             {displayCurrency !== 'USD' && (
               <div className="space-y-1.5">
                 <Label htmlFor="llm-currency-rate" className="flex flex-wrap items-baseline gap-x-2 text-xs">
-                  Ручной курс: {CURRENCY_SYMBOLS[displayCurrency] ?? displayCurrency} за 1 $
-                  <span className="font-normal text-zinc-500">пусто — курс из источников ниже</span>
+                  {t('sm.manualRateLabel', { symbol: CURRENCY_SYMBOLS[displayCurrency] ?? displayCurrency })}
+                  <span className="font-normal text-zinc-500">{t('sm.manualRateHint')}</span>
                 </Label>
                 <Input
                   id="llm-currency-rate"
@@ -559,7 +546,7 @@ export function SettingsModal() {
                   placeholder={
                     currencyStatus?.entries.find((e) => e.code === displayCurrency && e.rate > 0)
                       ? String(currencyStatus.entries.find((e) => e.code === displayCurrency)!.rate)
-                      : 'курса нет'
+                      : t('sm.noRateShort')
                   }
                   inputMode="decimal"
                   className="font-mono text-xs tabular-nums"
@@ -569,9 +556,7 @@ export function SettingsModal() {
               </div>
             )}
             {currencyStatus?.disabled ? (
-              <p className="text-[11px] leading-relaxed text-zinc-500">
-                Сетевые источники курсов выключены (TACG_CURRENCY_DISABLED=1) — конвертация только по ручному курсу.
-              </p>
+              <p className="text-[11px] leading-relaxed text-zinc-500">{t('sm.currencyDisabledNote')}</p>
             ) : (
               <div className="space-y-1">
                 {(currencyStatus?.sources ?? []).map((s) => (
@@ -586,17 +571,15 @@ export function SettingsModal() {
                       {s.label}:
                     </span>
                     <span className="text-zinc-500">
-                      {s.currencies ?? 0} валют
-                      {s.asOf ? ` · котировка ${s.asOf}` : ''}
-                      {s.fetchedAt ? ` · обновлён ${new Date(s.fetchedAt).toLocaleString('ru-RU')}` : ''}
-                      {s.ok === false ? ` · ${s.error ?? 'недоступен'}` : ''}
+                      {t('sm.currenciesCount', { n: s.currencies ?? 0 })}
+                      {s.asOf ? ` · ${t('sm.quote')} ${s.asOf}` : ''}
+                      {s.fetchedAt ? ` · ${t('sm.updated')} ${new Date(s.fetchedAt).toLocaleString(locale === 'en' ? 'en-US' : 'ru-RU')}` : ''}
+                      {s.ok === false ? ` · ${s.error ?? t('sm.unavailable')}` : ''}
                     </span>
                   </div>
                 ))}
                 <p className="pt-0.5 text-[11px] leading-relaxed text-zinc-500">
-                  Курсы подтягиваются в рантайме (приоритет: ручной → ЦБ РФ → зеркало ЦБ → open.er-api), кэшируются на
-                  диске, обновление — при старте и раз в {currencyStatus?.ttlHours ?? 6} ч. Базис аудита — USD;
-                  конвертация только на отображение (чип, инспектор, MD-отчёт).
+                  {t('sm.currencyNote', { hours: currencyStatus?.ttlHours ?? 6 })}
                 </p>
               </div>
             )}
@@ -605,15 +588,13 @@ export function SettingsModal() {
 
         {/* ─── Подвал ─── */}
         <DialogFooter className="flex-row flex-wrap items-center gap-3 border-t border-zinc-200 dark:border-zinc-800/80 px-6 py-3.5">
-          <p className="mr-auto hidden text-[11px] text-zinc-500 sm:block">
-            Сохранение сопровождается пробным запросом — неверный ключ или адрес не сохранятся.
-          </p>
+          <p className="mr-auto hidden text-[11px] text-zinc-500 sm:block">{t('sm.saveNote')}</p>
           <Button size="sm" onClick={save} disabled={llmSaving} className="gap-1.5">
             {llmSaving ? <Loader2 className="size-3.5 animate-spin" /> : <Settings2 className="size-3.5" />}
-            {llmSaving ? 'Сохраняю…' : 'Сохранить'}
+            {llmSaving ? t('sm.saving') : t('common.save')}
           </Button>
           <Button size="sm" variant="ghost" onClick={closeSettings}>
-            Закрыть
+            {t('common.close')}
           </Button>
         </DialogFooter>
       </DialogContent>

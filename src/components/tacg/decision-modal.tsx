@@ -9,8 +9,9 @@ import { Bot, GitFork, Hand, Layers, Loader2, MousePointerClick } from 'lucide-r
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { foldEvents, findOfferedDecision } from '@/lib/tacg/fold'
-import { DECISION_DOMAIN_LABELS, selectionMode } from '@/lib/tacg/types'
+import { decisionDomainLabel, selectionMode } from '@/lib/tacg/types'
 import { getSocket } from '@/lib/tacg/socket'
+import { useI18nStore, useT } from '@/lib/tacg/i18n'
 import { useTacgStore } from '@/store/tacg-store'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -32,6 +33,8 @@ export function DecisionModal() {
   const decisionDismissed = useTacgStore((s) => s.decisionDismissed)
   const dismissDecision = useTacgStore((s) => s.dismissDecision)
   const openDecision = useTacgStore((s) => s.openDecision)
+  const t = useT()
+  const locale = useI18nStore((s) => s.locale)
 
   const isLive = cursor === null
   // без useMemo: свёртка дешёвая, а условный slice внутри memo нарушает preserve-manual-memoization
@@ -72,20 +75,14 @@ export function DecisionModal() {
     getSocket().emit('decision:resolve', { runId: currentRunId, nodeId: offered.id, optionIds: selectedIds })
     // модалка закроется сама по событию decision:resolved (узел уйдёт из состояния offered)
     toast.info(
-      selectedIds.length > 1
-        ? `Смешанное решение (${selectedIds.length} варианта) отправлено — ветки активируются`
-        : 'Вариант отправлен — ветка активируется'
+      selectedIds.length > 1 ? t('dm.mixedSentToast', { n: selectedIds.length }) : t('dm.optionSentToast')
     )
   }
 
   const switchMode = (m: 'auto' | 'manual') => {
     if (!currentRunId || m === mode) return
     getSocket().emit('decision:mode', { runId: currentRunId, mode: m })
-    toast.info(
-      m === 'auto'
-        ? 'Режим «авто»: агент примет решение сам (в том числе на текущей развилке)'
-        : 'Режим «ручной выбор»: агент будет предлагать варианты и ждать'
-    )
+    toast.info(m === 'auto' ? t('dm.switchedAutoToast') : t('toolbar.modeManualToast'))
   }
 
   if (!offered) return null
@@ -98,9 +95,7 @@ export function DecisionModal() {
       <DialogContent
         className="flex h-[86dvh] max-h-[86dvh] w-[calc(100vw-1.5rem)] flex-col gap-0 overflow-hidden border-zinc-200 bg-white/95 p-0 backdrop-blur-md sm:max-w-none sm:w-[55vw] lg:w-[58vw] xl:w-[64vw] dark:border-zinc-800 dark:bg-zinc-950/95"
       >
-        <DialogDescription className="sr-only">
-          Развилка графа вычислений: варианты агента с обоснованием, выбор активирует одну или несколько веток
-        </DialogDescription>
+        <DialogDescription className="sr-only">{t('dm.description')}</DialogDescription>
 
         {/* ─── Шапка ─── */}
         <DialogHeader className="border-b border-zinc-200/80 px-6 py-4 text-left dark:border-zinc-800/80">
@@ -114,12 +109,12 @@ export function DecisionModal() {
             <div className="mt-0.5 flex shrink-0 flex-wrap items-center gap-1.5">
               {decision.domain && (
                 <span className="rounded-md border border-violet-500/40 bg-violet-500/10 px-2 py-0.5 text-xs font-medium text-violet-700 dark:text-violet-300">
-                  {DECISION_DOMAIN_LABELS[decision.domain]}
+                  {decisionDomainLabel(decision.domain, locale)}
                 </span>
               )}
               <span className="flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300">
                 {mixed ? <Layers className="size-3" /> : <span className="size-1.5 animate-pulse rounded-full bg-amber-500 dark:bg-amber-400" />}
-                {mixed ? 'смешанный выбор' : 'один вариант'}
+                {mixed ? t('dm.mixedSelection') : t('dm.singleSelection')}
               </span>
             </div>
           </div>
@@ -131,14 +126,13 @@ export function DecisionModal() {
           {manual ? (
             <p className="text-xs text-muted-foreground">
               {mixed
-                ? `Агент предлагает ${decision.options.length} варианта — можно выбрать несколько (смешанное решение). Выбранные ветки реализуются вместе, остальные погаснут.`
-                : `Агент предлагает ${decision.options.length} варианта. Выбор определяет дальнейшие шаги — нереализованные ветки погаснут на графе сразу после решения.`}
+                ? t('dm.manualHintMixed', { n: decision.options.length })
+                : t('dm.manualHintSingle', { n: decision.options.length })}
             </p>
           ) : (
             <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">
               <Loader2 className="size-4 shrink-0 animate-spin" />
-              Режим «авто»: агент взвешивает варианты{mixed ? ' (может собрать смешанное решение)' : ''} и примет решение
-              самостоятельно. Обоснование появится в инспекторе узла и в журнале.
+              {t('dm.autoHint', { mixed: mixed ? t('dm.autoHintMixedSuffix') : '' })}
             </div>
           )}
 
@@ -174,13 +168,13 @@ export function DecisionModal() {
                   </div>
                   {isSel && (
                     <span className="shrink-0 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-300">
-                      {mixed ? 'в составе' : 'выбран'}
+                      {mixed ? t('inspector.inCombo') : t('inspector.chosen')}
                     </span>
                   )}
                 </div>
                 <p className="mt-2 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">{o.rationale}</p>
                 <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                  <span className="text-[11px] text-zinc-500">дальше:</span>
+                  <span className="text-[11px] text-zinc-500">{t('dm.nextStepsPrefix')}:</span>
                   {o.nextSteps.map((s, i) => (
                     <span
                       key={i}
@@ -189,7 +183,7 @@ export function DecisionModal() {
                       {i + 1}. {s}
                     </span>
                   ))}
-                  {o.nextSteps.length === 0 && <span className="text-[11px] text-zinc-500">прямое продолжение</span>}
+                  {o.nextSteps.length === 0 && <span className="text-[11px] text-zinc-500">{t('dm.directContinuation')}</span>}
                 </div>
               </button>
             )
@@ -197,15 +191,14 @@ export function DecisionModal() {
 
           <p className="flex items-center gap-1.5 pt-1 text-[11px] text-zinc-500 dark:text-zinc-600">
             <MousePointerClick className="size-3" />
-            {mixed ? 'Кликайте по нескольким карточкам, чтобы собрать смешанное решение. ' : ''}
-            Esc скрывает окно — ожидание выбора не отменяется. Вернуться можно кликом по развилке на графе или баннером в
-            панели управления.
+            {mixed ? t('dm.footerHintMixed') : ''}
+            {t('dm.footerHint')}
           </p>
         </div>
 
         {/* ─── Подвал: режим + принятие ─── */}
         <footer className="flex flex-wrap items-center gap-3 border-t border-zinc-200/80 px-6 py-3.5 dark:border-zinc-800/80">
-          <div className="flex items-center rounded-lg border border-zinc-300 p-0.5 dark:border-zinc-700" role="group" aria-label="Режим принятия решений">
+          <div className="flex items-center rounded-lg border border-zinc-300 p-0.5 dark:border-zinc-700" role="group" aria-label={t('dm.modeGroupAria')}>
             <button
               type="button"
               onClick={() => switchMode('manual')}
@@ -215,10 +208,10 @@ export function DecisionModal() {
                   ? 'bg-amber-500/20 text-amber-700 dark:text-amber-200'
                   : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'
               )}
-              title="Агент предлагает варианты и ожидает вашего решения"
+              title={t('dm.manualModeTitle')}
             >
               <Hand className="size-3.5" />
-              Вручную
+              {t('toolbar.manualShort')}
             </button>
             <button
               type="button"
@@ -229,16 +222,16 @@ export function DecisionModal() {
                   ? 'bg-amber-500/20 text-amber-700 dark:text-amber-200'
                   : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'
               )}
-              title="Агент принимает решения на развилках сам"
+              title={t('dm.autoModeTitle')}
             >
               <Bot className="size-3.5" />
-              Авто
+              {t('toolbar.auto')}
             </button>
           </div>
 
           {certaintyNow != null && (
-            <span className="hidden items-center gap-1.5 text-xs text-zinc-500 sm:flex" title="Оценка агентом «понимания задачи»">
-              понимание: {Math.round(certaintyNow * 100)}%
+            <span className="hidden items-center gap-1.5 text-xs text-zinc-500 sm:flex" title={t('dm.certaintyTitle')}>
+              {t('dm.certaintyLabel')}: {Math.round(certaintyNow * 100)}%
               {certaintyAfter != null && (
                 <span className="text-emerald-600/80 dark:text-emerald-400/80">→ ~{Math.round(Math.max(certaintyNow, certaintyAfter) * 100)}%</span>
               )}
@@ -246,16 +239,16 @@ export function DecisionModal() {
           )}
 
           <div className="ml-auto flex items-center gap-2">
-            {!manual && <span className="text-xs text-zinc-500">переключите в «Вручную», чтобы выбрать самому</span>}
+            {!manual && <span className="text-xs text-zinc-500">{t('dm.switchToManualHint')}</span>}
             <Button size="sm" onClick={accept} disabled={!manual || !selectedIds.length}>
               <GitFork className="mr-1.5 size-3.5" />
               {selectedIds.length > 1
-                ? `Принять смешанное решение (${selectedIds.length})`
+                ? t('dm.acceptMixed', { n: selectedIds.length })
                 : selectedIds.length === 1
-                  ? `Принять вариант «${decision.options.find((o) => o.id === selectedIds[0])?.label ?? selectedIds[0]}»`
+                  ? t('dm.acceptOption', { label: decision.options.find((o) => o.id === selectedIds[0])?.label ?? selectedIds[0] })
                   : mixed
-                    ? 'Выберите один или несколько'
-                    : 'Выберите вариант'}
+                    ? t('dm.pickOneOrMore')
+                    : t('dm.pickOption')}
             </Button>
           </div>
         </footer>

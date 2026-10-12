@@ -33,8 +33,20 @@ function engineTarget(): { url: string; opts: Record<string, unknown> } | null {
 export function getSocket(): Socket {
   if (!socket) {
     const direct = engineTarget()
+    // локаль интерфейса (ADR-022): движок отвечает ошибками конфигурации на языке клиента
+    let locale = 'ru'
+    try {
+      const saved = localStorage.getItem('tacg-locale')
+      if (saved === 'en' || saved === 'ru') locale = saved
+      else if ((navigator.language || '').toLowerCase().startsWith('ru')) locale = 'ru'
+      else locale = 'en'
+    } catch {
+      /* приватный режим */
+    }
+    const base = direct ? direct.opts : { query: { XTransformPort: 3003 } }
     socket = io(direct ? direct.url : '/', {
-      ...(direct ? direct.opts : { query: { XTransformPort: 3003 } }),
+      ...base,
+      query: { ...(base as { query?: Record<string, unknown> }).query, locale },
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: 8,

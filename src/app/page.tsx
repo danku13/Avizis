@@ -16,9 +16,11 @@ import { HistoryPanel } from '@/components/tacg/history-panel'
 import { Timeline } from '@/components/tacg/timeline'
 import { GraphLegend } from '@/components/tacg/status-badge'
 import { ThemeToggle } from '@/components/tacg/theme-toggle'
+import { LanguageToggle } from '@/components/tacg/language-toggle'
 import { LlmChip } from '@/components/tacg/llm-chip'
 import { UpdateBadge } from '@/components/tacg/update-badge'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { useI18nStore, useT, tNow } from '@/lib/tacg/i18n'
 import { cn } from '@/lib/utils'
 
 export default function Home() {
@@ -29,6 +31,12 @@ export default function Home() {
   const selectedNodeId = useTacgStore((s) => s.selectedNodeId)
   const select = useTacgStore((s) => s.select)
   const runLlm = useTacgStore((s) => s.runLlm)
+  const t = useT()
+
+  // ─── Локализация (ADR-022): применяем сохранённый/браузерный язык после монтирования ───
+  useEffect(() => {
+    useI18nStore.getState().init()
+  }, [])
 
   // ─── Подключение к движку агента (socket.io) ───
   useEffect(() => {
@@ -79,8 +87,8 @@ export default function Home() {
             const ev = data.event
             if (ev.type === 'run:status' && ev.status === 'error') {
               import('sonner').then(({ toast }) =>
-                toast.error('Прогон завершился ошибкой', {
-                  description: ev.reason || 'Подробности — в журнале событий (нажмите «Повторить узел» для ретрая)',
+                toast.error(tNow('toast.runError'), {
+                  description: ev.reason || tNow('toast.runErrorHint'),
                 })
               )
             }
@@ -101,7 +109,7 @@ export default function Home() {
         'error:server',
         (data: any) => {
           useTacgStore.getState().setStarting(false)
-          import('sonner').then(({ toast }) => toast.error(data?.message || 'Ошибка движка агента'))
+          import('sonner').then(({ toast }) => toast.error(data?.message || tNow('toast.engineError')))
         },
       ],
       [
@@ -109,7 +117,7 @@ export default function Home() {
         (data: any) => {
           if (data && data.ok === false) {
             import('sonner').then(({ toast }) =>
-              toast.error(data?.error || 'Не удалось принять решение — возможно, оно уже принято')
+              toast.error(data?.error || tNow('toast.decisionResolveError'))
             )
           }
         },
@@ -118,7 +126,7 @@ export default function Home() {
         'decision:mode:result',
         (data: any) => {
           if (data && data.ok === false) {
-            import('sonner').then(({ toast }) => toast.error(data?.error || 'Не удалось изменить режим решений'))
+            import('sonner').then(({ toast }) => toast.error(data?.error || tNow('toast.decisionModeError')))
           }
         },
       ],
@@ -138,15 +146,15 @@ export default function Home() {
             st.setLlmConfig(data.config ?? null)
             st.setLlmStatus({ ok: true, latencyMs: data.latencyMs })
             import('sonner').then(({ toast }) =>
-              toast.success('Конфигурация LLM сохранена', {
-                description: 'Новые прогоны пойдут через выбранного провайдера',
+              toast.success(tNow('toast.configSaved'), {
+                description: tNow('toast.configSavedHint'),
               })
             )
           } else {
             st.setLlmStatus({ ok: false, error: data?.error })
             import('sonner').then(({ toast }) =>
-              toast.error('Конфигурация не сохранена', {
-                description: data?.error || 'Проверка подключения не прошла',
+              toast.error(tNow('toast.configNotSaved'), {
+                description: data?.error || tNow('toast.configTestFailed'),
               })
             )
           }
@@ -171,12 +179,12 @@ export default function Home() {
         (data: any) => {
           import('sonner').then(({ toast }) => {
             if (data?.ok) {
-              toast.success('Прайсы моделей обновлены', {
-                description: 'Стоимость новых вызовов считается по свежим ценам',
+              toast.success(tNow('toast.pricingRefreshed'), {
+                description: tNow('toast.pricingRefreshedHint'),
               })
             } else {
-              toast.error('Не удалось обновить прайсы', {
-                description: data?.error || 'Сетевые источники недоступны — работает кэш',
+              toast.error(tNow('toast.pricingRefreshError'), {
+                description: data?.error || tNow('toast.pricingOffline'),
               })
             }
           })
@@ -194,12 +202,12 @@ export default function Home() {
         (data: any) => {
           import('sonner').then(({ toast }) => {
             if (data?.ok) {
-              toast.success('Курсы валют обновлены', {
-                description: 'Конвертация стоимости — по свежим курсам',
+              toast.success(tNow('toast.currencyRefreshed'), {
+                description: tNow('toast.currencyRefreshedHint'),
               })
             } else {
-              toast.error('Не удалось обновить курсы', {
-                description: data?.error || 'Источники недоступны — работает кэш/ручной курс',
+              toast.error(tNow('toast.currencyRefreshError'), {
+                description: data?.error || tNow('toast.currencyOffline'),
               })
             }
           })
@@ -261,12 +269,13 @@ export default function Home() {
                     : 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300'
                 )}
                 role="status"
-                aria-label={connected ? 'Движок агента: подключён' : 'Движок агента: офлайн'}
-                title={connected ? 'Мини-сервис socket.io :3003 — подключён' : 'Движок агента недоступен — проверьте сервис'}
+                aria-label={connected ? t('header.engineConnected') : t('header.engineOffline')}
+                title={connected ? t('header.engineConnectedTitle') : t('header.engineOfflineTitle')}
               >
                 {connected ? <Wifi className="size-3.5 shrink-0" /> : <WifiOff className="size-3.5 shrink-0" />}
-                <span className="hidden sm:inline">{connected ? 'движок: подключён' : 'движок: офлайн'}</span>
+                <span className="hidden sm:inline">{connected ? t('header.engineConnected') : t('header.engineOffline')}</span>
               </span>
+              <LanguageToggle />
               <ThemeToggle />
             </div>
           </div>
@@ -289,8 +298,8 @@ export default function Home() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h2 className="flex items-center gap-2 text-sm font-semibold">
                   <Eye className="size-4 text-zinc-400" />
-                  Граф выполнения
-                  {currentMeta && !isLive && <span className="text-xs font-normal text-amber-600 dark:text-amber-300">· режим воспроизведения</span>}
+                  {t('graph.title')}
+                  {currentMeta && !isLive && <span className="text-xs font-normal text-amber-600 dark:text-amber-300">· {t('graph.playbackMode')}</span>}
                 </h2>
                 <GraphLegend />
               </div>
@@ -317,11 +326,11 @@ export default function Home() {
         {/* ─── Подвал: версия + индикатор автообновления (ADR-021) ─── */}
         <footer className="mt-auto shrink-0 border-t border-zinc-200/80 bg-white/80 dark:border-zinc-800/80 dark:bg-zinc-950/80">
           <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5 text-xs text-zinc-500">
-            <span>TACG Prototype v0.11.0 · прототип для тестирования концепции</span>
+            <span>TACG Prototype v0.12.0 · {t('footer.prototypeNote')}</span>
             <span className="hidden sm:inline">·</span>
-            <span className="hidden sm:inline">Движок: socket.io мини-сервис + z-ai-web-dev-sdk (LLM)</span>
+            <span className="hidden sm:inline">{t('footer.engineNote')}</span>
             <span className="hidden md:inline">·</span>
-            <span className="hidden md:inline">React Flow · Развилки решений · Аудит токенов и стоимости · Валюта · Светлая/тёмная тема</span>
+            <span className="hidden md:inline">{t('footer.featuresNote')}</span>
             <span className="ml-auto inline-flex items-center gap-2">
               <UpdateBadge />
             </span>

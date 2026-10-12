@@ -25,6 +25,7 @@ import { chosenIds, GraphNode, selectionMode } from '@/lib/tacg/types'
 import { computeEdges } from '@/lib/tacg/fold'
 import { useIsDark } from '@/lib/tacg/theme'
 import { useTacgStore } from '@/store/tacg-store'
+import { useT } from '@/lib/tacg/i18n'
 import { cn } from '@/lib/utils'
 
 const NODE_W = 248
@@ -109,6 +110,7 @@ function computeLayout(nodes: GraphNode[]) {
 /** ─── Кастомный узел React Flow ─── */
 function TacgNodeCard({ data: n, selected }: NodeProps<TacgFlowNode>) {
   const decisionMode = useTacgStore((s) => s.decisionMode)
+  const t = useT()
   const isDecision = n.kind === 'decision' && !!n.decision
   const dec = isDecision ? n.decision! : undefined
   const offered = isDecision && dec?.status === 'offered' && chosenIds(dec).length === 0
@@ -166,7 +168,7 @@ function TacgNodeCard({ data: n, selected }: NodeProps<TacgFlowNode>) {
                   'rounded px-1.5 py-0.5 text-[10px] font-bold uppercase',
                   OPTION_STYLES[n.branchOf.optionId] ?? 'bg-zinc-500/20 text-zinc-600 dark:text-zinc-300'
                 )}
-                title={`Ветка варианта «${n.branchOf.optionId}» развилки ${n.branchOf.decisionId}`}
+                title={t('graph.branchTitle', { option: n.branchOf.optionId, decision: n.branchOf.decisionId })}
               >
                 {n.branchOf.optionId}
               </span>
@@ -180,7 +182,7 @@ function TacgNodeCard({ data: n, selected }: NodeProps<TacgFlowNode>) {
             {n.overridden && !n.dynamic && (
               <span className="flex items-center gap-0.5 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
                 <PenLine className="size-2.5" />
-                изм.
+                {t('graph.edited')}
               </span>
             )}
           </div>
@@ -201,26 +203,26 @@ function TacgNodeCard({ data: n, selected }: NodeProps<TacgFlowNode>) {
           ) : n.status === 'running' ? (
             <span className="flex items-center gap-1 text-cyan-600 dark:text-cyan-300">
               <Loader2 className="size-3 animate-spin" />
-              выполнение…
+              {t('graph.executing')}
             </span>
           ) : n.status === 'discarded' ? (
             <span className="flex items-center gap-1">
               <X className="size-3" />
-              ветка не выбрана
+              {t('graph.branchNotChosen')}
             </span>
           ) : (
             <>
               <span className={cn('size-1.5 rounded-full', BAR_STYLES[n.status])} />
               <span>
                 {n.status === 'done' && n.durationMs
-                  ? `${(n.durationMs / 1000).toFixed(1)} с`
+                  ? `${(n.durationMs / 1000).toFixed(1)} s`
                   : {
-                      pending: 'ожидает',
-                      done: 'готово',
-                      error: 'ошибка',
-                      skipped: 'пропущен',
-                      running: 'выполняется',
-                      discarded: 'не реализовано',
+                      pending: t('graph.stPending'),
+                      done: t('graph.stDone'),
+                      error: t('graph.stError'),
+                      skipped: t('graph.stSkipped'),
+                      running: t('graph.stRunning'),
+                      discarded: t('graph.stDiscarded'),
                     }[n.status]}
               </span>
               {(n.runs ?? 0) > 1 && <span className="text-amber-600/80 dark:text-amber-400/80">·×{n.runs}</span>}
@@ -258,15 +260,16 @@ function DecisionStatusRow({
   optionsCount: number
   mixed?: boolean
 }) {
+  const t = useT()
   if (decisionStatus === 'resolved' && chosenLabels.length) {
     const isMixed = chosenLabels.length > 1
     return (
       <span className="flex min-w-0 items-center gap-1.5 text-emerald-600 dark:text-emerald-300">
         <CheckCircle2 className="size-3 shrink-0" />
         <span className="truncate">
-          {isMixed ? `смешанное: ${chosenLabels.join(' + ')}` : `выбрано: ${chosenLabels[0]}`}
+          {isMixed ? t('graph.mixedPrefix', { labels: chosenLabels.join(' + ') }) : t('graph.chosenPrefix', { label: chosenLabels[0] })}
         </span>
-        <span className="shrink-0 text-zinc-500">· {chosenBy === 'user' ? 'вы' : 'агент'}</span>
+        <span className="shrink-0 text-zinc-500">· {chosenBy === 'user' ? t('graph.byUser') : t('graph.byAgent')}</span>
       </span>
     )
   }
@@ -274,12 +277,12 @@ function DecisionStatusRow({
     return waitingUser ? (
       <span className="flex animate-pulse items-center gap-1 text-amber-600 dark:text-amber-300">
         <GitFork className="size-3 shrink-0" />
-        {mixed ? `ждёт выбора (можно несколько)` : 'ждёт вашего выбора'}
+        {mixed ? t('graph.waitsChoiceMulti') : t('graph.waitsYourChoice')}
       </span>
     ) : (
       <span className="flex items-center gap-1 text-amber-600 dark:text-amber-300">
         <Loader2 className="size-3 shrink-0 animate-spin" />
-        агент выбирает…
+        {t('graph.agentChoosing')}
       </span>
     )
   }
@@ -287,14 +290,14 @@ function DecisionStatusRow({
     return (
       <span className="flex items-center gap-1 text-cyan-600 dark:text-cyan-300">
         <Loader2 className="size-3 animate-spin" />
-        агент рассуждает…
+        {t('graph.agentReasoning')}
       </span>
     )
   }
   return (
     <span className="flex items-center gap-1">
       <GitFork className="size-3" />
-      развилка · вариантов: {optionsCount}
+      {t('graph.forkWithOptions', { n: optionsCount })}
     </span>
   )
 }
@@ -471,6 +474,7 @@ export interface GraphCanvasProps {
 }
 
 export function GraphCanvas({ nodes, selectedNodeId, onSelect, waitingDecisionId, onOpenDecision, planning }: GraphCanvasProps) {
+  const t = useT()
   return (
     /* absolute inset-0: надёжнее h-full — проценты не резолвятся
        в flex-item, чья высота задана только min-height (мобильная раскладка) */
@@ -485,11 +489,8 @@ export function GraphCanvas({ nodes, selectedNodeId, onSelect, waitingDecisionId
               <span className="absolute -right-1.5 -top-1.5 size-3.5 animate-ping rounded-full bg-teal-400/70" />
             </div>
             <div className="max-w-sm space-y-1.5 text-center">
-              <p className="text-sm font-medium text-foreground">Агент работает…</p>
-              <p className="text-xs leading-relaxed">
-                Планировщик LLM анализирует задачу и строит граф — узлы появятся здесь через несколько секунд.
-                Ход работы виден в журнале событий ниже.
-              </p>
+              <p className="text-sm font-medium text-foreground">{t('graph.agentWorking')}</p>
+              <p className="text-xs leading-relaxed">{t('graph.agentWorkingHint')}</p>
             </div>
           </div>
         ) : (
@@ -497,9 +498,7 @@ export function GraphCanvas({ nodes, selectedNodeId, onSelect, waitingDecisionId
             <div className="flex size-14 items-center justify-center rounded-2xl border border-dashed">
               <Network className="size-7" />
             </div>
-            <p className="max-w-xs text-center text-sm">
-              Граф появится здесь: задайте задачу агенту и нажмите «Запустить агента»
-            </p>
+            <p className="max-w-xs text-center text-sm">{t('graph.emptyState')}</p>
           </div>
         )
       ) : (

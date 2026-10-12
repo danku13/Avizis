@@ -14,9 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TACG Playground — живой граф вычислений агента",
+  title: "TACG Playground — live agent computation graph",
   description:
-    "Прототип Transparent Agent Computation Graph: прозрачный, управляемый и воспроизводимый процесс работы ИИ-агента на живом графе. Движок — z-ai-web-dev-sdk.",
+    "Transparent Agent Computation Graph: watch an LLM agent work as a live graph, intervene (pause / override / choose decision branches) and replay any run frame by frame. Engine — z-ai-web-dev-sdk.",
   keywords: ["TACG", "transparent AI", "explainable agents", "agent graph", "z-ai-web-dev-sdk"],
   icons: {
     icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",

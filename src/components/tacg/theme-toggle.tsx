@@ -5,9 +5,11 @@ import { Moon, Sun } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { toggleTheme, useIsDark } from '@/lib/tacg/theme'
+import { useT } from '@/lib/tacg/i18n'
 
 export function ThemeToggle() {
   const isDark = useIsDark()
+  const t = useT()
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -16,14 +18,14 @@ export function ThemeToggle() {
           size="icon"
           className="size-7"
           onClick={toggleTheme}
-          aria-label={isDark ? 'Включить светлую тему' : 'Включить тёмную тему'}
-          title={isDark ? 'Светлая тема' : 'Тёмная тема'}
+          aria-label={isDark ? t('theme.lightAria') : t('theme.darkAria')}
+          title={isDark ? t('theme.lightTitle') : t('theme.darkTitle')}
         >
           {isDark ? <Sun className="size-3.5" /> : <Moon className="size-3.5" />}
         </Button>
       </TooltipTrigger>
       <TooltipContent side="bottom">
-        {isDark ? 'Переключить на светлую тему' : 'Переключить на тёмную тему'}
+        {isDark ? t('theme.switchToLight') : t('theme.switchToDark')}
       </TooltipContent>
     </Tooltip>
   )

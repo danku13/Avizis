@@ -1,5 +1,7 @@
 // TACG — общие типы клиентской части (зеркало mini-services/tacg-agent/types.ts)
 
+import type { Locale } from './i18n'
+
 export type NodeStatus = 'pending' | 'running' | 'done' | 'error' | 'skipped' | 'discarded'
 export type RunStatus = 'planning' | 'running' | 'paused' | 'stopped' | 'completed' | 'error'
 export type RunMode = 'demo' | 'llm'
@@ -77,28 +79,40 @@ export interface RunUsage {
   byRole: Record<string, { inputTokens: number; outputTokens: number; calls: number; costUsd?: number }>
 }
 
-/** Форматирование числа токенов: 940 → «940», 1200 → «1,2k» */
-export const fmtTokens = (n: number): string => {
-  if (n >= 1000) return `${(n / 1000).toFixed(1).replace('.', ',')}k`
+/** Форматирование числа токенов: 940 → «940», 1200 → «1,2k» (EN: 1.2k) */
+export const fmtTokens = (n: number, locale: Locale = 'ru'): string => {
+  if (n >= 1000) return `${(n / 1000).toFixed(1).replace('.', locale === 'ru' ? ',' : '.')}k`
   return String(n)
 }
 
-/** Формат суммы USD: $123 / $1,23 / $0,0123 / $0,00045 — 3 значащих цифры до $1 (как fmtUsd движка) */
-export const fmtUsd = (v: number): string => {
+/** Формат суммы USD: $123 / $1,23 / $0,0123 — 3 значащих цифры до $1 (как fmtUsd движка);
+ *  десятичный разделитель — по локали (ru: запятая, en: точка) */
+export const fmtUsd = (v: number, locale: Locale = 'ru'): string => {
   if (!Number.isFinite(v) || v <= 0) return '$0'
   let s: string
   if (v >= 100) s = v.toFixed(0)
   else if (v >= 1) s = v.toFixed(2)
   else s = String(parseFloat(v.toPrecision(3)))
-  return '$' + s.replace('.', ',')
+  return '$' + (locale === 'ru' ? s.replace('.', ',') : s)
 }
 
-/** Человекочитаемый источник прайса (ADR-016) */
-export const PRICE_SOURCE_LABELS: Record<string, string> = {
-  manual: 'вручную (конфиг)',
-  openrouter: 'OpenRouter',
-  litellm: 'каталог LiteLLM',
+/** Человекочитаемый источник прайса (ADR-016), по языку */
+export const PRICE_SOURCE_LABELS: Record<Locale, Record<string, string>> = {
+  ru: {
+    manual: 'вручную (конфиг)',
+    openrouter: 'OpenRouter',
+    litellm: 'каталог LiteLLM',
+  },
+  en: {
+    manual: 'manual (config)',
+    openrouter: 'OpenRouter',
+    litellm: 'LiteLLM catalog',
+  },
 }
+
+/** Подпись источника прайса с фолбэком на ru */
+export const priceSourceLabel = (id: string, locale: Locale): string =>
+  PRICE_SOURCE_LABELS[locale][id] ?? PRICE_SOURCE_LABELS.ru[id] ?? id
 
 /** Статус одного источника прайсов (для блока в настройках) */
 export interface PricingSourceStatus {
@@ -125,12 +139,24 @@ export const CURRENCY_SYMBOLS: Record<string, string> = {
   AED: 'DH', INR: '₹', BYN: 'Br', UAH: '₴', GEL: '₾', JPY: '¥', CHF: 'Fr', KRW: '₩',
 }
 
-export const CURRENCY_SOURCE_LABELS: Record<string, string> = {
-  manual: 'вручную (конфиг)',
-  cbr: 'ЦБ РФ',
-  'cbr-mirror': 'ЦБ РФ (зеркало)',
-  'er-api': 'open.er-api',
+export const CURRENCY_SOURCE_LABELS: Record<Locale, Record<string, string>> = {
+  ru: {
+    manual: 'вручную (конфиг)',
+    cbr: 'ЦБ РФ',
+    'cbr-mirror': 'ЦБ РФ (зеркало)',
+    'er-api': 'open.er-api',
+  },
+  en: {
+    manual: 'manual (config)',
+    cbr: 'Bank of Russia',
+    'cbr-mirror': 'Bank of Russia (mirror)',
+    'er-api': 'open.er-api',
+  },
 }
+
+/** Подпись источника курса с фолбэком на ru */
+export const currencySourceLabel = (id: string, locale: Locale): string =>
+  CURRENCY_SOURCE_LABELS[locale][id] ?? CURRENCY_SOURCE_LABELS.ru[id] ?? id
 
 /** Курс одной валюты (сколько единиц за 1 USD; rate 0 = курса нет) */
 export interface CurrencyEntry {
@@ -163,14 +189,14 @@ export interface CurrencyStatus {
  * Формат суммы в валюте: «₽0,29» / «₽12,5» / «₽123» — 3 значащих цифры до 1
  * (согласовано с fmtUsd). Курс — единиц валюты за 1 USD.
  */
-export const fmtCurrency = (v: number, code: string): string => {
+export const fmtCurrency = (v: number, code: string, locale: Locale = 'ru'): string => {
   const symbol = CURRENCY_SYMBOLS[code] ?? code
   if (!Number.isFinite(v) || v <= 0) return `${symbol}0`
   let s: string
   if (v >= 100) s = v.toFixed(0)
   else if (v >= 1) s = v.toFixed(1)
   else s = String(parseFloat(v.toPrecision(3)))
-  return symbol + s.replace('.', ',')
+  return symbol + (locale === 'ru' ? s.replace('.', ',') : s)
 }
 
 /** Конвертация USD → выбранная валюта; null — курса нет */
@@ -201,12 +227,24 @@ export interface LlmConfigPublic {
   currency?: { rates?: Record<string, number> }
 }
 
-export const LLM_ROLE_LABELS: Record<string, string> = {
-  planner: 'Планировщик',
-  executor: 'Исполнитель',
-  supervisor: 'Супервайзер',
-  decider: 'Решатель',
+export const LLM_ROLE_LABELS: Record<Locale, Record<string, string>> = {
+  ru: {
+    planner: 'Планировщик',
+    executor: 'Исполнитель',
+    supervisor: 'Супервайзер',
+    decider: 'Решатель',
+  },
+  en: {
+    planner: 'Planner',
+    executor: 'Executor',
+    supervisor: 'Supervisor',
+    decider: 'Decider',
+  },
 }
+
+/** Подпись роли LLM с фолбэком на ru */
+export const llmRoleLabel = (role: string, locale: Locale): string =>
+  LLM_ROLE_LABELS[locale][role] ?? LLM_ROLE_LABELS.ru[role] ?? role
 
 export interface GraphNode {
   id: string
@@ -361,23 +399,46 @@ export const chosenIds = (dec: DecisionState | undefined): string[] => {
 export const selectionMode = (dec: DecisionState | undefined): 'single' | 'mixed' =>
   dec?.selection === 'mixed' ? 'mixed' : 'single'
 
-/** Человекочитаемая оценка «понимания задачи» */
-export const certaintyLabel = (c: number): { label: string; hint: string } => {
+/** Человекочитаемая оценка «понимания задачи», по языку */
+export const certaintyLabel = (c: number, locale: Locale = 'ru'): { label: string; hint: string } => {
+  if (locale === 'en') {
+    if (c < 0.35) return { label: 'Vague direction', hint: 'The solution space is wide: the agent needs clarifications' }
+    if (c < 0.7) return { label: 'Narrowing', hint: 'The direction is set, some aspects are still open' }
+    return { label: 'Sharp direction', hint: 'Required certainty reached — the solution vector is fixed' }
+  }
   if (c < 0.35) return { label: 'Размытый вектор', hint: 'Поле решений широкое: агенту нужны уточнения' }
   if (c < 0.7) return { label: 'Вектор сужается', hint: 'Направление определено, часть аспектов ещё открыта' }
   return { label: 'Узкий вектор', hint: 'Требуемая точность достигнута — вектор решения задан жёстко' }
 }
 
-export const DECISION_DOMAIN_LABELS: Record<DecisionDomain, string> = {
-  scope: 'Объём работ',
-  specialization: 'Специализация',
-  product: 'Продуктовый вопрос',
-  architecture: 'Архитектура',
-  tone: 'Tone of voice',
-  format: 'Формат результата',
-  context: 'Контекст задачи',
-  strategy: 'Стратегия',
+export const DECISION_DOMAIN_LABELS: Record<Locale, Record<DecisionDomain, string>> = {
+  ru: {
+    scope: 'Объём работ',
+    specialization: 'Специализация',
+    product: 'Продуктовый вопрос',
+    architecture: 'Архитектура',
+    tone: 'Tone of voice',
+    format: 'Формат результата',
+    context: 'Контекст задачи',
+    strategy: 'Стратегия',
+  },
+  en: {
+    scope: 'Scope',
+    specialization: 'Specialization',
+    product: 'Product question',
+    architecture: 'Architecture',
+    tone: 'Tone of voice',
+    format: 'Output format',
+    context: 'Task context',
+    strategy: 'Strategy',
+  },
 }
+
+/** Подпись домена развилки с фолбэком на ru */
+export const decisionDomainLabel = (domain: string, locale: Locale): string =>
+  (DECISION_DOMAIN_LABELS[locale] as Record<string, string>)[domain] ??
+  (DECISION_DOMAIN_LABELS.ru as Record<string, string>)[domain] ??
+  domain
 
 export interface GraphEdge {
   id: string
@@ -385,25 +446,56 @@ export interface GraphEdge {
   to: string
 }
 
-export const STATUS_LABELS: Record<NodeStatus, string> = {
-  pending: 'Ожидает',
-  running: 'Выполняется',
-  done: 'Выполнено',
-  error: 'Ошибка',
-  skipped: 'Пропущено',
-  discarded: 'Не реализовано',
+export const STATUS_LABELS: Record<Locale, Record<NodeStatus, string>> = {
+  ru: {
+    pending: 'Ожидает',
+    running: 'Выполняется',
+    done: 'Выполнено',
+    error: 'Ошибка',
+    skipped: 'Пропущено',
+    discarded: 'Не реализовано',
+  },
+  en: {
+    pending: 'Pending',
+    running: 'Running',
+    done: 'Done',
+    error: 'Error',
+    skipped: 'Skipped',
+    discarded: 'Discarded',
+  },
 }
 
-export const RUN_STATUS_LABELS: Record<RunStatus, string> = {
-  planning: 'Планирование',
-  running: 'Выполняется',
-  paused: 'Пауза',
-  stopped: 'Остановлено',
-  completed: 'Завершено',
-  error: 'Ошибка',
+export const RUN_STATUS_LABELS: Record<Locale, Record<RunStatus, string>> = {
+  ru: {
+    planning: 'Планирование',
+    running: 'Выполняется',
+    paused: 'Пауза',
+    stopped: 'Остановлено',
+    completed: 'Завершено',
+    error: 'Ошибка',
+  },
+  en: {
+    planning: 'Planning',
+    running: 'Running',
+    paused: 'Paused',
+    stopped: 'Stopped',
+    completed: 'Completed',
+    error: 'Error',
+  },
 }
 
-export const DECISION_MODE_LABELS: Record<DecisionMode, string> = {
-  auto: 'Авто — агент решает сам',
-  manual: 'Вручную — агент предлагает и ждёт',
+export const DECISION_MODE_LABELS: Record<Locale, Record<DecisionMode, string>> = {
+  ru: {
+    auto: 'Авто — агент решает сам',
+    manual: 'Вручную — агент предлагает и ждёт',
+  },
+  en: {
+    auto: 'Auto — the agent decides',
+    manual: 'Manual — the agent proposes and waits',
+  },
+}
+
+/** Универсальный резолвер словаря-по-языку с фолбэком на ru */
+export function byLocale<T extends Record<string, string>>(map: Record<Locale, T>, locale: Locale): T {
+  return map[locale] ?? map.ru
 }

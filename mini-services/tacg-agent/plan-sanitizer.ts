@@ -7,6 +7,8 @@ import { DecisionDomain, DecisionOption, GraphNode } from './types'
 
 /** Заметка аудита усечения: код + готовое русское сообщение для журнала запуска */
 export interface SanitizeNote {
+  /** Английская версия (ADR-022: en-прогоны) */
+  messageEn?: string
   code: string
   message: string
 }
@@ -60,6 +62,7 @@ export function sanitizePlanData(json: any): SanitizedPlan {
     notes.push({
       code: 'plan-nodes',
       message: `Лимит плана: LLM вернул ${allNodes.length} узлов — взяты первые ${PLAN_LIMITS.maxNodes} (отброшены: ${dropped.join(', ')})`,
+      messageEn: `Plan limit: the LLM returned ${allNodes.length} nodes — kept the first ${PLAN_LIMITS.maxNodes} (dropped: ${dropped.join(', ')})`,
     })
   }
   const rawNodes = allNodes.slice(0, PLAN_LIMITS.maxNodes)
@@ -84,6 +87,7 @@ export function sanitizePlanData(json: any): SanitizedPlan {
       notes.push({
         code: 'deps-unknown',
         message: `Лимит плана: у узла ${nodeId} отброшены ссылки на необъявленные узлы: ${unknown.join(', ')}`,
+        messageEn: `Plan limit: node ${nodeId} dropped references to undeclared nodes: ${unknown.join(', ')}`,
       })
     }
     const deps = [...new Set(normalized.filter((d) => d && declared.has(d) && !exclude.has(d)))]
@@ -92,6 +96,7 @@ export function sanitizePlanData(json: any): SanitizedPlan {
       notes.push({
         code: 'deps-cap',
         message: `Лимит плана: у узла ${nodeId} зависимостей ${deps.length} — оставлены первые ${PLAN_LIMITS.maxDeps} (отброшены: ${deps.slice(PLAN_LIMITS.maxDeps).join(', ')})`,
+        messageEn: `Plan limit: node ${nodeId} has ${deps.length} dependencies — kept the first ${PLAN_LIMITS.maxDeps} (dropped: ${deps.slice(PLAN_LIMITS.maxDeps).join(', ')})`,
       })
     }
     return deps.slice(0, PLAN_LIMITS.maxDeps)
@@ -113,6 +118,7 @@ export function sanitizePlanData(json: any): SanitizedPlan {
         notes.push({
           code: 'options-cap',
           message: `Лимит плана: у развилки ${id} вариантов ${optionsTruthy.length} — оставлены первые ${PLAN_LIMITS.maxOptions}`,
+          messageEn: `Plan limit: fork ${id} has ${optionsTruthy.length} options — kept the first ${PLAN_LIMITS.maxOptions}`,
         })
       }
       const branchIds = new Set<string>()
@@ -130,6 +136,7 @@ export function sanitizePlanData(json: any): SanitizedPlan {
           notes.push({
             code: 'branch-steps',
             message: `Лимит плана: у ветки ${optId} развилки ${id} шагов ${stepsAll.length} — оставлены первые ${PLAN_LIMITS.maxBranchSteps}`,
+            messageEn: `Plan limit: branch ${optId} of fork ${id} has ${stepsAll.length} steps — kept the first ${PLAN_LIMITS.maxBranchSteps}`,
           })
         }
         const stepsRaw = stepsAll.slice(0, PLAN_LIMITS.maxBranchSteps)
@@ -186,11 +193,13 @@ export function sanitizePlanData(json: any): SanitizedPlan {
           notes.push({
             code: 'decision-degraded',
             message: `Лимит плана: у узла ${id} меньше 2 валидных вариантов${empties} — развилка деградировала в обычный шаг`,
+            messageEn: `Plan limit: node ${id} has fewer than 2 valid options${empties} — the fork degraded into a regular step`,
           })
         } else {
           notes.push({
             code: 'decision-degraded',
             message: `Лимит плана: у узла ${id} развилка без вопроса — деградировала в обычный шаг`,
+            messageEn: `Plan limit: node ${id} fork without a question — degraded into a regular step`,
           })
         }
       }
