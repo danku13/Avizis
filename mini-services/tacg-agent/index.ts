@@ -55,7 +55,8 @@ io.on('connection', (socket) => {
       const task = typeof data?.task === 'string' ? data.task : ''
       const mode: RunMode = data?.mode === 'llm' ? 'llm' : 'demo'
       const decisionMode: DecisionMode = data?.decisionMode === 'auto' ? 'auto' : 'manual'
-      const run = await engine.start(task, mode, decisionMode)
+      // язык UI передаётся движку: пустая задача демо берёт дефолт на языке клиента (ADR-022)
+      const run = await engine.start(task, mode, decisionMode, clientLang)
       socket.emit('run:started', { runId: run.id })
     } catch (e: any) {
       console.error('[tacg] ошибка запуска:', e)

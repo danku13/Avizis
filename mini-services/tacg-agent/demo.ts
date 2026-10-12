@@ -8,11 +8,28 @@
 //    динамически (формат → блоки контента [mixed] → tone of voice), поднимая
 //    «понимание задачи» от 0.2 до 0.95.
 import { DecisionDomain, DecisionState, GraphNode } from './types'
+import type { Lang } from './i18n'
+import {
+  DEFAULT_TASK_EN,
+  DEMO_ADAPTATIONS_EN,
+  DEMO_AUTO_PICK_EN,
+  DEMO_DECISION_INSERTIONS_EN,
+  DEMO_WRITING_AUTO_PICKS_EN,
+  DEMO_INITIAL_CERTAINTY_NOTE_EN,
+  demoOutputEn,
+  demoPlanEn,
+  demoWritingPlanEn,
+} from './demo-i18n-en'
 
 export const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
 export const DEFAULT_TASK = 'Проанализируй данные о продажах за Q3 и найди аномалии'
 export const WRITING_TASK = 'Напиши пост про запуск нашей новой функции — умного помощника в редакторе'
+
+/** Дефолтная задача демо по языку (пустой ввод → язык UI, ADR-022) */
+export function defaultTask(lang: Lang): string {
+  return lang === 'en' ? DEFAULT_TASK_EN : DEFAULT_TASK
+}
 
 /** Выбор демо-сценария по тексту задачи */
 export function detectDemoScenario(task: string): 'data' | 'writing' {
@@ -61,7 +78,8 @@ export const DEMO_AUTO_PICK = {
     'Кандидаты затрагивают выручку: цена пропущенного ложного срабатывания в итоговом отчёте выше стоимости двух дополнительных шагов. Глубокое расследование сверит кандидатов с бизнес-событиями и отсечёт ложные до формирования итога.',
 }
 
-export function demoPlan(): GraphNode[] {
+export function demoPlan(lang: Lang = 'ru'): GraphNode[] {
+  if (lang === 'en') return demoPlanEn()
   const base = {
     status: 'pending' as const,
     dynamic: false,
@@ -122,7 +140,8 @@ export function demoPlan(): GraphNode[] {
 }
 
 /** Начальный план сценария «Напиши пост»: намеренно размытый — финал ждёт уточнений */
-export function demoWritingPlan(): GraphNode[] {
+export function demoWritingPlan(lang: Lang = 'ru'): GraphNode[] {
+  if (lang === 'en') return demoWritingPlanEn()
   const base = {
     status: 'pending' as const,
     dynamic: false,
@@ -166,6 +185,11 @@ export const DEMO_ADAPTATIONS: DemoAdaptation[] = [
     reason: 'Обнаружены пропущенные значения и дубликаты в собранных данных — без валидации следующий шаг даст искажённый результат',
   },
 ]
+
+/** Локализованные адаптации по языку прогона (EN-зеркало — demo-i18n-en.ts) */
+export function demoAdaptations(lang: Lang = 'ru'): DemoAdaptation[] {
+  return lang === 'en' ? DEMO_ADAPTATIONS_EN : DEMO_ADAPTATIONS
+}
 
 // ───────────── Сценарий 2: эмерджентные развилки («агент анализирует каждый шаг») ─────────────
 
@@ -322,7 +346,12 @@ export const DEMO_DECISION_INSERTIONS: DemoDecisionInsertion[] = [
   },
 ]
 
-/** Скриптованные решения агента в авто-режиме по развилкам сценария «Напиши пост» */
+/** Локализованные эмерджентные развилки по языку прогона (EN — DEMO_DECISION_INSERTIONS_EN) */
+export function demoDecisionInsertions(lang: Lang = 'ru'): DemoDecisionInsertion[] {
+  return lang === 'en' ? DEMO_DECISION_INSERTIONS_EN : DEMO_DECISION_INSERTIONS
+}
+
+/** Скриптованные решения агента в авто-режиме по развилкам сценария «Напиши пост» (RU-контент) */
 export const DEMO_WRITING_AUTO_PICKS: Record<string, { optionIds: string[]; reasoning: string }> = {
   decf: {
     optionIds: ['a'],
@@ -341,6 +370,16 @@ export const DEMO_WRITING_AUTO_PICKS: Record<string, { optionIds: string[]; reas
   },
 }
 
+/** Локализованные авто-решения сценария «Напиши пост» */
+export function demoWritingAutoPicks(lang: Lang = 'ru'): Record<string, { optionIds: string[]; reasoning: string }> {
+  return lang === 'en' ? DEMO_WRITING_AUTO_PICKS_EN : DEMO_WRITING_AUTO_PICKS
+}
+
+/** Скриптованное авто-решение сценария анализа данных по языку прогона */
+export function demoAutoPick(lang: Lang = 'ru'): { optionIds: string[]; reasoning: string } {
+  return lang === 'en' ? DEMO_AUTO_PICK_EN : DEMO_AUTO_PICK
+}
+
 /** Начальная оценка «понимания задачи» по сценариям */
 export const DEMO_INITIAL_CERTAINTY: Record<'data' | 'writing', number> = {
   data: 0.55,
@@ -352,8 +391,14 @@ export const DEMO_INITIAL_CERTAINTY_NOTE: Record<'data' | 'writing', string> = {
   writing: 'Запрос размыт: не определены формат, объём, тон и целевая аудитория — вектор решения широкий',
 }
 
-/** Скриптованные результаты узлов демо-режима */
-export function demoOutput(node: GraphNode, task: string, picks: Record<string, string[]> = {}): string {
+/** Локализованная стартовая заметка о «понимании задачи» */
+export function demoInitialCertaintyNote(lang: Lang = 'ru'): Record<'data' | 'writing', string> {
+  return lang === 'en' ? DEMO_INITIAL_CERTAINTY_NOTE_EN : DEMO_INITIAL_CERTAINTY_NOTE
+}
+
+/** Скриптованные результаты узлов демо-режима (RU-контент; EN — demoOutputEn) */
+export function demoOutput(node: GraphNode, task: string, picks: Record<string, string[]> = {}, lang: Lang = 'ru'): string {
+  if (lang === 'en') return demoOutputEn(node, task, picks)
   const fmt = picks.decf?.[0]
   const blocks = picks.decb ?? []
   const tone = picks.dect?.[0]

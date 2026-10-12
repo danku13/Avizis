@@ -5,15 +5,15 @@ import { Server } from 'socket.io'
 import { DecisionDomain, DecisionMode, GraphNode, LlmProviderInfo, RunEvent, RunMode, RunSnapshot, RunStatus } from './types'
 import { detectLang, L, Lang, promptLangSuffix } from './i18n'
 import {
-  DEMO_ADAPTATIONS,
-  DEMO_AUTO_PICK,
-  DEFAULT_TASK,
-  DEMO_DECISION_INSERTIONS,
   DEMO_INITIAL_CERTAINTY,
-  DEMO_INITIAL_CERTAINTY_NOTE,
-  DEMO_WRITING_AUTO_PICKS,
+  defaultTask,
+  demoAdaptations,
+  demoAutoPick,
+  demoDecisionInsertions,
+  demoInitialCertaintyNote,
   demoOutput,
   demoPlan,
+  demoWritingAutoPicks,
   demoWritingPlan,
   detectDemoScenario,
   sleep,
@@ -41,6 +41,14 @@ export const fmtUsd = (v: number): string => {
 }
 
 /** Хвост «· токены: ↑N / ↓M · ≈$X» для записей журнала (только если провайдер сообщил usage) */
+/** Локализованная сводка использования LLM уровня прогона (стоп/финал) */
+const runUsageNote = (u: RunSnapshot['usage'], lang: 'ru' | 'en'): string =>
+  u
+    ? ` · ${lang === 'en' ? 'tokens' : 'токены'}: ↑${fmtK(u.inputTokens)} / ↓${fmtK(u.outputTokens)} (${u.calls} ${lang === 'en' ? 'LLM calls' : 'вызов. LLM'})${
+        u.costUsd ? ` · ≈${fmtUsd(u.costUsd)}` : ''
+      }`
+    : ''
+
 const usageNote = (u: LlmUsage | undefined, costUsd?: number | null, lang: 'ru' | 'en' = 'ru') =>
   u && ((u.promptTokens ?? 0) > 0 || (u.completionTokens ?? 0) > 0)
     ? ` · ${lang === 'en' ? 'tokens' : 'токены'}: ↑${fmtK(u.promptTokens ?? 0)} / ↓${fmtK(u.completionTokens ?? 0)}${
@@ -189,8 +197,8 @@ export class AgentEngine {
 
   // ─────────────────────────── Запуск ───────────────────────────
 
-  async start(taskInput: string, mode: RunMode, decisionMode: DecisionMode = 'manual'): Promise<RunSnapshot> {
-    const task = (taskInput || '').trim() || DEFAULT_TASK
+  async start(taskInput: string, mode: RunMode, decisionMode: DecisionMode = 'manual', uiLang: Lang = 'ru'): Promise<RunSnapshot> {
+    const task = (taskInput || '').trim() || defaultTask(uiLang)
     const id = 'run_' + now().toString(36) + Math.random().toString(36).slice(2, 7)
     const scenario = mode === 'demo' ? detectDemoScenario(task) : 'data'
     const run: RunSnapshot = {
@@ -271,10 +279,10 @@ export class AgentEngine {
     if (mode === 'llm') {
       nodes = await this.planWithLLM(task, rt)
     } else if (scenario === 'writing') {
-      nodes = demoWritingPlan()
-      this.log(rt, 'plan', 'Демо-сценарий «Напиши пост»: размытый запрос — агент будет уточнять вектор по ходу выполнения')
+      nodes = demoWritingPlan(rt.lang)
+      this.log(rt, 'plan', L(rt.lang, 'Демо-сценарий «Напиши пост»: размытый запрос — агент будет уточнять вектор по ходу выполнения', 'The “Write a post” demo scenario: a vague request — the agent will refine the vector as it runs'))
     } else {
-      nodes = demoPlan()
+      nodes = demoPlan(rt.lang)
     }
 
     this.emitEvent(rt, { type: 'graph:init', ts: now(), nodes })
@@ -285,7 +293,7 @@ export class AgentEngine {
 
     // стартовая самооценка «понимания задачи»: насколько узкий вектор решения
     const initialCertainty = mode === 'llm' ? (rt.snapshot.certainty ?? 0.4) : DEMO_INITIAL_CERTAINTY[scenario]
-    const initialNote = mode === 'llm' ? undefined : DEMO_INITIAL_CERTAINTY_NOTE[scenario]
+    const initialNote = mode === 'llm' ? undefined : demoInitialCertaintyNote(rt.lang)[scenario]
     this.emitCertainty(rt, initialCertainty, initialNote)
 
     this.pushStatus(rt, 'running', 0)
@@ -294,7 +302,7 @@ export class AgentEngine {
 
     this.runLoop(rt).catch((err: any) => {
       this.log(rt, 'run', L(rt.lang, `Внутренняя ошибка цикла выполнения: ${err?.message || err}`, `Execution loop internal error: ${err?.message || err}`))
-      this.pushStatus(rt, 'error', run.progress, `Внутренняя ошибка цикла: ${trunc(err?.message || '', 120)}`)
+      this.pushStatus(rt, 'error', run.progress, L(rt.lang, `Внутренняя ошибка цикла: ${trunc(err?.message || '', 120)}`, `Execution loop internal error: ${trunc(err?.message || '', 120)}`))
     })
     return run
   }
@@ -351,7 +359,7 @@ export class AgentEngine {
     } catch (e: any) {
       this.log(rt, 'info', L(rt.lang, `Планировщик LLM недоступен (${trunc(e?.message || '', 80)}) — применён резервный план`, `The LLM planner is unavailable (${trunc(e?.message || '', 80)}) — a fallback plan was applied`))
     }
-    return demoPlan()
+    return demoPlan(rt.lang)
   }
 
   // ─────────────────────── Цикл выполнения ───────────────────────
@@ -371,7 +379,7 @@ export class AgentEngine {
           const errored = run.nodes.find((n) => n.status === 'error')
           if (errored) {
             this.log(rt, 'node-error', L(rt.lang, `Узел «${errored.title}» завершился ошибкой — выполнение остановлено. Доступно вмешательство: «Повторить узел».`, `Node “${errored.title}” failed — execution stopped. Intervention available: “Retry node”.`))
-            this.pushStatus(rt, 'error', run.progress, `Узел «${errored.title}» упал: ${trunc(errored.error || 'ошибка выполнения', 140)}`)
+            this.pushStatus(rt, 'error', run.progress, L(rt.lang, `Узел «${errored.title}» упал: ${trunc(errored.error || 'ошибка выполнения', 140)}`, `Node “${errored.title}” failed: ${trunc(errored.error || 'execution error', 140)}`))
             run.finishedAt = now()
             store.save(run)
             return
@@ -490,9 +498,9 @@ export class AgentEngine {
         picks[n.id] = [...n.decision.chosen]
       }
     }
-    const base = demoOutput(node, rt.snapshot.task, picks)
+    const base = demoOutput(node, rt.snapshot.task, picks, rt.lang)
     const isRerun = (node.runs ?? 0) > 1
-    const text = isRerun ? `↻ Пересчёт после вмешательства пользователя.\n\n${base}` : base
+    const text = isRerun ? `${L(rt.lang, '↻ Пересчёт после вмешательства пользователя.', '↻ Recomputed after user intervention.')}\n\n${base}` : base
     const duration = isRerun ? 1200 : 2300
     const deadline = now() + duration
     while (now() < deadline) {
@@ -539,22 +547,24 @@ ${trunc(node.input || `Задача: ${run.task}`, 12000)}
     const run = rt.snapshot
     if (run.mode === 'demo') {
       if (rt.scenario === 'data') {
-        const idx = DEMO_ADAPTATIONS.findIndex((a, i) => a.after === finished.id && !rt.demoAdaptDone.has(i))
+        const adaptations = demoAdaptations(rt.lang)
+        const idx = adaptations.findIndex((a, i) => a.after === finished.id && !rt.demoAdaptDone.has(i))
         if (idx < 0) return
         rt.demoAdaptDone.add(idx)
         await sleep(450)
-        const spec = DEMO_ADAPTATIONS[idx]
+        const spec = adaptations[idx]
         this.insertNode(rt, { ...spec.node, dependsOn: [finished.id] }, spec.reason)
         return
       }
       // сценарий «Напиши пост»: агент анализирует результаты шагов и вставляет развилки-уточнения
-      const insIdx = DEMO_DECISION_INSERTIONS.findIndex(
+      const insertions = demoDecisionInsertions(rt.lang)
+      const insIdx = insertions.findIndex(
         (d, i) => d.afterAny.includes(finished.id) && !rt.demoInsertionsDone.has(i)
       )
       if (insIdx < 0) return
       rt.demoInsertionsDone.add(insIdx)
       await sleep(450)
-      const spec = DEMO_DECISION_INSERTIONS[insIdx]
+      const spec = insertions[insIdx]
       this.insertDecision(rt, finished.id, spec.decision, spec.reason)
       return
     }
@@ -644,7 +654,7 @@ ${graphDesc}
                 this.log(
                   rt,
                   'limits',
-                  `Лимит адаптации: у вопроса супервайзера «${qTitle}» шагов ${stepsAll.length} в ветке ${optId} — оставлены 3`
+                  L(rt.lang, `Лимит адаптации: у вопроса супервайзера «${qTitle}» шагов ${stepsAll.length} в ветке ${optId} — оставлены 3`, `Adaptation limit: supervisor question “${qTitle}” has ${stepsAll.length} steps in branch ${optId} — kept 3`)
                 )
               }
               return {
@@ -652,7 +662,7 @@ ${graphDesc}
                 label: String(o.label).slice(0, 60),
                 rationale: String(o.rationale || ''),
                 steps: stepsAll.slice(0, 3).map((s: any) => ({
-                  title: String(s?.title || 'шаг ветки').slice(0, 60),
+                  title: String(s?.title || L(rt.lang, 'шаг ветки', 'branch step')).slice(0, 60),
                   description: String(s?.description || ''),
                 })),
               }
@@ -664,8 +674,8 @@ ${graphDesc}
               finished.id,
               {
                 id: `decq${rt.emergentAdded + 1}`,
-                title: `Вопрос: ${String(q.question).slice(0, 40)}`,
-                description: String(q.reason || 'Выявлена неоднозначность, влияющая на итог'),
+                title: L(rt.lang, `Вопрос: ${String(q.question).slice(0, 40)}`, `Question: ${String(q.question).slice(0, 40)}`),
+                description: String(q.reason || L(rt.lang, 'Выявлена неоднозначность, влияющая на итог', 'An ambiguity affecting the outcome was identified')),
                 question: String(q.question),
                 domain: DECISION_DOMAINS.includes(q.domain) ? q.domain : 'context',
                 selection: q.selection === 'mixed' ? 'mixed' : 'single',
@@ -828,9 +838,15 @@ ${graphDesc}
     this.log(
       rt,
       'adapt',
-      `＋ Эмерджентная развилка (v${version}): «${spec.title}» — ${spec.options.length} варианта${
-        spec.selection === 'mixed' ? ' (смешанный выбор допустим)' : ''
-      }. Причина: ${reason}`
+      L(
+        rt.lang,
+        `＋ Эмерджентная развилка (v${version}): «${spec.title}» — ${spec.options.length} варианта${
+          spec.selection === 'mixed' ? ' (смешанный выбор допустим)' : ''
+        }. Причина: ${reason}`,
+        `＋ Emergent fork (v${version}): “${spec.title}” — ${spec.options.length} option${
+          spec.selection === 'mixed' ? ' (a mixed choice is allowed)' : ''
+        }. Reason: ${reason}`
+      )
     )
     store.save(run)
   }
@@ -871,9 +887,15 @@ ${graphDesc}
       this.log(
         rt,
         'decision',
-        `⎇ Режим «ручной выбор»: агент предлагает ${dec.options.length} варианта с обоснованием и ожидает решения пользователя${
-          dec.selection === 'mixed' ? ' (допустимо смешанное решение из нескольких)' : ''
-        }`
+        L(
+          rt.lang,
+          `⎇ Режим «ручной выбор»: агент предлагает ${dec.options.length} варианта с обоснованием и ожидает решения пользователя${
+            dec.selection === 'mixed' ? ' (допустимо смешанное решение из нескольких)' : ''
+          }`,
+          `⎇ “Manual choice” mode: the agent offers ${dec.options.length} options with rationale and awaits the user’s decision${
+            dec.selection === 'mixed' ? ' (a mixed decision of several is allowed)' : ''
+          }`
+        )
       )
       const choice = await this.waitForDecision(rt, node)
       if (!choice) return this.rollbackDecision(rt, node)
@@ -920,9 +942,10 @@ ${graphDesc}
     const dec = node.decision!
     if (rt.snapshot.mode === 'demo') {
       await sleep(1200)
-      const scripted = DEMO_WRITING_AUTO_PICKS[node.id]
+      const scripted = demoWritingAutoPicks(rt.lang)[node.id]
       if (scripted) return { optionIds: [...scripted.optionIds], reasoning: scripted.reasoning }
-      return { optionIds: [...DEMO_AUTO_PICK.optionIds], reasoning: DEMO_AUTO_PICK.reasoning }
+      const pick = demoAutoPick(rt.lang)
+      return { optionIds: [...pick.optionIds], reasoning: pick.reasoning }
     }
     const mixed = dec.selection === 'mixed'
     // provenance узла-развилки: адаптер/модель решателя (без ключей)
@@ -978,7 +1001,7 @@ ${mixed ? '{"optionIds":["<id1>","<id2>"],"reasoning":"краткое, но ис
     if (single) picked = picked.slice(0, 1)
     const opts = picked.map((id) => dec.options.find((o) => o.id === id)!)
     const isMixedResult = picked.length > 1
-    const pickedLabel = opts.map((o) => `«${o.label}»`).join(isMixedResult ? ' + ' : '')
+    const pickedLabel = opts.map((o) => `${rt.lang === 'en' ? '“' : '«'}${o.label}${rt.lang === 'en' ? '”' : '»'}`).join(isMixedResult ? ' + ' : '')
 
     node.status = 'done'
     node.finishedAt = now()
@@ -986,8 +1009,16 @@ ${mixed ? '{"optionIds":["<id1>","<id2>"],"reasoning":"краткое, но ис
     node.decision = { ...dec, status: 'resolved', chosen: picked, chosenBy: by, reasoning: reasoning?.trim() || undefined }
     node.output =
       by === 'agent'
-        ? `${isMixedResult ? `Смешанное решение агента: ${pickedLabel}.` : `Решение агента: вариант ${pickedLabel}.`} ${reasoning || ''}`.trim()
-        : `${isMixedResult ? `Смешанный выбор пользователя: ${pickedLabel}.` : `Выбор пользователя: вариант ${pickedLabel}.`} ${opts.map((o) => o.rationale).join(' ')}`
+        ? L(
+            rt.lang,
+            `${isMixedResult ? `Смешанное решение агента: ${pickedLabel}.` : `Решение агента: вариант ${pickedLabel}.`} ${reasoning || ''}`.trim(),
+            `${isMixedResult ? `The agent’s mixed decision: ${pickedLabel}.` : `The agent’s decision: option ${pickedLabel}.`} ${reasoning || ''}`.trim()
+          )
+        : L(
+            rt.lang,
+            `${isMixedResult ? `Смешанный выбор пользователя: ${pickedLabel}.` : `Выбор пользователя: вариант ${pickedLabel}.`} ${opts.map((o) => o.rationale).join(' ')}`,
+            `${isMixedResult ? `The user’s mixed choice: ${pickedLabel}.` : `The user’s choice: option ${pickedLabel}.`} ${opts.map((o) => o.rationale).join(' ')}`
+          )
     this.emitEvent(rt, { type: 'node:update', ts: now(), node: { ...node } })
 
     // мгновенная визуализация последствий: нереализованные ветки гаснут
@@ -1011,9 +1042,15 @@ ${mixed ? '{"optionIds":["<id1>","<id2>"],"reasoning":"краткое, но ис
     this.log(
       rt,
       'decision',
+      L(
+      rt.lang,
       `⎇ Решение принято (${by === 'agent' ? 'агентом' : 'пользователем'}): ${pickedLabel}${
         isMixedResult ? ' — ветки активированы' : ' — ветка активирована'
-      }, узлов в нереализованных ветках: ${discarded}`
+      }, узлов в нереализованных ветках: ${discarded}`,
+      `⎇ Decision made (${by === 'agent' ? 'by the agent' : 'by the user'}): ${pickedLabel}${
+        isMixedResult ? ' — branches activated' : ' — branch activated'
+      }, nodes in unrealized branches: ${discarded}`
+    )
     )
 
     // закрытие вопроса сужает вектор понимания задачи
@@ -1023,15 +1060,15 @@ ${mixed ? '{"optionIds":["<id1>","<id2>"],"reasoning":"краткое, но ис
       rt,
       Math.max(rt.snapshot.certainty ?? 0, after),
       isMixedResult
-        ? `смешанное решение по вопросу «${trunc(node.title, 48)}»`
-        : `вопрос «${trunc(node.title, 48)}» закрыт`
+        ? L(rt.lang, `смешанное решение по вопросу «${trunc(node.title, 48)}»`, `a mixed decision on the question “${trunc(node.title, 48)}”`)
+        : L(rt.lang, `вопрос «${trunc(node.title, 48)}» закрыт`, `the question “${trunc(node.title, 48)}” is closed`)
     )
   }
 
   /** Переключение режима решений на ходу; «авто» во время ожидания — агент решает немедленно */
   setDecisionMode(runId: string, mode: DecisionMode): { ok: boolean; error?: string } {
     const rt = this.runs.get(runId)
-    if (!rt) return { ok: false, error: 'Запуск не активен или уже выгружен' }
+    if (!rt) return { ok: false, error: L(rt.lang, 'Запуск не активен или уже выгружен', 'The run is not active or already unloaded') }
     if (rt.decisionMode === mode) return { ok: true }
     rt.decisionMode = mode
     rt.snapshot.decisionMode = mode
@@ -1039,7 +1076,11 @@ ${mixed ? '{"optionIds":["<id1>","<id2>"],"reasoning":"краткое, но ис
     this.log(
       rt,
       'control',
-      `⎇ Режим решений: ${mode === 'auto' ? '«авто» — агент решает сам' : '«ручной выбор» — агент предлагает варианты и ждёт'}`
+      L(
+      rt.lang,
+      `⎇ Режим решений: ${mode === 'auto' ? '«авто» — агент решает сам' : '«ручной выбор» — агент предлагает варианты и ждёт'}`,
+      `⎇ Decision mode: ${mode === 'auto' ? '“auto” — the agent decides on its own' : '“manual choice” — the agent offers options and waits'}`
+    )
     )
     store.save(rt.snapshot)
     // если сейчас ожидается выбор, а включили «авто» — агент принимает решение вместо пользователя
@@ -1062,14 +1103,14 @@ ${mixed ? '{"optionIds":["<id1>","<id2>"],"reasoning":"краткое, но ис
   /** Выбор пользователя на развилке (из модалки): один или несколько вариантов */
   resolveDecisionFromUser(runId: string, nodeId: string, optionIds: string[]): { ok: boolean; error?: string } {
     const rt = this.runs.get(runId)
-    if (!rt) return { ok: false, error: 'Запуск не активен' }
+    if (!rt) return { ok: false, error: L(rt.lang, 'Запуск не активен', 'The run is not active') }
     const pd = rt.pendingDecision
-    if (!pd || pd.nodeId !== nodeId) return { ok: false, error: 'Решение не ожидается (уже принято или запуск завершён)' }
+    if (!pd || pd.nodeId !== nodeId) return { ok: false, error: L(rt.lang, 'Решение не ожидается (уже принято или запуск завершён)', 'No decision is awaited (already made or the run has ended)') }
     const node = rt.snapshot.nodes.find((n) => n.id === nodeId)
     const dec = node?.decision
     const ids = (optionIds || []).map((id) => String(id).trim().toLowerCase())
     if (!dec || !ids.length || !ids.every((id) => dec.options.some((o) => o.id === id))) {
-      return { ok: false, error: 'Неизвестный вариант' }
+      return { ok: false, error: L(rt.lang, 'Неизвестный вариант', 'Unknown option') }
     }
     rt.pendingDecision = null
     pd.resolve({ optionIds: ids, by: 'user' })
@@ -1128,11 +1169,7 @@ ${mixed ? '{"optionIds":["<id1>","<id2>"],"reasoning":"краткое, но ис
     this.pushStatus(rt, 'stopped', run.progress)
     const doneCount = run.nodes.filter((n) => n.status === 'done').length
     const u = run.usage
-    const usageTotal = u
-      ? ` · токены: ↑${fmtK(u.inputTokens)} / ↓${fmtK(u.outputTokens)} (${u.calls} вызов. LLM)${
-          u.costUsd ? ` · ≈${fmtUsd(u.costUsd)}` : ''
-        }`
-      : ''
+    const usageTotal = runUsageNote(u, rt.lang)
     this.log(rt, 'run', L(rt.lang, `Выполнение остановлено пользователем · выполнено узлов: ${doneCount}, пропущено: ${skipped}${usageTotal}`, `Execution stopped by the user · nodes done: ${doneCount}, skipped: ${skipped}${usageTotal}`))
     run.finishedAt = now()
     store.save(run)
@@ -1149,12 +1186,12 @@ ${mixed ? '{"optionIds":["<id1>","<id2>"],"reasoning":"краткое, но ис
     const last = [...run.nodes].filter((n) => n.status === 'done').pop()
     // Аудит токенов и стоимости (ADR-015/016): итог запуска в summary и журнале
     const u = run.usage
-    const usageTotal = u
-      ? ` · токены: ↑${fmtK(u.inputTokens)} / ↓${fmtK(u.outputTokens)} (${u.calls} вызов. LLM)${
-          u.costUsd ? ` · ≈${fmtUsd(u.costUsd)}` : ''
-        }`
-      : ''
-    const summary = `Готово за ${durS} с: ${run.nodes.length} узлов, ${dynamic} добавлено динамически, версий графа — ${run.version}${usageTotal}. Итог: ${trunc(last?.output || '—', 220)}`
+    const usageTotal = runUsageNote(u, rt.lang)
+    const summary = L(
+      rt.lang,
+      `Готово за ${durS} с: ${run.nodes.length} узлов, ${dynamic} добавлено динамически, версий графа — ${run.version}${usageTotal}. Итог: ${trunc(last?.output || '—', 220)}`,
+      `Done in ${durS} s: ${run.nodes.length} nodes, ${dynamic} added dynamically, graph versions — ${run.version}${usageTotal}. Outcome: ${trunc(last?.output || '—', 220)}`
+    )
     run.summary = summary
     this.emitEvent(rt, { type: 'run:summary', ts: now(), summary })
     this.log(rt, 'run', L(rt.lang, `✓ Задача выполнена за ${durS} с${usageTotal}`, `✓ Task completed in ${durS} s${usageTotal}`))
@@ -1188,13 +1225,13 @@ ${mixed ? '{"optionIds":["<id1>","<id2>"],"reasoning":"краткое, но ис
 
   overrideNode(runId: string, nodeId: string, output: string): { ok: boolean; error?: string; resetCount?: number } {
     const rt = this.runs.get(runId)
-    if (!rt) return { ok: false, error: 'Запуск не активен или уже выгружен' }
+    if (!rt) return { ok: false, error: L(rt.lang, 'Запуск не активен или уже выгружен', 'The run is not active or already unloaded') }
     const run = rt.snapshot
     const node = run.nodes.find((n) => n.id === nodeId && n.status === 'done')
-    if (!node) return { ok: false, error: 'Узел не найден или ещё не завершён' }
-    if (rt.stopped) return { ok: false, error: 'Запуск остановлен — переопределение недоступно' }
+    if (!node) return { ok: false, error: L(rt.lang, 'Узел не найден или ещё не завершён', 'Node not found or not finished yet') }
+    if (rt.stopped) return { ok: false, error: L(rt.lang, 'Запуск остановлен — переопределение недоступно', 'The run is stopped — override is unavailable') }
     const trimmed = (output || '').trim()
-    if (!trimmed) return { ok: false, error: 'Результат не может быть пустым' }
+    if (!trimmed) return { ok: false, error: L(rt.lang, 'Результат не может быть пустым', 'The result cannot be empty') }
 
     node.output = trimmed
     node.overridden = true
@@ -1227,9 +1264,9 @@ ${mixed ? '{"optionIds":["<id1>","<id2>"],"reasoning":"краткое, но ис
 
   retryNode(runId: string, nodeId: string): { ok: boolean; error?: string } {
     const rt = this.runs.get(runId)
-    if (!rt) return { ok: false, error: 'Запуск не активен' }
+    if (!rt) return { ok: false, error: L(rt.lang, 'Запуск не активен', 'The run is not active') }
     const node = rt.snapshot.nodes.find((n) => n.id === nodeId)
-    if (!node || node.status !== 'error') return { ok: false, error: 'Узел не в состоянии ошибки' }
+    if (!node || node.status !== 'error') return { ok: false, error: L(rt.lang, 'Узел не в состоянии ошибки', 'The node is not in an error state') }
     rt.stopped = false
     node.status = 'pending'
     node.error = undefined

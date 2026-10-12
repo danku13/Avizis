@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator'
 import { DecisionMode, RunMode, RunStatus, RUN_STATUS_LABELS, byLocale } from '@/lib/tacg/types'
 import { getSocket } from '@/lib/tacg/socket'
-import { useI18nStore, useT } from '@/lib/tacg/i18n'
+import { useI18nStore, useT, translate } from '@/lib/tacg/i18n'
 import { useTacgStore } from '@/store/tacg-store'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -36,7 +36,11 @@ export function HistoryPanel() {
   const setStarting = useTacgStore((s) => s.setStarting)
   const t = useT()
   const locale = useI18nStore((s) => s.locale)
-  const [task, setTask] = useState(t('history.defaultTask'))
+  // задача: null = пользователь не вводил своё — показываем локализованный пример,
+  // который следует за языком интерфейса (стор стартует RU-пререндером, локаль
+  // применяется после монтирования — вычисляем при рендере, без эффекта, ADR-022)
+  const [userTask, setTask] = useState<string | null>(null)
+  const task = userTask ?? translate(locale, 'history.defaultTask')
   const [mode, setMode] = useState<RunMode>('demo')
   const [decisionMode, setDecisionMode] = useState<DecisionMode>('manual')
 

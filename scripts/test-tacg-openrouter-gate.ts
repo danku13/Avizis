@@ -286,9 +286,21 @@ async function partB(savedConfig: any) {
       [JSON.stringify(snapshot?.llm?.planner)]
     )
   } finally {
-    // восстановление исходного конфига
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(savedConfig, null, 2), 'utf-8')
-    socket.emit('llm:config:get')
+    // восстановление исходного конфига: через API (llm:config:save), чтобы
+    // инвалидировать кэш движка — прямой файл-запись движок не видит, и
+    // следующий за тестом LLM-прогон уходит в протухший baseUrl мока
+    // (zai-адаптер сохраняется без пробного запроса — офлайн-безопасно)
+    try {
+      const restored = await saveConfig(savedConfig)
+      if (restored?.ok !== true) {
+        // фолбэк: файл + перезапуск кэша через повторный save недоступен —
+        // хотя бы файл, чтобы не оставить движку мок-конфиг на диске
+        fs.writeFileSync(CONFIG_FILE, JSON.stringify(savedConfig, null, 2), 'utf-8')
+        console.log('[test] ВНИМАНИЕ: конфиг восстановлен только в файле:', restored?.error)
+      }
+    } catch {
+      fs.writeFileSync(CONFIG_FILE, JSON.stringify(savedConfig, null, 2), 'utf-8')
+    }
     socket.disconnect()
   }
 }
