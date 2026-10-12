@@ -52,7 +52,7 @@ jobs:
       - name: Tauri build (NSIS-установщик)
         run: bunx tauri build
 
-      - name: Портативная сборка (zip с оболочкой и сайдкаром)
+      - name: Портативная сборка (zip с оболочкой, сайдкаром и README)
         shell: pwsh
         run: |
           $rel = 'src-tauri/target/release'
@@ -63,7 +63,22 @@ jobs:
           if (-not (Test-Path "$rel/tacg.exe") -or -not (Test-Path "$rel/tacg-engine.exe")) {
             Write-Error "нет компонентов портативной сборки: tacg.exe / tacg-engine.exe"; exit 1
           }
-          Compress-Archive -Path "$rel/tacg.exe", "$rel/tacg-engine.exe" -DestinationPath tacg-portable-windows-x64.zip
+          # README внутри архива (ADR-021): запуск без установки, WebView2, данные, обновления
+          $readme = @'
+          TACG — портативная версия (без установки)
+
+          1. Распакуйте архив в любую папку и запустите tacg.exe.
+          2. Требуется Microsoft WebView2 (обычно уже установлен в Windows 10/11;
+             иначе скачайте с официального сайта Microsoft).
+          3. Данные (история прогонов, ключи LLM) хранятся в каталоге приложения ОС
+             и переживают обновления; удаление папки приложения их не удаляет.
+
+          Обновление: приложение само проверяет GitHub Releases при старте и предлагает
+          обновиться (значок в правом нижнем углу) — скачает новую версию, заменит файлы
+          рядом с tacg.exe и перезапустится. Установщик не нужен.
+          '@
+          Set-Content -Path portable-README.txt -Value $readme.TrimStart() -Encoding utf8
+          Compress-Archive -Path "$rel/tacg.exe", "$rel/tacg-engine.exe", "portable-README.txt" -DestinationPath tacg-portable-windows-x64.zip
           Get-Item tacg-portable-windows-x64.zip | Select-Object Name, Length
 
       - name: Артефакты проверочной сборки
