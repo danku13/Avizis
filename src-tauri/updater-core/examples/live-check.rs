@@ -6,11 +6,15 @@ fn main() {
     let json = std::fs::read_to_string(&path).expect("не прочитан файл");
     match updater_core::extract_release(&json) {
         Ok(rel) => {
-            let notes = rel.notes.as_deref().map(|n| &n[..n.len().min(60).max(n.len().min(60))]);
+            // срез заметок по границе символов (UTF-8): байтовый срез паникует на кириллице
+            let notes = rel
+                .notes
+                .as_deref()
+                .map(|n| n.chars().take(60).collect::<String>());
             println!("OK: version={} tag={} size={:?}", rel.version, rel.tag, rel.asset_size);
             println!("    asset={}", rel.asset_url);
             println!("    html={:?} notes={:?}", rel.html_url, notes);
-            println!("    is_newer(0.10.1)={}", updater_core::is_newer(&rel.version, "0.10.1"));
+            println!("    is_newer(0.11.0)={}", updater_core::is_newer(&rel.version, "0.11.0"));
         }
         Err(e) => {
             println!("ERR: {e}");
