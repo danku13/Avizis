@@ -2,8 +2,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { RunMeta, RunSnapshot } from './types'
+import { DATA_DIR } from './data-dir'
 
-const DATA_DIR = path.join(import.meta.dir, 'data')
 const FILE = path.join(DATA_DIR, 'runs.json')
 const MAX_RUNS = 20
 

@@ -4,7 +4,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { AlertTriangle, ChevronRight, Cpu, Eye, EyeOff, KeyRound, Loader2, Plug, Settings2, ShieldCheck } from 'lucide-react'
+import { AlertTriangle, ChevronRight, Cpu, DollarSign, Eye, EyeOff, KeyRound, Loader2, Plug, RefreshCw, Settings2, ShieldCheck } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -33,6 +33,9 @@ interface FormState {
   model: string
   apiKey: string
   roleModels: Record<LlmRole, string>
+  /** Ручная цена текущей модели, USD за 1M токенов (пусто = каталог/нет цены) */
+  priceIn: string
+  priceOut: string
 }
 
 const PRESETS: { id: PresetId; label: string; baseUrl: string; modelHint: string }[] = [
@@ -59,8 +62,16 @@ function detectPreset(cfg: LlmConfigPublic | null): PresetId {
   return hit?.id ?? 'custom'
 }
 
+/** Ключ прайса для текущей модели: zai → 'z-ai-sdk', иначе нормализованный id модели */
+function pricingKey(cfg: LlmConfigPublic | null): string {
+  const d = cfg?.default
+  if (!d || d.adapter === 'zai') return 'z-ai-sdk'
+  return (d.model || '').trim().toLowerCase() || 'z-ai-sdk'
+}
+
 /** Черновик формы из публичного конфига: ключ всегда пустой (пусто = «не менять») */
 function seedForm(cfg: LlmConfigPublic | null): FormState {
+  const price = cfg?.pricing?.models?.[pricingKey(cfg)]
   return {
     preset: detectPreset(cfg),
     baseUrl: cfg?.default?.baseUrl || '',
@@ -72,7 +83,62 @@ function seedForm(cfg: LlmConfigPublic | null): FormState {
       supervisor: cfg?.roles?.supervisor?.model || '',
       decider: cfg?.roles?.decider?.model || '',
     },
+    priceIn: typeof price?.inputPer1M === 'number' ? String(price.inputPer1M) : '',
+    priceOut: typeof price?.outputPer1M === 'number' ? String(price.outputPer1M) : '',
   }
+}
+
+/** Поля ручной цены модели (ADR-016): USD за 1M токенов вход/выход; пусто = каталог/нет цены */
+function PriceFields({
+  label,
+  priceIn,
+  priceOut,
+  onChange,
+  hint,
+}: {
+  label: string
+  priceIn: string
+  priceOut: string
+  onChange: (key: 'priceIn' | 'priceOut', v: string) => void
+  hint: string
+}) {
+  return (
+    <div className="space-y-2">
+      <Label className="flex items-center gap-1.5 text-xs">
+        <DollarSign className="size-3.5 text-teal-500/80" />
+        {label}
+      </Label>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <Label htmlFor="llm-price-in" className="text-[11px] font-normal text-zinc-500">Вход (промпт)</Label>
+          <Input
+            id="llm-price-in"
+            value={priceIn}
+            onChange={(e) => onChange('priceIn', e.target.value)}
+            placeholder="из каталога"
+            inputMode="decimal"
+            className="font-mono text-xs tabular-nums"
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="llm-price-out" className="text-[11px] font-normal text-zinc-500">Выход (ответ)</Label>
+          <Input
+            id="llm-price-out"
+            value={priceOut}
+            onChange={(e) => onChange('priceOut', e.target.value)}
+            placeholder="из каталога"
+            inputMode="decimal"
+            className="font-mono text-xs tabular-nums"
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </div>
+      </div>
+      <p className="text-[11px] leading-relaxed text-zinc-500">{hint}</p>
+    </div>
+  )
 }
 
 export function SettingsModal() {
@@ -82,6 +148,7 @@ export function SettingsModal() {
   const llmStatus = useTacgStore((s) => s.llmStatus)
   const llmSaving = useTacgStore((s) => s.llmSaving)
   const llmTesting = useTacgStore((s) => s.llmTesting)
+  const pricingStatus = useTacgStore((s) => s.pricingStatus)
   const setLlmSaving = useTacgStore((s) => s.setLlmSaving)
   const setLlmTesting = useTacgStore((s) => s.setLlmTesting)
   const setLlmStatus = useTacgStore((s) => s.setLlmStatus)
@@ -89,6 +156,7 @@ export function SettingsModal() {
   const [form, setForm] = useState<FormState | null>(null)
   const [showKey, setShowKey] = useState(false)
   const [rolesOpen, setRolesOpen] = useState(false)
+  const [pricingRefreshing, setPricingRefreshing] = useState(false)
   const [seen, setSeen] = useState<{ open: boolean; cfg: LlmConfigPublic | null } | undefined>(undefined)
 
   // Сброс черновика при открытии модалки или обновлении конфига — паттерн
@@ -102,15 +170,18 @@ export function SettingsModal() {
   const values: FormState = form ?? seedForm(llmConfig)
   const setField = <K extends keyof FormState>(key: K, v: FormState[K]) => setForm({ ...values, [key]: v })
 
-  const { preset, baseUrl, model, apiKey, roleModels } = values
+  const { preset, baseUrl, model, apiKey, roleModels, priceIn, priceOut } = values
 
   const isZai = preset === 'zai'
   const presetMeta = PRESETS.find((p) => p.id === preset)!
   const keyMask = llmConfig?.default?.apiKey
 
-  // при открытии — запросить актуальный конфиг с сервера (только маска ключа)
+  // при открытии — запросить актуальный конфиг и статус прайсов с сервера
   useEffect(() => {
-    if (open) getSocket().emit('llm:config:get')
+    if (open) {
+      getSocket().emit('llm:config:get')
+      getSocket().emit('pricing:get')
+    }
   }, [open])
 
   const applyPreset = (id: PresetId) => {
@@ -131,7 +202,35 @@ export function SettingsModal() {
       if (m) roles[role] = { model: m }
     }
     if (Object.keys(roles).length) config.roles = roles
+    // ручная цена текущей модели (ADR-016): USD за 1M токенов, приоритет выше каталогов
+    const inPrice = parseFloat(priceIn.replace(',', '.'))
+    const outPrice = parseFloat(priceOut.replace(',', '.'))
+    const key = isZai ? 'z-ai-sdk' : model.trim().toLowerCase()
+    if (key && ((Number.isFinite(inPrice) && inPrice > 0) || (Number.isFinite(outPrice) && outPrice > 0))) {
+      config.pricing = {
+        models: {
+          [key]: {
+            ...(Number.isFinite(inPrice) && inPrice > 0 ? { inputPer1M: inPrice } : {}),
+            ...(Number.isFinite(outPrice) && outPrice > 0 ? { outputPer1M: outPrice } : {}),
+          },
+        },
+      }
+    }
     return config
+  }
+
+  const refreshPricing = () => {
+    if (pricingRefreshing) return
+    setPricingRefreshing(true)
+    const s = getSocket()
+    const done = () => {
+      s.off('pricing:refresh:result', done)
+      setPricingRefreshing(false)
+    }
+    s.once('pricing:refresh:result', done)
+    // страховка от потерянного ответа — снимаем спиннер через 20 с
+    setTimeout(done, 20_000)
+    s.emit('pricing:refresh')
   }
 
   const testConnection = () => {
@@ -197,6 +296,7 @@ export function SettingsModal() {
           </div>
 
           {isZai ? (
+            <>
             <div className="flex items-start gap-2.5 rounded-lg border border-teal-500/30 bg-teal-500/10 p-3.5 text-xs leading-relaxed text-teal-900 dark:text-teal-100">
               <Cpu className="mt-0.5 size-4 shrink-0" />
               <span>
@@ -205,6 +305,15 @@ export function SettingsModal() {
                 эндпоинт).
               </span>
             </div>
+            {/* Цена z-ai SDK (ADR-016): у встроенного провайдера нет публичного прайса — можно задать вручную */}
+            <PriceFields
+              label="Цена z-ai SDK за 1M токенов, $"
+              priceIn={priceIn}
+              priceOut={priceOut}
+              onChange={(k, v) => setField(k, v)}
+              hint="У встроенного провайдера нет публичного прайса — задайте свою цену, чтобы видеть стоимость прогонов"
+            />
+            </>
           ) : (
             <>
               <div className="space-y-2">
@@ -237,6 +346,15 @@ export function SettingsModal() {
                   spellCheck={false}
                 />
               </div>
+
+              {/* Ручная цена модели (ADR-016): USD за 1M токенов; пусто — прайс из каталогов */}
+              <PriceFields
+                label="Цена модели за 1M токенов, $"
+                priceIn={priceIn}
+                priceOut={priceOut}
+                onChange={(k, v) => setField(k, v)}
+                hint="Пусто — цена подтягивается с OpenRouter / из каталога LiteLLM; вручную — приоритет выше (z-ai, Ollama, свой тариф)"
+              />
 
               <div className="space-y-2">
                 <Label htmlFor="llm-key" className="flex items-center gap-1.5">
@@ -321,6 +439,56 @@ export function SettingsModal() {
               ))}
             </CollapsibleContent>
           </Collapsible>
+
+          {/* ─── Прайсинг моделей (ADR-016): источники динамических цен ─── */}
+          <div className="space-y-2.5 rounded-lg border border-zinc-200 dark:border-zinc-800 p-3.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <DollarSign className="size-4 shrink-0 text-teal-500 dark:text-teal-400" />
+              <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">Прайсинг моделей (динамический)</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={refreshPricing}
+                disabled={pricingRefreshing || pricingStatus?.disabled}
+                className="ml-auto h-7 gap-1.5"
+              >
+                {pricingRefreshing ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+                {pricingRefreshing ? 'Обновляю…' : 'Обновить прайсы'}
+              </Button>
+            </div>
+            {pricingStatus?.disabled ? (
+              <p className="text-[11px] leading-relaxed text-zinc-500">
+                Сетевые источники выключены (TACG_PRICING_DISABLED=1) — стоимость считается только по ценам, заданным
+                вручную.
+              </p>
+            ) : (
+              <div className="space-y-1">
+                {(pricingStatus?.sources ?? []).map((s) => (
+                  <div key={s.id} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs tabular-nums">
+                    <span
+                      className={cn(
+                        'inline-flex items-center gap-1',
+                        s.ok === false ? 'text-red-600 dark:text-red-400' : 'text-zinc-700 dark:text-zinc-300'
+                      )}
+                    >
+                      {s.ok === false && <AlertTriangle className="size-3 shrink-0" />}
+                      {s.label}:
+                    </span>
+                    <span className="text-zinc-500">
+                      {s.models} моделей
+                      {s.fetchedAt ? ` · обновлён ${new Date(s.fetchedAt).toLocaleString('ru-RU')}` : ''}
+                      {s.ok === false ? ` · ${s.error ?? 'недоступен'}` : ''}
+                    </span>
+                  </div>
+                ))}
+                <p className="pt-0.5 text-[11px] leading-relaxed text-zinc-500">
+                  Цены подтягиваются с провайдеров в рантайме (не захардкожены), кэшируются на диске, обновление — при
+                  старте и раз в {pricingStatus?.ttlHours ?? 24} ч. Стоимость в тулбаре, инспекторе и отчётах — оценка
+                  (≈) по этим ценам.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* ─── Подвал ─── */}

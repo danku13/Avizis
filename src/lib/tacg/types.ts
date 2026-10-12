@@ -57,18 +57,24 @@ export interface LlmProviderInfo {
   model: string
 }
 
-/** Затраты токенов LLM-вызовов одного узла (ADR-015) */
+/** Затраты LLM-вызовов одного узла (ADR-015): токены + стоимость (ADR-016) */
 export interface NodeUsage {
   input: number
   output: number
+  /** Оценка стоимости вызовов узла в USD (динамический прайсинг; нет цены — нет поля) */
+  costUsd?: number
 }
 
-/** Сводка использования токенов по запуску (ADR-015): totals + разбивка по ролям движка */
+/** Сводка использования LLM по запуску (ADR-015/016): токены + стоимость */
 export interface RunUsage {
   inputTokens: number
   outputTokens: number
   calls: number
-  byRole: Record<string, { inputTokens: number; outputTokens: number; calls: number }>
+  /** Оценка суммарной стоимости в USD (динамический прайсинг) */
+  costUsd?: number
+  /** Вызовы без известной цены модели (стоимость не оценена) */
+  unpricedCalls?: number
+  byRole: Record<string, { inputTokens: number; outputTokens: number; calls: number; costUsd?: number }>
 }
 
 /** Форматирование числа токенов: 940 → «940», 1200 → «1,2k» */
@@ -77,7 +83,41 @@ export const fmtTokens = (n: number): string => {
   return String(n)
 }
 
-/** Публичная (маскированная) конфигурация провайдера — apiKey здесь всегда маска */
+/** Формат суммы USD: $123 / $1,23 / $0,0123 / $0,00045 — 3 значащих цифры до $1 (как fmtUsd движка) */
+export const fmtUsd = (v: number): string => {
+  if (!Number.isFinite(v) || v <= 0) return '$0'
+  let s: string
+  if (v >= 100) s = v.toFixed(0)
+  else if (v >= 1) s = v.toFixed(2)
+  else s = String(parseFloat(v.toPrecision(3)))
+  return '$' + s.replace('.', ',')
+}
+
+/** Человекочитаемый источник прайса (ADR-016) */
+export const PRICE_SOURCE_LABELS: Record<string, string> = {
+  manual: 'вручную (конфиг)',
+  openrouter: 'OpenRouter',
+  litellm: 'каталог LiteLLM',
+}
+
+/** Статус одного источника прайсов (для блока в настройках) */
+export interface PricingSourceStatus {
+  id: 'manual' | 'openrouter' | 'litellm'
+  label: string
+  models: number
+  fetchedAt?: number
+  ok?: boolean
+  error?: string
+}
+
+/** Статус динамического прайсинга с сервера (socket 'pricing:status') */
+export interface PricingStatus {
+  sources: PricingSourceStatus[]
+  ttlHours: number
+  disabled: boolean
+}
+
+/** Публичная (маскированная) конфигурация LLM: apiKey здесь всегда маска */
 export interface LlmProviderConfigPublic {
   adapter: string
   baseUrl?: string
@@ -87,10 +127,16 @@ export interface LlmProviderConfigPublic {
   temperature?: number
 }
 
-/** Публичная конфигурация LLM: дефолт + per-role переопределения */
+/** Ручные цены моделей из конфига (USD за 1M токенов; не секретны) */
+export interface PricingOverridesPublic {
+  models?: Record<string, { inputPer1M?: number; outputPer1M?: number }>
+}
+
+/** Публичная конфигурация LLM: дефолт + per-role переопределения + прайсинг */
 export interface LlmConfigPublic {
   default?: LlmProviderConfigPublic
   roles?: Partial<Record<LlmRole, Partial<LlmProviderConfigPublic>>>
+  pricing?: PricingOverridesPublic
 }
 
 export const LLM_ROLE_LABELS: Record<string, string> = {
@@ -172,8 +218,21 @@ export type RunEvent =
   | { type: 'decision:mode'; ts: number; mode: DecisionMode }
   /** Агент переоценил «понимание задачи» (насколько узкий вектор решения) */
   | { type: 'run:certainty'; ts: number; certainty: number; note?: string }
-  /** Аудит токенов (ADR-015): один успешный LLM-вызов; nodeId — атрибуция узлу */
-  | { type: 'llm:usage'; ts: number; role: string; nodeId?: string; inputTokens: number; outputTokens: number }
+  /** Аудит токенов и стоимости (ADR-015/016): один успешный LLM-вызов; nodeId — атрибуция узлу.
+   *  adapter/model — provenance; costUsd — оценка по динамическому прайсу (нет цены — нет поля) */
+  | {
+      type: 'llm:usage'
+      ts: number
+      role: string
+      nodeId?: string
+      inputTokens: number
+      outputTokens: number
+      adapter?: string
+      model?: string
+      costUsd?: number
+      /** 'manual' | 'openrouter' | 'litellm' — источник прайса */
+      priceSource?: string
+    }
 
 export interface RunSnapshot {
   id: string

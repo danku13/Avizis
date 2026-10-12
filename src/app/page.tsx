@@ -149,6 +149,29 @@ export default function Home() {
           useTacgStore.getState().setLlmStatus({ ok: !!data?.ok, error: data?.error, latencyMs: data?.latencyMs })
         },
       ],
+      // ─── Динамический прайсинг (ADR-016): статус источников и результат обновления ───
+      [
+        'pricing:status',
+        (data: any) => {
+          useTacgStore.getState().setPricingStatus(data ?? null)
+        },
+      ],
+      [
+        'pricing:refresh:result',
+        (data: any) => {
+          import('sonner').then(({ toast }) => {
+            if (data?.ok) {
+              toast.success('Прайсы моделей обновлены', {
+                description: 'Стоимость новых вызовов считается по свежим ценам',
+              })
+            } else {
+              toast.error('Не удалось обновить прайсы', {
+                description: data?.error || 'Сетевые источники недоступны — работает кэш',
+              })
+            }
+          })
+        },
+      ],
     ]
     handlers.forEach(([ev, fn]) => s.on(ev, fn))
     if (s.connected) {
@@ -249,7 +272,7 @@ export default function Home() {
         {/* ─── Подвал ─── */}
         <footer className="mt-auto shrink-0 border-t border-zinc-200/80 bg-white/80 dark:border-zinc-800/80 dark:bg-zinc-950/80">
           <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5 text-xs text-zinc-500">
-            <span>TACG Prototype v0.8 · прототип для тестирования концепции</span>
+            <span>TACG Prototype v0.9 · прототип для тестирования концепции</span>
             <span className="hidden sm:inline">·</span>
             <span className="hidden sm:inline">Движок: socket.io мини-сервис + z-ai-web-dev-sdk (LLM)</span>
             <span className="hidden md:inline">·</span>

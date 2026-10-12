@@ -8,7 +8,18 @@ import { Progress } from '@/components/ui/progress'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { RunStatusBadge, ModeBadge } from './status-badge'
 import { findOfferedDecision, foldEvents, versionMarkers } from '@/lib/tacg/fold'
-import { chosenIds, certaintyLabel, DECISION_DOMAIN_LABELS, DecisionMode, fmtTokens, LLM_ROLE_LABELS, LlmProviderInfo, selectionMode } from '@/lib/tacg/types'
+import {
+  chosenIds,
+  certaintyLabel,
+  DECISION_DOMAIN_LABELS,
+  DecisionMode,
+  fmtTokens,
+  fmtUsd,
+  LLM_ROLE_LABELS,
+  LlmProviderInfo,
+  PRICE_SOURCE_LABELS,
+  selectionMode,
+} from '@/lib/tacg/types'
 import { getSocket } from '@/lib/tacg/socket'
 import { useTacgStore } from '@/store/tacg-store'
 import { toast } from 'sonner'
@@ -98,6 +109,7 @@ export function RunToolbar() {
       lines.push(
         `- **Токены LLM:** ↑ ${view.usage.inputTokens} / ↓ ${view.usage.outputTokens} (${view.usage.calls} вызов.)`
       )
+      if (view.usage.costUsd) lines.push(`- **Стоимость LLM:** ≈ ${fmtUsd(view.usage.costUsd)} (динамический прайсинг)`)
     }
     lines.push('')
 
@@ -112,30 +124,68 @@ export function RunToolbar() {
       lines.push('')
     }
 
-    // Использование токенов (ADR-015): разбивка по ролям + итог
+    // Использование токенов и стоимости (ADR-015/016): разбивка по ролям + итог
     if (view.usage && view.usage.calls > 0) {
-      lines.push('## Использование токенов')
+      const hasCost = !!view.usage.costUsd || Object.values(view.usage.byRole).some((r) => r.costUsd)
+      lines.push('## Использование LLM: токены и стоимость')
       lines.push('')
-      lines.push('| Роль | Вызовы | Токены (вход) | Токены (выход) |')
-      lines.push('|---|---|---|---|')
+      if (hasCost) {
+        lines.push('| Роль | Вызовы | Токены (вход) | Токены (выход) | Стоимость |')
+        lines.push('|---|---|---|---|---|')
+      } else {
+        lines.push('| Роль | Вызовы | Токены (вход) | Токены (выход) |')
+        lines.push('|---|---|---|---|')
+      }
       const roles = Object.entries(view.usage.byRole).sort((a, b) => b[1].calls - a[1].calls)
       roles.forEach(([role, u]) => {
-        lines.push(`| ${LLM_ROLE_LABELS[role] ?? role} | ${u.calls} | ↑ ${u.inputTokens} | ↓ ${u.outputTokens} |`)
+        const base = `| ${LLM_ROLE_LABELS[role] ?? role} | ${u.calls} | ↑ ${u.inputTokens} | ↓ ${u.outputTokens}`
+        lines.push(hasCost ? `${base} | ${u.costUsd ? `≈ ${fmtUsd(u.costUsd)}` : '—'} |` : `${base} |`)
       })
-      lines.push(`| **Итого** | **${view.usage.calls}** | **↑ ${view.usage.inputTokens}** | **↓ ${view.usage.outputTokens}** |`)
+      const total = `| **Итого** | **${view.usage.calls}** | **↑ ${view.usage.inputTokens}** | **↓ ${view.usage.outputTokens}**`
+      lines.push(hasCost ? `${total} | **${view.usage.costUsd ? `≈ ${fmtUsd(view.usage.costUsd)}` : '—'}** |` : `${total} |`)
       lines.push('')
+
+      // Provenance прайсов (ADR-016): источник и свежесть — обязательная часть аудита
+      const pricingStatus = useTacgStore.getState().pricingStatus
+      const netSources = (pricingStatus?.sources ?? []).filter((s) => s.id !== 'manual')
+      if (hasCost || netSources.length) {
+        lines.push('Прайсинг (динамический, без захардкоженных цен):')
+        netSources.forEach((s) => {
+          const when = s.fetchedAt ? new Date(s.fetchedAt).toLocaleString('ru-RU') : '—'
+          lines.push(
+            `- ${s.label}: ${s.models} моделей, обновлён ${when}${s.ok === false ? ` (последнее обновление не удалось: ${s.error ?? 'сетевая ошибка'})` : ''}`
+          )
+        })
+        const manual = pricingStatus?.sources.find((s) => s.id === 'manual')
+        if (manual?.models) lines.push(`- вручную (конфиг): ${manual.models} переопределённых цен`)
+        if (view.usage.unpricedCalls) {
+          lines.push(
+            `- без оценки: ${view.usage.unpricedCalls} вызов. — цена модели неизвестна ни одному источнику`
+          )
+        }
+        lines.push('')
+      }
     }
 
     lines.push('## Граф вычислений')
     lines.push('')
-    lines.push('| # | Шаг | Статус | Зависимости | Длительность | Токены ↑/↓ | Добавлен |')
-    lines.push('|---|-----|--------|-------------|--------------|------------|----------|')
+    const nodesHaveCost = view.nodes.some((n) => n.usage?.costUsd)
+    if (nodesHaveCost) {
+      lines.push('| # | Шаг | Статус | Зависимости | Длительность | Токены ↑/↓ | Стоимость | Добавлен |')
+      lines.push('|---|-----|--------|-------------|--------------|------------|-----------|----------|')
+    } else {
+      lines.push('| # | Шаг | Статус | Зависимости | Длительность | Токены ↑/↓ | Добавлен |')
+      lines.push('|---|-----|--------|-------------|--------------|------------|----------|')
+    }
     view.nodes.forEach((n, i) => {
       const dur = n.durationMs ? `${(n.durationMs / 1000).toFixed(1)} с` : '—'
       const tokens = n.usage ? `↑ ${n.usage.input} / ↓ ${n.usage.output}` : '—'
       const added = n.dynamic ? `динамически (v${n.addedAtVersion})` : 'план (v1)'
+      const base = `| ${i + 1} | ${n.title} | ${n.status} | ${n.dependsOn.join(', ') || '—'} | ${dur} | ${tokens}`
       lines.push(
-        `| ${i + 1} | ${n.title} | ${n.status} | ${n.dependsOn.join(', ') || '—'} | ${dur} | ${tokens} | ${added} |`
+        nodesHaveCost
+          ? `${base} | ${n.usage?.costUsd ? `≈ ${fmtUsd(n.usage.costUsd)}` : '—'} | ${added} |`
+          : `${base} | ${added} |`
       )
     })
     lines.push('')
@@ -352,24 +402,24 @@ export function RunToolbar() {
           </span>
         )}
 
-        {/* ─── Аудит токенов (ADR-015): счётчики запуска, live и replay ─── */}
+        {/* ─── Аудит токенов и стоимости (ADR-015/016): счётчики запуска, live и replay ─── */}
         {view.usage && view.usage.calls > 0 && (
           <Tooltip>
             <TooltipTrigger asChild>
               <span
                 role="status"
-                aria-label={`Токены LLM: вход ${view.usage.inputTokens}, выход ${view.usage.outputTokens}, вызовов ${view.usage.calls}`}
+                aria-label={`Токены LLM: вход ${view.usage.inputTokens}, выход ${view.usage.outputTokens}, вызовов ${view.usage.calls}${view.usage.costUsd ? `, оценка стоимости ${fmtUsd(view.usage.costUsd)}` : ''}`}
                 className="inline-flex items-center gap-1.5 rounded-md border border-zinc-300 bg-white/70 px-2 py-0.5 text-xs font-medium tabular-nums text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-200"
               >
                 <Coins className="size-3.5 shrink-0 text-teal-500 dark:text-teal-400" />
                 <span className="whitespace-nowrap">
                   ↑ {fmtTokens(view.usage.inputTokens)} · ↓ {fmtTokens(view.usage.outputTokens)} ·{' '}
-                  {view.usage.calls} вызов.
+                  {view.usage.calls} вызов.{view.usage.costUsd ? ` · ≈${fmtUsd(view.usage.costUsd)}` : ''}
                 </span>
               </span>
             </TooltipTrigger>
             <TooltipContent side="bottom" className="max-w-xs">
-              <p className="font-semibold">Использование токенов LLM</p>
+              <p className="font-semibold">Использование LLM: токены и стоимость</p>
               <div className="mt-1.5 space-y-0.5">
                 {Object.entries(view.usage.byRole)
                   .sort((a, b) => b[1].calls - a[1].calls)
@@ -378,16 +428,27 @@ export function RunToolbar() {
                       <span>{LLM_ROLE_LABELS[role] ?? role}</span>
                       <span>
                         ↑ {u.inputTokens} / ↓ {u.outputTokens} · {u.calls} вызов.
+                        {u.costUsd ? ` · ≈${fmtUsd(u.costUsd)}` : ''}
                       </span>
                     </p>
                   ))}
               </div>
               <p className="mt-1.5 border-t border-border pt-1.5 text-xs font-semibold tabular-nums">
                 Итого: ↑ {view.usage.inputTokens} / ↓ {view.usage.outputTokens} · {view.usage.calls} вызовов
+                {view.usage.costUsd ? ` · ≈${fmtUsd(view.usage.costUsd)}` : ''}
               </p>
-              <p className="mt-1 text-[11px] leading-relaxed opacity-80">
-                Данные провайдера (вход/выход) по каждому LLM-вызову; шаги — в инспекторе узлов, детализация — в MD-отчёте
-              </p>
+              {view.usage.costUsd ? (
+                <p className="mt-1 text-[11px] leading-relaxed opacity-80">
+                  Оценка в USD по динамическому прайсу ({Object.values(PRICE_SOURCE_LABELS).join(' / ')}); цены
+                  подтягиваются с провайдеров, шаги — в инспекторе узлов, детализация — в MD-отчёте
+                </p>
+              ) : (
+                <p className="mt-1 text-[11px] leading-relaxed opacity-80">
+                  Стоимость не оценена — цена модели неизвестна источникам прайса
+                  {view.usage.unpricedCalls ? ` (${view.usage.unpricedCalls} вызов.)` : ''}; токены — данные
+                  провайдера, шаги — в инспекторе, детализация — в MD-отчёте
+                </p>
+              )}
             </TooltipContent>
           </Tooltip>
         )}

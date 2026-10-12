@@ -20,6 +20,8 @@
 | 013 | [ADR-013-truncation-audit.md](./ADR-013-truncation-audit.md) | Аудит усечений структурных лимитов (конец «тихим потерям») | CR-008 |
 | 014 | [ADR-014-computable-certainty.md](./ADR-014-computable-certainty.md) | **задел**: вычислимая метрика понимания из состояния графа | — |
 | 015 | [ADR-015-token-usage.md](./ADR-015-token-usage.md) | Аудит использования токенов через событийный поток (llm:usage) | CR-009 |
+| 016 | [ADR-016-dynamic-pricing-cost-audit.md](./ADR-016-dynamic-pricing-cost-audit.md) | Динамический прайсинг (OpenRouter/LiteLLM/manual) и аудит стоимости в USD | CR-011 |
+| 017 | [ADR-017-single-file-executable.md](./ADR-017-single-file-executable.md) | Упаковка в однофайловые исполняемые файлы: bun compile, портативные данные, уровни | CR-011 |
 | — | [tech-stack.md](./tech-stack.md) | Сводка технологического стека | — |
 
 ## Правила ведения

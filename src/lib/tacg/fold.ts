@@ -42,21 +42,26 @@ export function foldEvents(events: RunEvent[], base?: { llm?: Record<string, Llm
         certainty = ev.certainty
         break
       case 'llm:usage': {
-        // Аудит токенов (ADR-015): копим сводку и атрибутируем узлу (в replay — до курсора)
+        // Аудит токенов и стоимости (ADR-015/016): копим сводку и атрибутируем узлу
+        // (в replay — до курсора); costUsd считается движком по динамическому прайсу
         usage ??= { inputTokens: 0, outputTokens: 0, calls: 0, byRole: {} }
         usage.inputTokens += ev.inputTokens
         usage.outputTokens += ev.outputTokens
         usage.calls += 1
+        if (ev.costUsd != null) usage.costUsd = (usage.costUsd ?? 0) + ev.costUsd
+        else usage.unpricedCalls = (usage.unpricedCalls ?? 0) + 1
         const r = (usage.byRole[ev.role] ??= { inputTokens: 0, outputTokens: 0, calls: 0 })
         r.inputTokens += ev.inputTokens
         r.outputTokens += ev.outputTokens
         r.calls += 1
+        if (ev.costUsd != null) r.costUsd = (r.costUsd ?? 0) + ev.costUsd
         if (ev.nodeId) {
           const n = nodes.get(ev.nodeId)
           if (n) {
             const u = (n.usage ??= { input: 0, output: 0 })
             u.input += ev.inputTokens
             u.output += ev.outputTokens
+            if (ev.costUsd != null) u.costUsd = (u.costUsd ?? 0) + ev.costUsd
           }
         }
         break

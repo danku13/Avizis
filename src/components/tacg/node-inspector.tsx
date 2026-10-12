@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { NodeStatusBadge } from './status-badge'
-import { chosenIds, DECISION_DOMAIN_LABELS, GraphNode, RunEvent, selectionMode } from '@/lib/tacg/types'
+import { chosenIds, DECISION_DOMAIN_LABELS, fmtUsd, GraphNode, RunEvent, selectionMode } from '@/lib/tacg/types'
 import { getSocket } from '@/lib/tacg/socket'
 import { useTacgStore } from '@/store/tacg-store'
 import { toast } from 'sonner'
@@ -324,11 +324,17 @@ export function NodeInspectorModal() {
                     <GitBranch className="size-3.5" />
                     Зависимостей: {node.dependsOn.length}
                   </div>
-                  {/* Аудит токенов (ADR-015): затраты LLM-вызовов этого узла (исполнитель/решатель) */}
+                  {/* Аудит токенов и стоимости (ADR-015/016): затраты LLM-вызовов узла (исполнитель/решатель) */}
                   {node.usage && (node.usage.input > 0 || node.usage.output > 0) && (
-                    <div className="col-span-2 flex items-center gap-1.5 tabular-nums" title="Токены LLM-вызовов узла: вход/выход (данные провайдера, повторные запуски суммируются)">
+                    <div
+                      className="col-span-2 flex items-center gap-1.5 tabular-nums"
+                      title="Токены LLM-вызовов узла: вход/выход (данные провайдера, повторные запуски суммируются); стоимость — оценка по динамическому прайсу"
+                    >
                       <Coins className="size-3.5 text-teal-500 dark:text-teal-400" />
                       Токены: ↑ {node.usage.input.toLocaleString('ru-RU')} · ↓ {node.usage.output.toLocaleString('ru-RU')}
+                      {node.usage.costUsd ? (
+                        <span className="font-medium text-teal-600 dark:text-teal-300">· ≈{fmtUsd(node.usage.costUsd)}</span>
+                      ) : null}
                     </div>
                   )}
                 </div>

@@ -3,6 +3,7 @@
 // chmod 600) и никогда не попадают в runs.json/снапшоты/события/логи.
 import fs from 'node:fs'
 import path from 'node:path'
+import { DATA_DIR } from './data-dir'
 import type { LlmAdapterId, LlmRole } from './llm'
 import type { LlmProviderInfo } from './types'
 
@@ -15,14 +16,15 @@ export interface LlmProviderConfig {
   temperature?: number
 }
 
-/** Полная конфигурация: дефолт + per-role переопределения */
+/** Полная конфигурация: дефолт + per-role переопределения + ручной прайсинг (ADR-016) */
 export interface LlmConfig {
   default?: LlmProviderConfig
   roles?: Partial<Record<LlmRole, Partial<LlmProviderConfig>>>
+  /** Ручные цены моделей (USD за 1M токенов): приоритет выше сетевых каталогов */
+  pricing?: { models?: Record<string, { inputPer1M?: number; outputPer1M?: number }> }
 }
 
-// (import.meta as any).dir — Bun-API, cast чтобы не добавлять новую ошибку tsc
-const DATA_DIR = path.join((import.meta as any).dir as string, 'data')
+// Портативный каталог данных (ADR-017): data/ рядом с exe в скомпилированном бинарнике
 const FILE = path.join(DATA_DIR, 'llm-config.json')
 
 export const LLM_ROLES: LlmRole[] = ['planner', 'executor', 'supervisor', 'decider']
@@ -58,10 +60,24 @@ export function looksLikeMask(v?: string): boolean {
   return !!v && (v.includes('…') || v.includes('•'))
 }
 
+/** Прайс модели в USD за 1M токенов (руками в конфиге — для моделей вне каталогов) */
+const cleanPrice = (v: any): number | undefined => {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return undefined
+  return Math.min(10_000, Math.max(0, v))
+}
+
+const PRICING_LABELS: Record<string, string> = { manual: 'вручную (конфиг)', openrouter: 'OpenRouter', litellm: 'каталог LiteLLM' }
+
+/** Человекочитаемое имя источника прайса */
+export function priceSourceLabel(source: string): string {
+  return PRICING_LABELS[source] ?? source
+}
+
 /**
  * Санитайз входа конфигурации (socket API): adapter из белого списка, строки
  * триммируются и урезаются (baseUrl ≤ 300, model ≤ 100, apiKey ≤ 400),
- * roles — только валидные ключи ролей.
+ * roles — только валидные ключи ролей; pricing.models — ≤ 50 моделей,
+ * цены — числа 0..10000 USD за 1M токенов.
  */
 export function sanitizeConfigInput(raw: any): LlmConfig | null {
   if (!raw || typeof raw !== 'object') return null
@@ -108,6 +124,19 @@ export function sanitizeConfigInput(raw: any): LlmConfig | null {
     }
     if (Object.keys(roles).length) out.roles = roles
   }
+  // Ручной прайсинг (ADR-016): только конечный объект с валидными числами
+  if (raw.pricing && typeof raw.pricing === 'object' && raw.pricing.models && typeof raw.pricing.models === 'object') {
+    const models: NonNullable<LlmConfig['pricing']>['models'] = {}
+    for (const [k, v] of Object.entries(raw.pricing.models as Record<string, any>).slice(0, 50)) {
+      const key = String(k).trim().toLowerCase().slice(0, 100)
+      if (!key || typeof v !== 'object' || v === null) continue
+      const inputPer1M = cleanPrice(v.inputPer1M)
+      const outputPer1M = cleanPrice(v.outputPer1M)
+      if (inputPer1M === undefined && outputPer1M === undefined) continue
+      models[key] = { inputPer1M, outputPer1M }
+    }
+    out.pricing = { models }
+  }
   return out
 }
 
@@ -116,6 +145,8 @@ export function sanitizeConfigInput(raw: any): LlmConfig | null {
  * от прежнего провайдера, только если провайдер не сменился (тот же adapter и baseUrl)
  * и ключ реально используется (openai-compatible) — пользователь не перепечатывает
  * ключ при каждой правке модели; смена провайдера или переход на zai ключ сбрасывает.
+ * Прайсинг: per-key merge — вход перекрывает сохранённые цены поимённо, остальное живёт
+ * (в UI редактируется цена только текущей модели; удаление записи — правкой файла).
  */
 export function mergeSavedApiKey(incoming: LlmConfig, saved: LlmConfig): LlmConfig {
   const sameProvider = (a?: Partial<LlmProviderConfig>, b?: Partial<LlmProviderConfig>): boolean =>
@@ -149,6 +180,10 @@ export function mergeSavedApiKey(incoming: LlmConfig, saved: LlmConfig): LlmConf
       roles[role] = entry
     }
     merged.roles = roles
+  }
+  if (incoming.pricing?.models || saved.pricing?.models) {
+    const models = { ...(saved.pricing?.models ?? {}), ...(incoming.pricing?.models ?? {}) }
+    if (Object.keys(models).length) merged.pricing = { models }
   }
   return merged
 }
@@ -238,6 +273,8 @@ export function publicConfig(cfg: LlmConfig): Record<string, any> {
     }
     if (Object.keys(roles).length) out.roles = roles
   }
+  // прайсинг не секретен — отдаём как есть (для префилла полей цены в настройках)
+  if (cfg.pricing?.models && Object.keys(cfg.pricing.models).length) out.pricing = cfg.pricing
   return out
 }
 

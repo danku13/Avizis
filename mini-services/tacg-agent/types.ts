@@ -55,18 +55,24 @@ export interface LlmProviderInfo {
   model: string
 }
 
-/** Затраты токенов LLM-вызовов одного узла (исполнитель/решатель, с повторами) */
+/** Затраты LLM-вызовов одного узла: токены (ADR-015) + стоимость в USD (ADR-016) */
 export interface NodeUsage {
   input: number
   output: number
+  /** Оценка стоимости вызовов узла в USD (динамический прайсинг; отсутствует — цена модели неизвестна) */
+  costUsd?: number
 }
 
-/** Сводка использования токенов по запуску (ADR-015): totals + разбивка по ролям движка */
+/** Сводка использования LLM по запуску: токены (ADR-015) + стоимость (ADR-016) */
 export interface RunUsage {
   inputTokens: number
   outputTokens: number
   calls: number
-  byRole: Record<string, { inputTokens: number; outputTokens: number; calls: number }>
+  /** Оценка суммарной стоимости в USD (динамический прайсинг ADR-016) */
+  costUsd?: number
+  /** Вызовы без известной цены модели (стоимость не оценена) */
+  unpricedCalls?: number
+  byRole: Record<string, { inputTokens: number; outputTokens: number; calls: number; costUsd?: number }>
 }
 
 export interface GraphNode {
@@ -149,8 +155,21 @@ export type RunEvent =
   | { type: 'decision:mode'; ts: number; mode: DecisionMode }
   /** Агент переоценил «понимание задачи» (насколько узкий вектор решения) */
   | { type: 'run:certainty'; ts: number; certainty: number; note?: string }
-  /** Аудит токенов (ADR-015): один успешный LLM-вызов; nodeId — атрибуция узлу */
-  | { type: 'llm:usage'; ts: number; role: string; nodeId?: string; inputTokens: number; outputTokens: number }
+  /** Аудит токенов и стоимости (ADR-015/016): один успешный LLM-вызов; nodeId — атрибуция узлу.
+   *  adapter/model — provenance вызова; costUsd — оценка по динамическому прайсу (нет цены — нет поля) */
+  | {
+      type: 'llm:usage'
+      ts: number
+      role: string
+      nodeId?: string
+      inputTokens: number
+      outputTokens: number
+      adapter?: string
+      model?: string
+      costUsd?: number
+      /** 'manual' | 'openrouter' | 'litellm' — источник прайса стоимости */
+      priceSource?: string
+    }
 
 export interface RunSnapshot {
   id: string

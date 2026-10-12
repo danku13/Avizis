@@ -60,3 +60,7 @@ mini-services/tacg-agent/data/llm-config.json
 
 # Служебные артефакты инструментальных вызовов
 /tool-results/
+# TACG: дисковый кэш динамического прайсинга (генерируется в рантайме)
+mini-services/tacg-agent/data/pricing-cache.json
+# TACG: собранные исполняемые файлы (bun build --compile)
+mini-services/tacg-agent/dist/

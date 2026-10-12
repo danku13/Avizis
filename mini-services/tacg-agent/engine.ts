@@ -17,8 +17,9 @@ import {
   detectDemoScenario,
   sleep,
 } from './demo'
-import { chatJsonDetailed, chatTextDetailed, getZai, LlmUsage } from './llm'
+import { chatJsonDetailed, chatTextDetailed, getZai, LlmRole, LlmUsage } from './llm'
 import { loadConfig, providerInfoOf, resolveRole } from './llm-config'
+import { pricing } from './pricing'
 import { sanitizePlanData } from './plan-sanitizer'
 import { store } from './store'
 
@@ -28,10 +29,22 @@ const trunc = (s: string, n: number) => (s && s.length > n ? s.slice(0, n - 1) +
 /** Формат числа токенов для журнала/итога: 940 → «940», 1200 → «1,2k» */
 const fmtK = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1).replace('.', ',')}k` : String(n))
 
-/** Хвост «· токены: ↑N / ↓M» для записей журнала (только если провайдер сообщил usage) */
-const usageNote = (u: LlmUsage | undefined) =>
+/** Формат суммы USD: $123 / $1,23 / $0,0123 / $0,00045 — 3 значащих цифры до $1 */
+export const fmtUsd = (v: number): string => {
+  if (!Number.isFinite(v) || v <= 0) return '$0'
+  let s: string
+  if (v >= 100) s = v.toFixed(0)
+  else if (v >= 1) s = v.toFixed(2)
+  else s = String(parseFloat(v.toPrecision(3)))
+  return '$' + s.replace('.', ',')
+}
+
+/** Хвост «· токены: ↑N / ↓M · ≈$X» для записей журнала (только если провайдер сообщил usage) */
+const usageNote = (u: LlmUsage | undefined, costUsd?: number | null) =>
   u && ((u.promptTokens ?? 0) > 0 || (u.completionTokens ?? 0) > 0)
-    ? ` · токены: ↑${fmtK(u.promptTokens ?? 0)} / ↓${fmtK(u.completionTokens ?? 0)}`
+    ? ` · токены: ↑${fmtK(u.promptTokens ?? 0)} / ↓${fmtK(u.completionTokens ?? 0)}${
+        typeof costUsd === 'number' && costUsd > 0 ? ` · ≈${fmtUsd(costUsd)}` : ''
+      }`
     : ''
 
 export class StoppedError extends Error {
@@ -112,14 +125,18 @@ export class AgentEngine {
     }
   }
 
-  /** Аудит токенов (ADR-015): сводка снапшота + событие llm:usage; nodeId — атрибуция узлу.
-   *  Событие сворачивается fold'ом на фронтенде — счётчики видны и в replay. */
-  private addUsage(rt: Runtime, role: string, usage: LlmUsage | undefined, nodeId?: string) {
-    if (!usage) return
+  /** Аудит токенов и стоимости (ADR-015/016): сводка снапшота + событие llm:usage;
+   *  nodeId — атрибуция узлу. Событие сворачивается fold'ом на фронтенде — счётчики
+   *  и стоимость видны и в replay. Возвращает стоимость вызова в USD (null — прайса нет). */
+  private addUsage(rt: Runtime, role: string, usage: LlmUsage | undefined, nodeId?: string): number | null {
+    if (!usage) return null
     const input = usage.promptTokens ?? 0
     const output = usage.completionTokens ?? 0
-    if (!input && !output) return
+    if (!input && !output) return null
     const run = rt.snapshot
+    // provenance вызова (live-резолв роли): модель → динамический прайс (ADR-016)
+    const info = providerInfoOf(resolveRole(role as LlmRole, loadConfig()))
+    const priced = pricing.costFor(info.model, input, output)
     if (!run.usage) run.usage = { inputTokens: 0, outputTokens: 0, calls: 0, byRole: {} }
     run.usage.inputTokens += input
     run.usage.outputTokens += output
@@ -128,15 +145,33 @@ export class AgentEngine {
     r.inputTokens += input
     r.outputTokens += output
     r.calls += 1
+    if (priced) {
+      run.usage.costUsd = (run.usage.costUsd ?? 0) + priced.costUsd
+      r.costUsd = (r.costUsd ?? 0) + priced.costUsd
+    } else {
+      run.usage.unpricedCalls = (run.usage.unpricedCalls ?? 0) + 1
+    }
     if (nodeId) {
       const node = run.nodes.find((n) => n.id === nodeId)
       if (node) {
         const u = (node.usage ??= { input: 0, output: 0 })
         u.input += input
         u.output += output
+        if (priced) u.costUsd = (u.costUsd ?? 0) + priced.costUsd
       }
     }
-    this.emitEvent(rt, { type: 'llm:usage', ts: now(), role, nodeId, inputTokens: input, outputTokens: output })
+    this.emitEvent(rt, {
+      type: 'llm:usage',
+      ts: now(),
+      role,
+      nodeId,
+      inputTokens: input,
+      outputTokens: output,
+      adapter: info.adapter,
+      model: info.model,
+      ...(priced ? { costUsd: priced.costUsd, priceSource: priced.price.source } : {}),
+    })
+    return priced ? priced.costUsd : null
   }
 
   // ─────────────────────────── Запуск ───────────────────────────
@@ -277,12 +312,12 @@ export class AgentEngine {
 - dependsOn ссылается только на id уже объявленных узлов. Массив nodes обязан быть закрыт перед концом объекта.`
     try {
       const { json, usage } = await chatJsonDetailed(PLANNER_SYS, user, 60_000, 2, 'planner')
-      this.addUsage(rt, 'planner', usage)
+      const planCost = this.addUsage(rt, 'planner', usage)
       const { nodes, certainty, notes } = sanitizePlanData(json)
       if (certainty !== undefined) rt.snapshot.certainty = certainty
       if (nodes) {
         const plannerInfo = providerInfoOf(resolveRole('planner', loadConfig()))
-        this.log(rt, 'plan', `Планировщик: ${plannerInfo.adapter} · ${plannerInfo.model}${usageNote(usage)}`)
+        this.log(rt, 'plan', `Планировщик: ${plannerInfo.adapter} · ${plannerInfo.model}${usageNote(usage, planCost)}`)
         // ADR-013 (аудит усечений): каждая структурная потеря плана — в журнал
         // ДО итоговой записи о построенном графе (сначала лимиты, потом итог)
         for (const note of notes) this.log(rt, 'limits', note.message)
@@ -367,12 +402,12 @@ export class AgentEngine {
           node.durationMs = node.finishedAt - (node.startedAt ?? node.finishedAt)
           // Аудит токенов (ADR-015): атрибуция исполнителя узлу ДО node:update,
           // чтобы usage попал в событие и в инспектор replay
-          this.addUsage(rt, 'executor', result.usage, node.id)
+          const stepCost = this.addUsage(rt, 'executor', result.usage, node.id)
           this.emitEvent(rt, { type: 'node:update', ts: now(), node: { ...node } })
           this.log(
             rt,
             'node-done',
-            `✓ «${node.title}» — завершён за ${((node.durationMs ?? 0) / 1000).toFixed(1)} с${usageNote(result.usage)}`
+            `✓ «${node.title}» — завершён за ${((node.durationMs ?? 0) / 1000).toFixed(1)} с${usageNote(result.usage, stepCost)}`
           )
         } catch (err: any) {
           if (err instanceof StoppedError) {
@@ -1063,7 +1098,9 @@ ${mixed ? '{"optionIds":["<id1>","<id2>"],"reasoning":"краткое, но ис
     const doneCount = run.nodes.filter((n) => n.status === 'done').length
     const u = run.usage
     const usageTotal = u
-      ? ` · токены: ↑${fmtK(u.inputTokens)} / ↓${fmtK(u.outputTokens)} (${u.calls} вызов. LLM)`
+      ? ` · токены: ↑${fmtK(u.inputTokens)} / ↓${fmtK(u.outputTokens)} (${u.calls} вызов. LLM)${
+          u.costUsd ? ` · ≈${fmtUsd(u.costUsd)}` : ''
+        }`
       : ''
     this.log(rt, 'run', `Выполнение остановлено пользователем · выполнено узлов: ${doneCount}, пропущено: ${skipped}${usageTotal}`)
     run.finishedAt = now()
@@ -1079,10 +1116,12 @@ ${mixed ? '{"optionIds":["<id1>","<id2>"],"reasoning":"краткое, но ис
     const dynamic = run.nodes.filter((n) => n.dynamic).length
     const durS = ((run.finishedAt - run.createdAt) / 1000).toFixed(1)
     const last = [...run.nodes].filter((n) => n.status === 'done').pop()
-    // Аудит токенов (ADR-015): итог запуска в summary и журнале
+    // Аудит токенов и стоимости (ADR-015/016): итог запуска в summary и журнале
     const u = run.usage
     const usageTotal = u
-      ? ` · токены: ↑${fmtK(u.inputTokens)} / ↓${fmtK(u.outputTokens)} (${u.calls} вызов. LLM)`
+      ? ` · токены: ↑${fmtK(u.inputTokens)} / ↓${fmtK(u.outputTokens)} (${u.calls} вызов. LLM)${
+          u.costUsd ? ` · ≈${fmtUsd(u.costUsd)}` : ''
+        }`
       : ''
     const summary = `Готово за ${durS} с: ${run.nodes.length} узлов, ${dynamic} добавлено динамически, версий графа — ${run.version}${usageTotal}. Итог: ${trunc(last?.output || '—', 220)}`
     run.summary = summary

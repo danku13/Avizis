@@ -4,6 +4,7 @@ import { Server } from 'socket.io'
 import { AgentEngine } from './engine'
 import { store } from './store'
 import { DecisionMode, RunMode } from './types'
+import { pricing } from './pricing'
 import {
   LlmConfig,
   loadConfig,
@@ -26,10 +27,14 @@ const io = new Server(httpServer, {
 
 const engine = new AgentEngine(io)
 
+// Динамический прайсинг (ADR-016): дисковый кэш сразу, устаревшие источники — фоном
+pricing.init()
+
 io.on('connection', (socket) => {
   console.log(`[tacg] клиент подключился: ${socket.id}`)
   socket.emit('connected', { ok: true, ts: Date.now(), service: 'tacg-agent' })
   socket.emit('history:list', { runs: store.history() })
+  socket.emit('pricing:status', pricing.status())
 
   socket.on('run:start', async (data: any) => {
     try {
@@ -146,6 +151,22 @@ io.on('connection', (socket) => {
       socket.emit('llm:config:test:result', result)
     } catch (e: any) {
       socket.emit('llm:config:test:result', { ok: false, error: e?.message || 'Ошибка проверки' })
+    }
+  })
+
+  // ─────────────────────── Динамический прайсинг (ADR-016) ───────────────────────
+
+  socket.on('pricing:get', () => {
+    socket.emit('pricing:status', pricing.status())
+  })
+
+  socket.on('pricing:refresh', async () => {
+    try {
+      const result = await pricing.refresh()
+      socket.emit('pricing:refresh:result', result)
+      io.emit('pricing:status', pricing.status())
+    } catch (e: any) {
+      socket.emit('pricing:refresh:result', { ok: false, error: e?.message || 'Ошибка обновления прайсов' })
     }
   })
 

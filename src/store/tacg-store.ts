@@ -6,6 +6,7 @@ import {
   DecisionMode,
   LlmConfigPublic,
   LlmProviderInfo,
+  PricingStatus,
   RunEvent,
   RunMeta,
   RunMode,
@@ -52,6 +53,8 @@ interface TacgStore {
   settingsOpen: boolean
   /** Provenance текущего запуска: роль → адаптер/модель (из run:created/run:snapshot) */
   runLlm: Record<string, LlmProviderInfo> | null
+  /** Динамический прайсинг (ADR-016): статус источников с сервера */
+  pricingStatus: PricingStatus | null
 
   setConnected: (v: boolean) => void
   setRuns: (runs: RunMeta[]) => void
@@ -73,6 +76,7 @@ interface TacgStore {
   setLlmStatus: (status: LlmStatusInfo | null) => void
   setLlmSaving: (v: boolean) => void
   setLlmTesting: (v: boolean) => void
+  setPricingStatus: (status: PricingStatus | null) => void
   openSettings: () => void
   closeSettings: () => void
 }
@@ -95,6 +99,7 @@ export const useTacgStore = create<TacgStore>()((set, get) => ({
   llmTesting: false,
   settingsOpen: false,
   runLlm: null,
+  pricingStatus: null,
 
   setConnected: (v) => set({ connected: v }),
 
@@ -180,6 +185,8 @@ export const useTacgStore = create<TacgStore>()((set, get) => ({
   setLlmSaving: (v) => set({ llmSaving: v }),
 
   setLlmTesting: (v) => set({ llmTesting: v }),
+
+  setPricingStatus: (status) => set({ pricingStatus: status }),
 
   openSettings: () => set({ settingsOpen: true, llmStatus: null }),
 

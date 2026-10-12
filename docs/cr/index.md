@@ -15,6 +15,7 @@
 | 008 | [CR-008-truncation-audit.md](./CR-008-truncation-audit.md) | Аудит усечений структурных лимитов | 10-b |
 | 009 | [CR-009-tokens-theme-colors.md](./CR-009-tokens-theme-colors.md) | Токены по шагам/ролям/запуску, светлая тема, разведение цветов + PRODUCT-001 | 12 |
 | 010 | [CR-010-collapsible-log-compact-header.md](./CR-010-collapsible-log-compact-header.md) | Сворачиваемый журнал (максимум графа) + компактная шапка с LLM-чипом | 13 |
+| 011 | [CR-011-pricing-cost.md](./CR-011-pricing-cost.md) | Стоимость прогонов в $ (динамический прайсинг) + однофайловые exe (ADR-017) | 14 |
 
 ## Сводка объёма изменений
 
@@ -30,6 +31,7 @@
 | CR-008 | plan-sanitizer.ts (новый, чистая функция+notes), engine.ts (логирование усечений), types.ts ×2 (kind limits), event-log.tsx, test-tacg-truncation.ts (новый) | test-tacg-truncation 31/31 (новый), decision, clarity, byok, llm-auto, E2E |
 | CR-009 | llm.ts (usage), types.ts ×2, engine.ts, fold.ts, theme.ts (новый), theme-toggle.tsx (новый), все TACG-компоненты (light-варианты, amber, токены), layout.tsx, globals.css, page.tsx, test-tacg-usage.ts (новый), docs/product/ (новый) | test-tacg-usage 13/13 (новый), byok, truncation, decision, clarity, llm-auto, E2E |
 | CR-010 | event-log.tsx (сворачиваемый контейнер, useSyncExternalStore), llm-chip.tsx (новый, из тулбара в шапку), page.tsx (компактная шапка h-11), run-toolbar.tsx (−LlmChip), theme-toggle.tsx (size-7) | E2E agent-browser (замеры высот: шапка 45px, канва +216px), clarity 17/17, decision, byok 13/13, usage 13/13, tsc = база |
+| CR-011 | pricing.ts (новый), data-dir.ts (новый), llm-config.ts (pricing.models), engine.ts (addUsage cost + хвосты), index.ts (pricing-сокеты), types.ts ×2, fold.ts, store.ts, run-toolbar/node-inspector/settings-modal.tsx, tacg-store, page.tsx, scripts/{test-tacg-pricing.ts, build-executables.sh} (новые) | test-tacg-pricing 26/26 (новый), usage 13/13, byok 13/13, truncation 31/31, clarity 17/17, decision, E2E (чип/инспектор/MD/настройки/VLM), сборка+запуск exe 4 таргета, tsc = база |
 
 ## Правила ведения
 
