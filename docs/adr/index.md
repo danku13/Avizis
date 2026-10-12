@@ -25,6 +25,7 @@
 | 018 | [ADR-018-tauri-desktop-exe.md](./ADR-018-tauri-desktop-exe.md) | Десктоп Tauri v2: единый exe с UI + движок-sidecar + CI/релиз | CR-012 |
 | 019 | [ADR-019-currency-conversion.md](./ADR-019-currency-conversion.md) | Конвертация валюты стоимости: ЦБ РФ (XML+зеркало)/er-api/ручной, USD-базис | CR-012 |
 | 020 | [ADR-020-openrouter-agentic-gate.md](./ADR-020-openrouter-agentic-gate.md) | Обход гейта OpenRouter «agentic harnesses»: retry с tools, кэш per модель, NonRetryable 4xx | CR-013 |
+| 021 | [ADR-021-github-releases-autoupdate.md](./ADR-021-github-releases-autoupdate.md) | Автообновление по GitHub Releases: свой апдейтер (zip → подмена exes → перезапуск), один путь для NSIS и portable | CR-014 |
 | — | [tech-stack.md](./tech-stack.md) | Сводка технологического стека | — |
 
 ## Правила ведения

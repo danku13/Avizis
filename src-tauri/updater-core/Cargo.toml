@@ -1,0 +1,11 @@
+[package]
+name = "updater-core"
+version = "0.1.0"
+edition = "2021"
+description = "TACG: чистая логика автообновления по GitHub Releases (версии, разбор релиза, распаковка и подмена файлов)"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# распаковка портативного zip — крейт на чистом Rust (без C-зависимостей)
+zip = "2"

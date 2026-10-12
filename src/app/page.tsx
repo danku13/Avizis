@@ -17,6 +17,7 @@ import { Timeline } from '@/components/tacg/timeline'
 import { GraphLegend } from '@/components/tacg/status-badge'
 import { ThemeToggle } from '@/components/tacg/theme-toggle'
 import { LlmChip } from '@/components/tacg/llm-chip'
+import { UpdateBadge } from '@/components/tacg/update-badge'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
@@ -313,14 +314,17 @@ export default function Home() {
           </section>
         </main>
 
-        {/* ─── Подвал ─── */}
+        {/* ─── Подвал: версия + индикатор автообновления (ADR-021) ─── */}
         <footer className="mt-auto shrink-0 border-t border-zinc-200/80 bg-white/80 dark:border-zinc-800/80 dark:bg-zinc-950/80">
           <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5 text-xs text-zinc-500">
-            <span>TACG Prototype v0.10.1 · прототип для тестирования концепции</span>
+            <span>TACG Prototype v0.11.0 · прототип для тестирования концепции</span>
             <span className="hidden sm:inline">·</span>
             <span className="hidden sm:inline">Движок: socket.io мини-сервис + z-ai-web-dev-sdk (LLM)</span>
             <span className="hidden md:inline">·</span>
             <span className="hidden md:inline">React Flow · Развилки решений · Аудит токенов и стоимости · Валюта · Светлая/тёмная тема</span>
+            <span className="ml-auto inline-flex items-center gap-2">
+              <UpdateBadge />
+            </span>
           </div>
         </footer>
 

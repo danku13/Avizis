@@ -1,6 +1,6 @@
 [package]
 name = "tacg"
-version = "0.10.1"
+version = "0.11.0"
 description = "TACG — прозрачный граф вычислений агента (десктоп-оболочка Tauri)"
 edition = "2021"
 rust-version = "1.77.2"
@@ -11,6 +11,11 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [] }
 tauri-plugin-shell = "2"
+# Автообновление по GitHub Releases (ADR-021): логика+файлы — в крейте updater-core,
+# здесь только сеть (reqwest/rustls — без системного OpenSSL) и serde-типы для IPC
+updater-core = { path = "updater-core" }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "gzip"] }
+serde = { version = "1", features = ["derive"] }
 
 [profile.release]
 strip = true

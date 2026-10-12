@@ -20,8 +20,11 @@ use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 
+mod updater;
+
 /// Хэндл процесса движка: гасим при выходе, чтобы не оставлять сирот
-struct EngineHandle(Mutex<Option<CommandChild>>);
+/// (и при обновлении — см. updater.rs, подменяющий файл сайдкара)
+pub(crate) struct EngineHandle(pub(crate) Mutex<Option<CommandChild>>);
 
 /// Свободный порт для движка (занимаем и освобождаем; движок стартует в доли секунды)
 fn free_port() -> u16 {
@@ -57,6 +60,15 @@ fn main() {
                 .expect("не удалось запустить движок-сайдкар");
             app.manage(EngineHandle(Mutex::new(Some(child))));
 
+            // Уборка бэкапов «*.old» от прошлого автообновления (ADR-021):
+            // они создаются подменой файлов и удаляются здесь best-effort
+            if let Some(exe_dir) = std::env::current_exe()
+                .ok()
+                .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+            {
+                updater::cleanup_backups(&exe_dir);
+            }
+
             // Сток stdout/stderr движка в лог (иначе пайп движка переполнится)
             tauri::async_runtime::spawn(async move {
                 let mut file = OpenOptions::new().create(true).append(true).open(&log_path).ok();
@@ -85,6 +97,10 @@ fn main() {
                 .build()?;
             Ok(())
         })
+        .invoke_handler(tauri::generate_handler![
+            updater::check_updates,
+            updater::apply_update
+        ])
         .build(tauri::generate_context!())
         .expect("ошибка при запуске TACG")
         .run(|app, event| {
