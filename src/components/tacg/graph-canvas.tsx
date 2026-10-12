@@ -20,7 +20,7 @@ import {
   type NodeTypes,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { CheckCircle2, GitFork, Loader2, Network, PenLine, Plus, X } from 'lucide-react'
+import { CheckCircle2, Compass, GitFork, Loader2, Network, PenLine, Plus, X } from 'lucide-react'
 import { chosenIds, GraphNode, selectionMode } from '@/lib/tacg/types'
 import { computeEdges } from '@/lib/tacg/fold'
 import { useIsDark } from '@/lib/tacg/theme'
@@ -466,22 +466,42 @@ export interface GraphCanvasProps {
   onSelect: (id: string | null) => void
   waitingDecisionId?: string | null
   onOpenDecision?: () => void
+  /** Прогон идёт (планирование/выполнение), узлов ещё нет — показать индикацию */
+  planning?: boolean
 }
 
-export function GraphCanvas({ nodes, selectedNodeId, onSelect, waitingDecisionId, onOpenDecision }: GraphCanvasProps) {
+export function GraphCanvas({ nodes, selectedNodeId, onSelect, waitingDecisionId, onOpenDecision, planning }: GraphCanvasProps) {
   return (
     /* absolute inset-0: надёжнее h-full — проценты не резолвятся
        в flex-item, чья высота задана только min-height (мобильная раскладка) */
     <div className="absolute inset-0 overflow-hidden rounded-lg border bg-zinc-50 dark:bg-zinc-950/60">
       {nodes.length === 0 ? (
-        <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
-          <div className="flex size-14 items-center justify-center rounded-2xl border border-dashed">
-            <Network className="size-7" />
+        planning ? (
+          // Живой прогон без узлов: LLM-планирование/первые вызовы — видимый
+          // процесс вместо пустого полотна (долгое планирование reasoning-моделей)
+          <div className="flex h-full flex-col items-center justify-center gap-4 text-muted-foreground">
+            <div className="relative flex size-14 items-center justify-center rounded-2xl border border-teal-500/30 bg-teal-500/5">
+              <Compass className="size-7 animate-pulse text-teal-500 dark:text-teal-400" />
+              <span className="absolute -right-1.5 -top-1.5 size-3.5 animate-ping rounded-full bg-teal-400/70" />
+            </div>
+            <div className="max-w-sm space-y-1.5 text-center">
+              <p className="text-sm font-medium text-foreground">Агент работает…</p>
+              <p className="text-xs leading-relaxed">
+                Планировщик LLM анализирует задачу и строит граф — узлы появятся здесь через несколько секунд.
+                Ход работы виден в журнале событий ниже.
+              </p>
+            </div>
           </div>
-          <p className="max-w-xs text-center text-sm">
-            Граф появится здесь: задайте задачу агенту и нажмите «Запустить агента»
-          </p>
-        </div>
+        ) : (
+          <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
+            <div className="flex size-14 items-center justify-center rounded-2xl border border-dashed">
+              <Network className="size-7" />
+            </div>
+            <p className="max-w-xs text-center text-sm">
+              Граф появится здесь: задайте задачу агенту и нажмите «Запустить агента»
+            </p>
+          </div>
+        )
       ) : (
         <ReactFlowProvider>
           <FlowStage

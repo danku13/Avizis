@@ -264,7 +264,7 @@ export type RunEvent =
   | { type: 'graph:init'; ts: number; nodes: GraphNode[] }
   | { type: 'graph:adapt'; ts: number; reason: string; version: number; nodes: GraphNode[] }
   | { type: 'node:update'; ts: number; node: GraphNode }
-  | { type: 'run:status'; ts: number; status: RunStatus; progress: number }
+  | { type: 'run:status'; ts: number; status: RunStatus; progress: number; reason?: string }
   | { type: 'log'; ts: number; entry: LogEntry }
   | { type: 'run:summary'; ts: number; summary: string }
   | { type: 'decision:offer'; ts: number; nodeId: string; question: string; options: DecisionOption[] }

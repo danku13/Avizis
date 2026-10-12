@@ -115,7 +115,7 @@ export const useTacgStore = create<TacgStore>()((set, get) => ({
   setRuns: (runs) => set({ runs: runs ?? [] }),
 
   onRunCreated: (meta, decisionMode, llm) =>
-    set({
+    set((s) => ({
       currentRunId: meta.id,
       currentMeta: meta,
       events: [],
@@ -126,16 +126,49 @@ export const useTacgStore = create<TacgStore>()((set, get) => ({
       decisionMode: decisionMode ?? 'manual',
       decisionDismissed: null,
       runLlm: llm ?? null,
-    }),
+      // Оптимистичный инсерт: прогон сразу в истории (статус «планирование»),
+      // не дожидаясь history:list от движка (долгое LLM-планирование)
+      runs: [
+        {
+          id: meta.id,
+          task: meta.task,
+          mode: meta.mode,
+          status: 'planning' as const,
+          createdAt: meta.createdAt,
+          finishedAt: undefined,
+          nodesCount: 0,
+          doneCount: 0,
+          dynamicCount: 0,
+          version: 0,
+          progress: 0,
+        },
+        ...s.runs.filter((r) => r.id !== meta.id),
+      ],
+    })),
 
   onRunStarted: () => set({ starting: false }),
 
   applyEvent: (ev) => {
     // события приходят только для текущего запуска (фильтр в слое socket)
-    set({ events: [...get().events, ev] })
+    set((s) => ({ events: [...s.events, ev] }))
     // новое предложение развилки — модалка открывается заново
     if (ev.type === 'decision:offer') set({ decisionDismissed: null })
     if (ev.type === 'decision:mode') set({ decisionMode: ev.mode })
+    // Живые метрики текущего прогона в истории: статус/прогресс и размер графа
+    if (ev.type === 'run:status' || ev.type === 'graph:init') {
+      set((s) => ({
+        runs: s.runs.map((r) =>
+          r.id !== s.currentRunId
+            ? r
+            : {
+                ...r,
+                ...(ev.type === 'run:status'
+                  ? { status: ev.status, progress: ev.progress }
+                  : { nodesCount: ev.nodes.length }),
+              }
+        ),
+      }))
+    }
   },
 
   loadSnapshot: (run) =>

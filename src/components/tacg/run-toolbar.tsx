@@ -109,7 +109,7 @@ export function RunToolbar() {
     lines.push('# TACG — аудиторский отчёт запуска')
     lines.push('')
     lines.push(`- **Задача:** «${meta.task}»`)
-    lines.push(`- **Режим:** ${meta.mode === 'llm' ? 'LLM (z-ai-web-dev-sdk)' : 'Демо (симуляция)'}`)
+    lines.push(`- **Режим:** ${meta.mode === 'llm' ? (runLlm?.planner?.model ? `LLM (${runLlm.planner.adapter} · ${runLlm.planner.model})` : 'LLM (z-ai-web-dev-sdk)') : 'Демо (симуляция)'}`)
     lines.push(`- **Статус:** ${view.status}`)
     lines.push(`- **Прогресс:** ${view.progress}% (${doneCount}/${view.nodes.length} узлов)`)
     lines.push(`- **Версий графа:** ${view.version}`)
@@ -319,7 +319,7 @@ export function RunToolbar() {
     <div className="space-y-2.5 rounded-lg border bg-secondary/40 p-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <RunStatusBadge status={view.status} />
-        <ModeBadge mode={meta.mode} />
+        <ModeBadge mode={meta.mode} model={meta.mode === 'llm' ? runLlm?.planner?.model : undefined} />
         <Tooltip>
           <TooltipTrigger asChild>
             <span className="max-w-[280px] truncate text-sm font-medium">{meta.task}</span>

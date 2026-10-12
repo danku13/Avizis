@@ -14,8 +14,8 @@ import {
   resolveRole,
   sanitizeConfigInput,
   saveConfig,
-  validateProvider,
 } from './llm-config'
+import { validateProvider } from './openai-client'
 
 const httpServer = createServer()
 

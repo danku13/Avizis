@@ -3,7 +3,8 @@
 // extractJson/repairJson/таймауты/ретраи — НАД адаптерами (провайдер-агностичны).
 import ZAI, { ChatMessage } from 'z-ai-web-dev-sdk'
 import type { LlmProviderConfig } from './llm-config'
-import { describeHttpError, describeNetworkError, loadConfig, resolveRole } from './llm-config'
+import { loadConfig, resolveRole } from './llm-config'
+import { chatCompletionsRequest, extractMessageContent, NonRetryableProviderError } from './openai-client'
 
 /** Роль движка: какая точка делает вызов */
 export type LlmRole = 'planner' | 'executor' | 'supervisor' | 'decider'
@@ -144,10 +145,10 @@ async function zaiChat(system: string, user: string, timeoutMs: number): Promise
   throw new Error('Пустой ответ модели')
 }
 
-/** Адаптер openai-compatible: POST {baseUrl}/chat/completions, Bearer-ключ */
+/** Адаптер openai-compatible: POST {baseUrl}/chat/completions через общий клиент
+ *  (openai-client.ts): обход гейта OpenRouter «agentic harnesses» (free-эндпоинты
+ *  вроде thinkingmachines/inkling:free) + разворачивание tool_calls в текст */
 async function openaiCompatibleChat(cfg: LlmProviderConfig, system: string, user: string, timeoutMs: number): Promise<LlmChatResult> {
-  const baseUrl = (cfg.baseUrl || '').trim().replace(/\/+$/, '')
-  if (!baseUrl) throw new Error('baseUrl провайдера не задан (настройки LLM)')
   const model = (cfg.model || '').trim()
   if (!model) throw new Error('Модель провайдера не задана (настройки LLM)')
   const body: Record<string, unknown> = {
@@ -161,33 +162,11 @@ async function openaiCompatibleChat(cfg: LlmProviderConfig, system: string, user
   if (typeof cfg.temperature === 'number' && Number.isFinite(cfg.temperature)) {
     body.temperature = cfg.temperature
   }
-  const ac = new AbortController()
-  const timer = setTimeout(() => ac.abort(), timeoutMs)
-  let res: any
-  try {
-    res = await fetch(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(cfg.apiKey ? { Authorization: `Bearer ${cfg.apiKey}` } : {}),
-      },
-      body: JSON.stringify(body),
-      signal: ac.signal,
-    })
-  } catch (e: any) {
-    throw new Error(describeNetworkError(e, timeoutMs))
-  } finally {
-    clearTimeout(timer)
-  }
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(describeHttpError(res.status, text))
-  }
-  const data: any = await res.json().catch(() => null)
-  const content = data?.choices?.[0]?.message?.content
-  if (typeof content !== 'string' || !content.trim()) throw new Error('Пустой ответ модели')
+  const { data } = await chatCompletionsRequest(cfg, body, timeoutMs)
+  const content = extractMessageContent(data)
+  if (!content) throw new Error('Пустой ответ модели')
   return {
-    content: content.trim(),
+    content,
     adapter: 'openai-compatible',
     model,
     usage: extractUsage(data),
@@ -224,6 +203,8 @@ export async function chatTextDetailed(
       return { content: res.content, usage: res.usage, model: res.model, adapter: res.adapter }
     } catch (e: any) {
       lastErr = e
+      // 4xx ключа/доступа/пути не лечится повтором — выходим сразу
+      if (e instanceof NonRetryableProviderError) break
       if (attempt < retries) await new Promise((r) => setTimeout(r, 900))
     }
   }

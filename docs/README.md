@@ -43,12 +43,12 @@
 - Движок: `mini-services/tacg-agent/` (bun + socket.io :3003, z-ai-web-dev-sdk, режимы demo/llm).
 - Фронтенд: `src/components/tacg/` (React Flow граф, модалки инспектора/выбора, тулбар, timeline),
   `src/lib/tacg/` (типы, сокет-клиент, fold), `src/store/tacg-store.ts`.
-- Тесты: `scripts/test-tacg-{client,llm,decision,clarity,byok,truncation,usage,pricing,currency}.ts`; E2E-скриншоты: `scripts/tacg-*.png`.
+- Тесты: `scripts/test-tacg-{client,llm,decision,clarity,byok,truncation,usage,pricing,currency,openrouter-gate}.ts`; E2E-скриншоты: `scripts/tacg-*.png`, `scripts/e2e-gate-*.png`.
 - Сборка exe движка: `bash scripts/build-executables.sh` (bun compile, 4 таргета, ADR-017).
-- Десктоп: `src-tauri/` (Tauri v2, ADR-018); CI `.github/workflows/desktop.yml` — артефакты на push, релиз по тегу `v*` (workflow-файл ждёт токен со scope `workflow`, шаблон — `docs/ci/desktop-workflow.yml`).
+- Десктоп: `src-tauri/` (Tauri v2, ADR-018); CI `.github/workflows/desktop.yml` — артефакты на push, релиз по тегу `v*` (доставка workflow-файла при PAT без scope workflow — `scripts/push-workflow-via-git-api.py`).
 - Рабочий журнал агентов: `/home/z/my-project/worklog.md` (вне репозитория — локальный артефакт сессии).
 
-## Текущее состояние (v0.10)
+## Текущее состояние (v0.10.1)
 
 - Развилки решений (auto/manual, на ходу), эмерджентные вопросы по доменам, метр «понимания задачи»,
   смешанные решения — реализованы и покрыты тестами (см. `cr/CR-003`, `cr/CR-004`).
@@ -86,6 +86,14 @@
   open.er-api и ручным override, кэш (TTL 6 ч); базис аудита — USD, конвертация на отображении:
   чип «≈$0,0027 · ₽0,263», инспектор, MD-отчёт с источником и датой котировки; селектор валюты
   (дефолт ₽, 15 валют) — `adr/ADR-019`, `cr/CR-012`, FR-910.
+- **Гейт OpenRouter «agentic harnesses»**: free-эндпоинты, доступные только агентным харнесам
+  (пример — `thinkingmachines/inkling:free`), проходят автоматически — запрос с tools
+  (`submit_final_answer`) по детекту ошибки, кэш per модель, `tool_calls` разворачиваются в
+  текст; 4xx ключа/доступа — без ретраев (мгновенная ошибка) — `adr/ADR-020`, `cr/CR-013`, FR-911.
+- **Мгновенная обратная связь запуска**: прогон попадает в историю при создании (не по
+  терминальному статусу), статус/прогресс/узлы в записи — live; при планировании область графа
+  показывает «Агент работает…»; ошибка прогона — тост с причиной; бейдж режима — реальная модель
+  прогона — `cr/CR-013`.
 - Задел на будущее: вычислимая метрика понимания из состояния графа вместо самооценки LLM —
   `adr/ADR-014`, FR-810; нативные адаптеры anthropic/gemini и стриминг — FR-907; матрица CI
   macOS/Linux для десктопа — ADR-018 (последствия).

@@ -74,6 +74,15 @@ export default function Home() {
           const st = useTacgStore.getState()
           if (data?.runId === st.currentRunId && data?.event) {
             st.applyEvent(data.event)
+            // Ошибка прогона видна сразу тостом — не только в свёрнутом журнале
+            const ev = data.event
+            if (ev.type === 'run:status' && ev.status === 'error') {
+              import('sonner').then(({ toast }) =>
+                toast.error('Прогон завершился ошибкой', {
+                  description: ev.reason || 'Подробности — в журнале событий (нажмите «Повторить узел» для ретрая)',
+                })
+              )
+            }
           } else if (data?.runId && data?.event?.type === 'run:status') {
             // обновляем историю, если завершился фоновый запуск
             const terminal = ['completed', 'stopped', 'error'].includes(data.event.status)
@@ -219,6 +228,9 @@ export default function Home() {
     () => foldEvents(isLive ? events : events.slice(0, cursor! + 1), { llm: runLlm ?? undefined }),
     [events, cursor, runLlm]
   )
+  // Живой прогон без узлов: видимое «планирование» вместо пустого полотна
+  const planningLive =
+    !!currentMeta && isLive && view.nodes.length === 0 && (view.status === 'planning' || view.status === 'running')
   const offeredDecision = useMemo(
     () => (isLive ? findOfferedDecision(view.nodes) : undefined),
     [view.nodes, isLive]
@@ -288,6 +300,7 @@ export default function Home() {
                   onSelect={select}
                   waitingDecisionId={offeredDecision?.id ?? null}
                   onOpenDecision={() => useTacgStore.getState().openDecision()}
+                  planning={planningLive}
                 />
               </div>
             </div>
@@ -303,7 +316,7 @@ export default function Home() {
         {/* ─── Подвал ─── */}
         <footer className="mt-auto shrink-0 border-t border-zinc-200/80 bg-white/80 dark:border-zinc-800/80 dark:bg-zinc-950/80">
           <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5 text-xs text-zinc-500">
-            <span>TACG Prototype v0.10 · прототип для тестирования концепции</span>
+            <span>TACG Prototype v0.10.1 · прототип для тестирования концепции</span>
             <span className="hidden sm:inline">·</span>
             <span className="hidden sm:inline">Движок: socket.io мини-сервис + z-ai-web-dev-sdk (LLM)</span>
             <span className="hidden md:inline">·</span>

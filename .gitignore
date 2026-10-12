@@ -64,3 +64,5 @@ mini-services/tacg-agent/data/llm-config.json
 mini-services/tacg-agent/data/pricing-cache.json
 # TACG: собранные исполняемые файлы (bun build --compile)
 mini-services/tacg-agent/dist/
+scripts/tg-send.py
+mini-services/tacg-agent/data/currency-cache.json

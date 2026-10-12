@@ -53,3 +53,12 @@
   (колонки + блок «Курс конвертации» с источником и датой котировки). Селектор валюты в
   настройках (дефолт ₽), выбор в `localStorage`. Офлайн → стоимость остаётся в USD. Связанное:
   [ADR-019](../adr/ADR-019-currency-conversion.md).
+- **FR-911 (M) ✅ (CR-013)** **Гейт OpenRouter «agentic harnesses»**: free-эндпоинты, доступные
+  только агентным харнесам (пример — `thinkingmachines/inkling:free`), проходят автоматически —
+  общий клиент openai-compatible (`openai-client.ts`: адаптер llm.ts + проба валидации настроек)
+  детектит маркер гейта в ошибке (403-тело или `error` внутри 200-ответа), повторяет запрос с
+  минимальным набором tools `submit_final_answer` (без `tool_choice` — free-варианты его не
+  поддерживают) и кэширует решение per `(baseUrl|model)` до рестарта движка. Ответ-`tool_calls`
+  разворачивается в текст (`extractMessageContent`). 4xx-ошибки ключа/доступа/пути —
+  `NonRetryableProviderError`: ретраи пропускаются, ошибка мгновенная (408/429/5xx — транзиентны).
+  Связанное: [ADR-020](../adr/ADR-020-openrouter-agentic-gate.md).

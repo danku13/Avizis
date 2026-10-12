@@ -13,7 +13,7 @@
 | FR-6xx | [FR-600-history-and-log.md](./FR-600-history-and-log.md) | FR-601…605 (5) | ✅ 5/5 (FR-603/604 — CR-008; FR-605 — CR-009) |
 | FR-7xx | [FR-700-nfr.md](./FR-700-nfr.md) | FR-701…708 (8) | ✅ 7 · ⬜ 1 (FR-705 задел; FR-706/707 — CR-009; FR-708 — CR-010) |
 | FR-8xx | [FR-800-clarity-agent.md](./FR-800-clarity-agent.md) | FR-801…810 (10) | ✅ 9 · ⬜ 1 (FR-810 задел — ADR-014) |
-| FR-9xx | [FR-900-byok.md](./FR-900-byok.md) | FR-901…908, 910 (9) | ✅ 8 · ⬜ 1 задел (FR-907; FR-908 — CR-011; FR-910 — CR-012) |
+| FR-9xx | [FR-900-byok.md](./FR-900-byok.md) | FR-901…908, 910, 911 (10) | ✅ 9 · ⬜ 1 задел (FR-907; FR-908 — CR-011; FR-910 — CR-012; FR-911 — CR-013) |
 
 ## Правила ведения
 

@@ -116,10 +116,10 @@ export class AgentEngine {
     this.emitEvent(rt, { type: 'log', ts: entry.ts, entry })
   }
 
-  private pushStatus(rt: Runtime, status: RunStatus, progress: number) {
+  private pushStatus(rt: Runtime, status: RunStatus, progress: number, reason?: string) {
     rt.snapshot.status = status
     rt.snapshot.progress = progress
-    this.emitEvent(rt, { type: 'run:status', ts: now(), status, progress })
+    this.emitEvent(rt, { type: 'run:status', ts: now(), status, progress, ...(reason ? { reason } : {}) })
     if (status === 'completed' || status === 'stopped' || status === 'error') {
       this.emit('history:list', { runs: store.history() })
     }
@@ -223,6 +223,10 @@ export class AgentEngine {
     this.emit('run:created', { runId: id, task, mode, decisionMode, createdAt: run.createdAt, llm: run.llm })
     this.emitEvent(rt, { type: 'decision:mode', ts: now(), mode: decisionMode })
     this.pushStatus(rt, 'planning', 0)
+    // Прогон сразу попадает в историю: запуск виден мгновенно, не дожидаясь
+    // терминального статуса (медленное LLM-планирование/ретраи — минуты)
+    store.save(run)
+    this.emit('history:list', { runs: store.history() })
     const llmLabel =
       mode === 'llm'
         ? run.llm!.planner.adapter === 'zai'
@@ -239,7 +243,7 @@ export class AgentEngine {
           await getZai()
         } catch (e: any) {
           this.log(rt, 'run', `Ошибка инициализации SDK: ${e?.message || e}`)
-          this.pushStatus(rt, 'error', 0)
+          this.pushStatus(rt, 'error', 0, `Ошибка инициализации SDK: ${trunc(e?.message || '', 120)}`)
           store.save(run)
           return run
         }
@@ -276,7 +280,7 @@ export class AgentEngine {
 
     this.runLoop(rt).catch((err: any) => {
       this.log(rt, 'run', `Внутренняя ошибка цикла выполнения: ${err?.message || err}`)
-      this.pushStatus(rt, 'error', run.progress)
+      this.pushStatus(rt, 'error', run.progress, `Внутренняя ошибка цикла: ${trunc(err?.message || '', 120)}`)
     })
     return run
   }
@@ -353,7 +357,7 @@ export class AgentEngine {
           const errored = run.nodes.find((n) => n.status === 'error')
           if (errored) {
             this.log(rt, 'node-error', `Узел «${errored.title}» завершился ошибкой — выполнение остановлено. Доступно вмешательство: «Повторить узел».`)
-            this.pushStatus(rt, 'error', run.progress)
+            this.pushStatus(rt, 'error', run.progress, `Узел «${errored.title}» упал: ${trunc(errored.error || 'ошибка выполнения', 140)}`)
             run.finishedAt = now()
             store.save(run)
             return

@@ -47,7 +47,8 @@ export function NodeStatusBadge({ status }: { status: NodeStatus }) {
   )
 }
 
-export function ModeBadge({ mode }: { mode: RunMode }) {
+export function ModeBadge({ mode, model }: { mode: RunMode; model?: string }) {
+  const label = mode === 'llm' ? (model ? `LLM · ${model}` : 'LLM · z-ai-web-dev-sdk') : 'Демо · симуляция'
   return (
     <span
       className={cn(
@@ -56,8 +57,9 @@ export function ModeBadge({ mode }: { mode: RunMode }) {
           ? 'bg-teal-500/15 text-teal-700 dark:text-teal-300'
           : 'bg-violet-500/15 text-violet-700 dark:text-violet-300'
       )}
+      title={mode === 'llm' ? (model ? `LLM-провайдер прогона: ${model}` : 'z-ai-web-dev-sdk') : 'Симуляция без LLM'}
     >
-      {mode === 'llm' ? 'LLM · z-ai-web-dev-sdk' : 'Демо · симуляция'}
+      {label}
     </span>
   )
 }

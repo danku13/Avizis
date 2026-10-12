@@ -24,6 +24,7 @@
 | 017 | [ADR-017-single-file-executable.md](./ADR-017-single-file-executable.md) | Упаковка в однофайловые исполняемые файлы: bun compile, портативные данные, уровни | CR-011 |
 | 018 | [ADR-018-tauri-desktop-exe.md](./ADR-018-tauri-desktop-exe.md) | Десктоп Tauri v2: единый exe с UI + движок-sidecar + CI/релиз | CR-012 |
 | 019 | [ADR-019-currency-conversion.md](./ADR-019-currency-conversion.md) | Конвертация валюты стоимости: ЦБ РФ (XML+зеркало)/er-api/ручной, USD-базис | CR-012 |
+| 020 | [ADR-020-openrouter-agentic-gate.md](./ADR-020-openrouter-agentic-gate.md) | Обход гейта OpenRouter «agentic harnesses»: retry с tools, кэш per модель, NonRetryable 4xx | CR-013 |
 | — | [tech-stack.md](./tech-stack.md) | Сводка технологического стека | — |
 
 ## Правила ведения
