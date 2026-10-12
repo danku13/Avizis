@@ -1,5 +1,5 @@
 // TACG — свёртка потока событий в состояние запуска (для live-вида и replay)
-import { DecisionMode, GraphEdge, GraphNode, LlmProviderInfo, LogEntry, RunEvent, RunStatus, RunView } from './types'
+import { DecisionMode, GraphEdge, GraphNode, LlmProviderInfo, LogEntry, RunEvent, RunStatus, RunUsage, RunView } from './types'
 
 /** Свёртка событий 0..n в состояние графа ( ядро режима «Воспроизведение» )
  *  base.llm — provenance из снапшота (события его не несут, он приходит с run:created/run:snapshot) */
@@ -12,6 +12,7 @@ export function foldEvents(events: RunEvent[], base?: { llm?: Record<string, Llm
   let decisionMode: DecisionMode = 'manual'
   let certainty: number | undefined
   const logs: LogEntry[] = []
+  let usage: RunUsage | undefined
 
   for (const ev of events) {
     switch (ev.type) {
@@ -40,6 +41,26 @@ export function foldEvents(events: RunEvent[], base?: { llm?: Record<string, Llm
       case 'run:certainty':
         certainty = ev.certainty
         break
+      case 'llm:usage': {
+        // Аудит токенов (ADR-015): копим сводку и атрибутируем узлу (в replay — до курсора)
+        usage ??= { inputTokens: 0, outputTokens: 0, calls: 0, byRole: {} }
+        usage.inputTokens += ev.inputTokens
+        usage.outputTokens += ev.outputTokens
+        usage.calls += 1
+        const r = (usage.byRole[ev.role] ??= { inputTokens: 0, outputTokens: 0, calls: 0 })
+        r.inputTokens += ev.inputTokens
+        r.outputTokens += ev.outputTokens
+        r.calls += 1
+        if (ev.nodeId) {
+          const n = nodes.get(ev.nodeId)
+          if (n) {
+            const u = (n.usage ??= { input: 0, output: 0 })
+            u.input += ev.inputTokens
+            u.output += ev.outputTokens
+          }
+        }
+        break
+      }
       case 'decision:offer':
       case 'decision:resolved':
         // состояние развилки переносится через node:update; события — сигнал для UI
@@ -49,7 +70,7 @@ export function foldEvents(events: RunEvent[], base?: { llm?: Record<string, Llm
         break
     }
   }
-  return { nodes: [...nodes.values()], version, status, progress, logs, summary, decisionMode, certainty, llm: base?.llm }
+  return { nodes: [...nodes.values()], version, status, progress, logs, summary, decisionMode, certainty, llm: base?.llm, usage }
 }
 
 /** Рёбра графа выводятся из зависимостей узлов */

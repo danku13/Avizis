@@ -40,6 +40,29 @@ const tryParse = (s: string): any | null => {
   }
 }
 
+/** Достаёт usage из ответа провайдера (OpenAI prompt/completion_tokens и GLM input/output_tokens) */
+function extractUsage(data: any): LlmUsage | undefined {
+  const u = data?.usage
+  if (!u || typeof u !== 'object') return undefined
+  const prompt = u.prompt_tokens ?? u.promptTokens ?? u.input_tokens ?? u.inputTokens
+  const completion = u.completion_tokens ?? u.completionTokens ?? u.output_tokens ?? u.outputTokens
+  if (typeof prompt !== 'number' && typeof completion !== 'number') return undefined
+  return {
+    promptTokens: typeof prompt === 'number' ? prompt : undefined,
+    completionTokens: typeof completion === 'number' ? completion : undefined,
+  }
+}
+
+/** Сложение usage по попыткам вызова (ретраи/JSON-повторы) */
+function mergeUsage(a: LlmUsage | undefined, b: LlmUsage | undefined): LlmUsage | undefined {
+  if (!a) return b
+  if (!b) return a
+  return {
+    promptTokens: (a.promptTokens ?? 0) + (b.promptTokens ?? 0) || undefined,
+    completionTokens: (a.completionTokens ?? 0) + (b.completionTokens ?? 0) || undefined,
+  }
+}
+
 /** Ремонт типичных ошибок LLM в JSON: незакрытый массив, висячая запятая, обрыв */
 function repairJson(text: string): any | null {
   let t = text
@@ -115,7 +138,8 @@ async function zaiChat(system: string, user: string, timeoutMs: number): Promise
   )
   const content = res?.choices?.[0]?.message?.content
   if (typeof content === 'string' && content.trim()) {
-    return { content: content.trim(), adapter: 'zai', model: 'z-ai-sdk' }
+    // usage — если провайдер его сообщает (GLM-форматы); отсутствие не ошибка
+    return { content: content.trim(), adapter: 'zai', model: 'z-ai-sdk', usage: extractUsage(res) }
   }
   throw new Error('Пустой ответ модели')
 }
@@ -162,15 +186,11 @@ async function openaiCompatibleChat(cfg: LlmProviderConfig, system: string, user
   const data: any = await res.json().catch(() => null)
   const content = data?.choices?.[0]?.message?.content
   if (typeof content !== 'string' || !content.trim()) throw new Error('Пустой ответ модели')
-  const usage = data?.usage
   return {
     content: content.trim(),
     adapter: 'openai-compatible',
     model,
-    usage:
-      usage && (typeof usage.prompt_tokens === 'number' || typeof usage.completion_tokens === 'number')
-        ? { promptTokens: usage.prompt_tokens, completionTokens: usage.completion_tokens }
-        : undefined,
+    usage: extractUsage(data),
   }
 }
 
@@ -181,13 +201,27 @@ async function callLlm(system: string, user: string, timeoutMs: number, role?: L
   return zaiChat(system, user, timeoutMs)
 }
 
-/** Один LLM-вызов (текстовый ответ); role резолвит провайдера, отсутствие — дефолт zai */
-export async function chatText(system: string, user: string, timeoutMs = 90_000, retries = 1, role?: LlmRole): Promise<string> {
+/** Детальный результат LLM-вызова: текст + usage (для аудита токенов) */
+export interface LlmTextResult {
+  content: string
+  usage?: LlmUsage
+  model?: string
+  adapter: LlmAdapterId | string
+}
+
+/** Один LLM-вызов с возвратом usage (ADR-015): роль резолвит провайдера */
+export async function chatTextDetailed(
+  system: string,
+  user: string,
+  timeoutMs = 90_000,
+  retries = 1,
+  role?: LlmRole
+): Promise<LlmTextResult> {
   let lastErr: any
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const res = await callLlm(system, user, timeoutMs, role)
-      return res.content
+      return { content: res.content, usage: res.usage, model: res.model, adapter: res.adapter }
     } catch (e: any) {
       lastErr = e
       if (attempt < retries) await new Promise((r) => setTimeout(r, 900))
@@ -196,16 +230,40 @@ export async function chatText(system: string, user: string, timeoutMs = 90_000,
   throw lastErr ?? new Error('Ошибка LLM')
 }
 
-/** LLM-вызов с ожиданием JSON: ретраи при неудачном парсинге ответа */
-export async function chatJson(system: string, user: string, timeoutMs = 60_000, jsonRetries = 1, role?: LlmRole): Promise<any | null> {
+/** Один LLM-вызов (текстовый ответ); role резолвит провайдера, отсутствие — дефолт zai */
+export async function chatText(system: string, user: string, timeoutMs = 90_000, retries = 1, role?: LlmRole): Promise<string> {
+  return (await chatTextDetailed(system, user, timeoutMs, retries, role)).content
+}
+
+/** Результат JSON-вызова: распарсенный объект + накопленный usage всех попыток */
+export interface LlmJsonResult {
+  json: any | null
+  usage?: LlmUsage
+}
+
+/** LLM-вызов с ожиданием JSON и возвратом usage (ADR-015): usage копится по всем попыткам */
+export async function chatJsonDetailed(
+  system: string,
+  user: string,
+  timeoutMs = 60_000,
+  jsonRetries = 1,
+  role?: LlmRole
+): Promise<LlmJsonResult> {
   let last: any = null
+  let usageAcc: LlmUsage | undefined
   const attempts = 1 + Math.max(0, jsonRetries)
   for (let i = 0; i < attempts; i++) {
-    const raw = await chatText(system, user, timeoutMs, i === 0 ? 0 : 1, role)
-    const parsed = extractJson(raw)
-    if (parsed) return parsed
-    last = raw
+    const res = await chatTextDetailed(system, user, timeoutMs, i === 0 ? 0 : 1, role)
+    usageAcc = mergeUsage(usageAcc, res.usage)
+    const parsed = extractJson(res.content)
+    if (parsed) return { json: parsed, usage: usageAcc }
+    last = res.content
   }
   console.error('[tacg-llm] JSON не извлечён из ответа:', String(last || '').slice(0, 200))
-  return null
+  return { json: null, usage: usageAcc }
+}
+
+/** LLM-вызов с ожиданием JSON: ретраи при неудачном парсинге ответа */
+export async function chatJson(system: string, user: string, timeoutMs = 60_000, jsonRetries = 1, role?: LlmRole): Promise<any | null> {
+  return (await chatJsonDetailed(system, user, timeoutMs, jsonRetries, role)).json
 }

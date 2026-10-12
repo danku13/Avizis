@@ -3,7 +3,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, PenLine, RotateCcw, Copy, MousePointerClick, Sparkles, Clock3, Cpu, GitBranch, GitFork, Hash, CheckCircle2, Bot, User } from 'lucide-react'
+import { AlertTriangle, PenLine, RotateCcw, Copy, MousePointerClick, Sparkles, Clock3, Cpu, Coins, GitBranch, GitFork, Hash, CheckCircle2, Bot, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
@@ -17,9 +17,9 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
 const OPTION_STYLES: Record<string, string> = {
-  a: 'bg-sky-500/25 text-sky-300',
-  b: 'bg-fuchsia-500/25 text-fuchsia-300',
-  c: 'bg-orange-500/25 text-orange-300',
+  a: 'bg-sky-500/25 text-sky-700 dark:text-sky-300',
+  b: 'bg-fuchsia-500/25 text-fuchsia-700 dark:text-fuchsia-300',
+  c: 'bg-orange-500/25 text-orange-700 dark:text-orange-300',
 }
 
 /** Поиск состояния узла в потоке событий (учитывает курсор воспроизведения) */
@@ -113,7 +113,7 @@ export function NodeInspectorModal() {
   return (
     <Dialog open={!!selectedNodeId} onOpenChange={close}>
       <DialogContent
-        className="flex h-[86dvh] max-h-[86dvh] w-[calc(100vw-1.5rem)] flex-col gap-0 overflow-hidden border-zinc-800 bg-zinc-950/95 p-0 backdrop-blur-md sm:max-w-none sm:w-[55vw] lg:w-[58vw] xl:w-[64vw]"
+        className="flex h-[86dvh] max-h-[86dvh] w-[calc(100vw-1.5rem)] flex-col gap-0 overflow-hidden border-zinc-200 bg-white/95 p-0 backdrop-blur-md sm:max-w-none sm:w-[55vw] lg:w-[58vw] xl:w-[64vw] dark:border-zinc-800 dark:bg-zinc-950/95"
       >
         <DialogDescription className="sr-only">
           Детали узла графа вычислений: вход, выход, причина добавления и инструменты вмешательства
@@ -130,24 +130,24 @@ export function NodeInspectorModal() {
         ) : (
           <>
             {/* ─── Шапка модалки ─── */}
-            <DialogHeader className="border-b border-zinc-800/80 px-6 py-4 text-left">
+            <DialogHeader className="border-b border-zinc-200/80 px-6 py-4 text-left dark:border-zinc-800/80">
               <div className="flex items-start justify-between gap-4 pr-8">
                 <DialogTitle className="text-lg font-semibold leading-tight">{node.title}</DialogTitle>
                 <NodeStatusBadge status={node.status} />
               </div>
               <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                <Badge variant="outline" className="gap-1 border-zinc-700 font-mono text-[10px] text-zinc-400">
+                <Badge variant="outline" className="gap-1 border-zinc-300 font-mono text-[10px] text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
                   <Hash className="size-2.5" />
                   {node.id}
                 </Badge>
                 {node.dynamic && (
-                  <Badge variant="outline" className="border-violet-500/40 bg-violet-500/10 text-violet-300">
+                  <Badge variant="outline" className="border-violet-500/40 bg-violet-500/10 text-violet-700 dark:text-violet-300">
                     <Sparkles className="mr-1 size-3" />
                     добавлен динамически · v{node.addedAtVersion}
                   </Badge>
                 )}
                 {node.kind === 'decision' && (
-                  <Badge variant="outline" className="border-fuchsia-500/40 bg-fuchsia-500/10 text-fuchsia-300">
+                  <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300">
                     <GitFork className="mr-1 size-3" />
                     развилка · {node.decision?.options.length ?? 0} варианта
                   </Badge>
@@ -155,7 +155,7 @@ export function NodeInspectorModal() {
                 {branchOf && (
                   <Badge
                     variant="outline"
-                    className={cn('font-bold uppercase', branchOf.optionId === 'a' ? 'border-sky-500/40 text-sky-300' : branchOf.optionId === 'b' ? 'border-fuchsia-500/40 text-fuchsia-300' : 'border-orange-500/40 text-orange-300')}
+                    className={cn('font-bold uppercase', branchOf.optionId === 'a' ? 'border-sky-500/40 text-sky-700 dark:text-sky-300' : branchOf.optionId === 'b' ? 'border-fuchsia-500/40 text-fuchsia-700 dark:text-fuchsia-300' : 'border-orange-500/40 text-orange-700 dark:text-orange-300')}
                     title={`Узел принадлежит ветке варианта «${branchOf.optionId}» развилки ${branchOf.decisionId}`}
                   >
                     <GitBranch className="mr-1 size-3" />
@@ -163,13 +163,13 @@ export function NodeInspectorModal() {
                   </Badge>
                 )}
                 {node.overridden && (
-                  <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-300">
+                  <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300">
                     <PenLine className="mr-1 size-3" />
                     переопределён пользователем
                   </Badge>
                 )}
                 {(node.runs ?? 0) > 1 && (
-                  <Badge variant="outline" className="border-zinc-600 text-zinc-400">
+                  <Badge variant="outline" className="border-zinc-400 text-zinc-500 dark:border-zinc-600 dark:text-zinc-400">
                     <RotateCcw className="mr-1 size-3" />
                     выполнений: {node.runs}
                   </Badge>
@@ -177,7 +177,7 @@ export function NodeInspectorModal() {
                 {node.llm && (
                   <Badge
                     variant="outline"
-                    className="gap-1 border-teal-500/40 bg-teal-500/10 font-mono text-[10px] text-teal-300"
+                    className="gap-1 border-teal-500/40 bg-teal-500/10 font-mono text-[10px] text-teal-700 dark:text-teal-300"
                     title={`LLM-вызов узла выполнен через адаптер «${node.llm.adapter}» (provenance BYOK)`}
                   >
                     <Cpu className="size-3" />
@@ -190,13 +190,13 @@ export function NodeInspectorModal() {
             {/* ─── Тело: слева мета-информация, справа вход/выход ─── */}
             <div className="flex min-h-0 flex-1 flex-col md:flex-row">
               {/* Левая колонка */}
-              <div className="min-h-0 shrink-0 space-y-4 overflow-y-auto border-b border-zinc-800/80 p-5 md:w-[340px] md:border-b-0 md:border-r">
+              <div className="min-h-0 shrink-0 space-y-4 overflow-y-auto border-b border-zinc-200/80 p-5 md:w-[340px] md:border-b-0 md:border-r dark:border-zinc-800/80">
                 {node.description && (
                   <p className="text-sm leading-relaxed text-muted-foreground">{node.description}</p>
                 )}
 
                 {node.reason && (
-                  <div className="rounded-lg border border-violet-500/30 bg-violet-500/10 p-3 text-xs leading-relaxed text-violet-200">
+                  <div className="rounded-lg border border-violet-500/30 bg-violet-500/10 p-3 text-xs leading-relaxed text-violet-800 dark:text-violet-200">
                     <span className="font-semibold">Причина добавления: </span>
                     {node.reason}
                   </div>
@@ -205,11 +205,11 @@ export function NodeInspectorModal() {
                 {/* ─── Секция развилки: вопрос, варианты, обоснование выбора ─── */}
                 {dec && (
                   <div className="space-y-3">
-                    <div className="rounded-lg border border-fuchsia-500/30 bg-fuchsia-500/10 p-3 text-xs leading-relaxed text-fuchsia-200">
+                    <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-800 dark:text-amber-200">
                       <span className="font-semibold">Вопрос развилки: </span>
                       {dec.question}
                       {(dec.domain || decMixed) && (
-                        <span className="mt-1.5 block text-[11px] text-fuchsia-300/70">
+                        <span className="mt-1.5 block text-[11px] text-amber-700/80 dark:text-amber-300/70">
                           {dec.domain ? `Домен уточнения: ${DECISION_DOMAIN_LABELS[dec.domain]}` : ''}
                           {dec.domain && decMixed ? ' · ' : ''}
                           {decMixed ? 'допустимо смешанное решение' : ''}
@@ -218,7 +218,7 @@ export function NodeInspectorModal() {
                     </div>
 
                     <div className="space-y-2">
-                      <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Варианты агента</h4>
+                      <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Варианты агента</h4>
                       {dec.options.map((o) => {
                         const chosen = pickedIds.includes(o.id)
                         return (
@@ -226,7 +226,9 @@ export function NodeInspectorModal() {
                             key={o.id}
                             className={cn(
                               'rounded-lg border p-3',
-                              chosen ? 'border-emerald-500/50 bg-emerald-500/10' : 'border-zinc-700/70 bg-zinc-900/60',
+                              chosen
+                                ? 'border-emerald-500/50 bg-emerald-500/10'
+                                : 'border-zinc-300 bg-zinc-100/70 dark:border-zinc-700/70 dark:bg-zinc-900/60',
                               !chosen && pickedIds.length > 0 && 'opacity-60'
                             )}
                           >
@@ -240,7 +242,7 @@ export function NodeInspectorModal() {
                                 >
                                   {o.id}
                                 </span>
-                                <span className="min-w-0 text-xs font-semibold leading-snug break-words text-zinc-100">{o.label}</span>
+                                <span className="min-w-0 text-xs font-semibold leading-snug break-words text-zinc-900 dark:text-zinc-100">{o.label}</span>
                               </div>
                               {chosen && (
                                 <span className="flex shrink-0 items-center gap-1 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-300">
@@ -249,9 +251,9 @@ export function NodeInspectorModal() {
                                 </span>
                               )}
                             </div>
-                            <p className="mt-1.5 text-[11px] leading-relaxed text-zinc-400">{o.rationale}</p>
+                            <p className="mt-1.5 text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-400">{o.rationale}</p>
                             {o.nextSteps.length > 0 && (
-                              <p className="mt-1.5 text-[11px] text-zinc-500">
+                              <p className="mt-1.5 text-[11px] text-zinc-500 dark:text-zinc-500">
                                 дальше: {o.nextSteps.map((s, i) => `${i + 1}. ${s}`).join(' → ')}
                               </p>
                             )}
@@ -261,7 +263,7 @@ export function NodeInspectorModal() {
                     </div>
 
                     {dec.status === 'offered' && (
-                      <div className="flex items-center gap-2 rounded-lg border border-fuchsia-500/40 bg-fuchsia-500/10 p-3 text-xs text-fuchsia-200">
+                      <div className="flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">
                         <GitFork className="size-3.5 shrink-0 animate-pulse" />
                         {(decisionMode ?? 'manual') === 'manual'
                           ? 'Развилка ожидает вашего выбора — график приостановлен'
@@ -282,7 +284,7 @@ export function NodeInspectorModal() {
                           </span>
                         </div>
                         {dec.reasoning && (
-                          <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs leading-relaxed text-emerald-100">
+                          <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs leading-relaxed text-emerald-800 dark:text-emerald-100">
                             <span className="font-semibold">
                               {dec.chosenBy === 'agent' ? (
                                 <span className="inline-flex items-center gap-1">
@@ -303,7 +305,7 @@ export function NodeInspectorModal() {
                 )}
 
                 {node.error && (
-                  <div className="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs leading-relaxed text-red-200">
+                  <div className="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs leading-relaxed text-red-700 dark:text-red-200">
                     <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
                     <span>{node.error}</span>
                   </div>
@@ -322,17 +324,24 @@ export function NodeInspectorModal() {
                     <GitBranch className="size-3.5" />
                     Зависимостей: {node.dependsOn.length}
                   </div>
+                  {/* Аудит токенов (ADR-015): затраты LLM-вызовов этого узла (исполнитель/решатель) */}
+                  {node.usage && (node.usage.input > 0 || node.usage.output > 0) && (
+                    <div className="col-span-2 flex items-center gap-1.5 tabular-nums" title="Токены LLM-вызовов узла: вход/выход (данные провайдера, повторные запуски суммируются)">
+                      <Coins className="size-3.5 text-teal-500 dark:text-teal-400" />
+                      Токены: ↑ {node.usage.input.toLocaleString('ru-RU')} · ↓ {node.usage.output.toLocaleString('ru-RU')}
+                    </div>
+                  )}
                 </div>
 
                 {node.dependsOn.length > 0 && (
                   <div className="space-y-1.5">
-                    <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Входы (зависимости)</h4>
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Входы (зависимости)</h4>
                     <div className="flex flex-wrap gap-1.5">
                       {node.dependsOn.map((d) => (
                         <button
                           key={d}
                           onClick={() => select(d)}
-                          className="rounded border border-zinc-700 bg-zinc-900 px-1.5 py-0.5 font-mono text-[10px] text-zinc-300 transition-colors hover:border-cyan-500/50 hover:text-cyan-300"
+                          className="rounded border border-zinc-300 bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] text-zinc-600 transition-colors hover:border-cyan-500/50 hover:text-cyan-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:text-cyan-300"
                           title="Перейти к узлу-зависимости"
                         >
                           {d}
@@ -347,7 +356,7 @@ export function NodeInspectorModal() {
               <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
                 <section>
                   <div className="mb-2 flex items-center justify-between">
-                    <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Вход</h4>
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Вход</h4>
                     {node.input && (
                       <Button variant="ghost" size="icon" className="size-6" onClick={() => copy(node.input)} aria-label="Копировать вход">
                         <Copy className="size-3" />
@@ -355,7 +364,7 @@ export function NodeInspectorModal() {
                     )}
                   </div>
                   {/* Полный текст без обрезки: прокрутка — на уровне колонки */}
-                  <pre className="whitespace-pre-wrap break-words rounded-md border bg-zinc-900/70 p-3 font-mono text-xs leading-relaxed text-zinc-300">
+                  <pre className="whitespace-pre-wrap break-words rounded-md border bg-zinc-100 p-3 font-mono text-xs leading-relaxed text-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-300">
                     {node.input ?? '— (узел ещё не стартовал)'}
                   </pre>
                 </section>
@@ -364,7 +373,7 @@ export function NodeInspectorModal() {
 
                 <section>
                   <div className="mb-2 flex items-center justify-between">
-                    <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Выход</h4>
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Выход</h4>
                     {!editing && node.output && (
                       <Button variant="ghost" size="icon" className="size-6" onClick={() => copy(node.output)} aria-label="Копировать выход">
                         <Copy className="size-3" />
@@ -372,11 +381,11 @@ export function NodeInspectorModal() {
                     )}
                   </div>
                   {node.status === 'error' ? (
-                    <div className="rounded-md border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-200">
+                    <div className="rounded-md border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-700 dark:text-red-200">
                       Узел завершился ошибкой. См. сообщение в левой колонке.
                     </div>
                   ) : node.status === 'running' ? (
-                    <div className="animate-pulse rounded-md border bg-zinc-900/70 p-3 font-mono text-xs text-zinc-500">
+                    <div className="animate-pulse rounded-md border bg-zinc-100 p-3 font-mono text-xs text-zinc-500 dark:bg-zinc-900/70 dark:text-zinc-500">
                       узел выполняется, результат появится здесь…
                     </div>
                   ) : editing ? (
@@ -398,7 +407,7 @@ export function NodeInspectorModal() {
                       </div>
                     </div>
                   ) : node.status === 'done' ? (
-                    <pre className="whitespace-pre-wrap break-words rounded-md border bg-zinc-900/70 p-3 font-mono text-xs leading-relaxed text-zinc-300">
+                    <pre className="whitespace-pre-wrap break-words rounded-md border bg-zinc-100 p-3 font-mono text-xs leading-relaxed text-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-300">
                       {node.output}
                     </pre>
                   ) : (
@@ -411,7 +420,7 @@ export function NodeInspectorModal() {
             </div>
 
             {/* ─── Подвал: вмешательство ─── */}
-            <footer className="flex flex-wrap items-center gap-2 border-t border-zinc-800/80 px-6 py-3.5">
+            <footer className="flex flex-wrap items-center gap-2 border-t border-zinc-200/80 px-6 py-3.5 dark:border-zinc-800/80">
               {isWaitingDecision && (
                 <Button
                   size="sm"
@@ -425,7 +434,7 @@ export function NodeInspectorModal() {
                       ? 'Режим «авто»: агент решает сам'
                       : 'Открыть модалку выбора варианта'
                   }
-                  className="border-fuchsia-500/40 bg-fuchsia-500/15 text-fuchsia-100 hover:bg-fuchsia-500/25"
+                  className="border-amber-500/40 bg-amber-500/15 text-amber-900 hover:bg-amber-500/25 dark:text-amber-100"
                 >
                   <GitFork className="mr-1.5 size-3.5" />
                   Открыть выбор варианта
@@ -460,7 +469,7 @@ export function NodeInspectorModal() {
                   Режим воспроизведения: вмешательство недоступно. Нажмите «Live» на таймлайне.
                 </p>
               )}
-              <span className="ml-auto text-[11px] text-zinc-600">
+              <span className="ml-auto text-[11px] text-zinc-400 dark:text-zinc-600">
                 Esc — закрыть · клик по фону графа — снять выделение
               </span>
             </footer>

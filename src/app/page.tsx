@@ -15,6 +15,7 @@ import { RunToolbar } from '@/components/tacg/run-toolbar'
 import { HistoryPanel } from '@/components/tacg/history-panel'
 import { Timeline } from '@/components/tacg/timeline'
 import { GraphLegend } from '@/components/tacg/status-badge'
+import { ThemeToggle } from '@/components/tacg/theme-toggle'
 import { TooltipProvider } from '@/components/ui/tooltip'
 
 export default function Home() {
@@ -171,9 +172,9 @@ export default function Home() {
     <TooltipProvider delayDuration={200}>
       {/* app-shell: на десктопе занимает весь экран без прокрутки страницы,
           на мобиле — обычная вертикальная прокрутка */}
-      <div className="flex min-h-dvh w-full flex-col bg-zinc-950 text-zinc-100 lg:h-dvh lg:overflow-hidden">
+      <div className="flex min-h-dvh w-full flex-col bg-zinc-50 text-zinc-900 lg:h-dvh lg:overflow-hidden dark:bg-zinc-950 dark:text-zinc-100">
         {/* ─── Шапка ─── */}
-        <header className="z-20 shrink-0 border-b border-zinc-800/80 bg-zinc-950/80 backdrop-blur">
+        <header className="z-20 shrink-0 border-b border-zinc-200/80 bg-white/80 backdrop-blur dark:border-zinc-800/80 dark:bg-zinc-950/80">
           <div className="flex w-full items-center gap-3 px-4 py-3">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-teal-400 to-emerald-600 text-zinc-950">
               <Activity className="size-5" />
@@ -187,13 +188,16 @@ export default function Home() {
             <div className="ml-auto flex items-center gap-2">
               <span
                 className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium ${
-                  connected ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-red-500/30 bg-red-500/10 text-red-300'
+                  connected
+                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                    : 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300'
                 }`}
                 role="status"
               >
                 {connected ? <Wifi className="size-3.5" /> : <WifiOff className="size-3.5" />}
                 {connected ? 'движок агента: подключён' : 'движок офлайн'}
               </span>
+              <ThemeToggle />
             </div>
           </div>
         </header>
@@ -202,7 +206,7 @@ export default function Home() {
         <main className="flex w-full min-h-0 flex-1 flex-col gap-3 p-3 lg:flex-row lg:overflow-hidden">
           {/* Левая колонка: запуск + история */}
           <aside className="w-full shrink-0 lg:w-[288px] lg:min-h-0 lg:overflow-y-auto">
-            <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-3.5 lg:flex lg:h-full lg:min-h-0 lg:flex-col">
+            <div className="rounded-xl border border-zinc-200/80 bg-white/60 p-3.5 lg:flex lg:h-full lg:min-h-0 lg:flex-col dark:border-zinc-800/80 dark:bg-zinc-900/40">
               <HistoryPanel />
             </div>
           </aside>
@@ -216,7 +220,7 @@ export default function Home() {
                 <h2 className="flex items-center gap-2 text-sm font-semibold">
                   <Eye className="size-4 text-zinc-400" />
                   Граф выполнения
-                  {currentMeta && !isLive && <span className="text-xs font-normal text-amber-300">· режим воспроизведения</span>}
+                  {currentMeta && !isLive && <span className="text-xs font-normal text-amber-600 dark:text-amber-300">· режим воспроизведения</span>}
                 </h2>
                 <GraphLegend />
               </div>
@@ -233,20 +237,20 @@ export default function Home() {
 
             <Timeline />
 
-            <div className="flex h-[260px] shrink-0 flex-col rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-3.5">
+            <div className="flex h-[260px] shrink-0 flex-col rounded-xl border border-zinc-200/80 bg-white/60 p-3.5 dark:border-zinc-800/80 dark:bg-zinc-900/40">
               <EventLog />
             </div>
           </section>
         </main>
 
         {/* ─── Подвал ─── */}
-        <footer className="mt-auto shrink-0 border-t border-zinc-800/80 bg-zinc-950/80">
+        <footer className="mt-auto shrink-0 border-t border-zinc-200/80 bg-white/80 dark:border-zinc-800/80 dark:bg-zinc-950/80">
           <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5 text-xs text-zinc-500">
-            <span>TACG Prototype v0.4 · прототип для тестирования концепции</span>
+            <span>TACG Prototype v0.7 · прототип для тестирования концепции</span>
             <span className="hidden sm:inline">·</span>
             <span className="hidden sm:inline">Движок: socket.io мини-сервис + z-ai-web-dev-sdk (LLM)</span>
             <span className="hidden md:inline">·</span>
-            <span className="hidden md:inline">React Flow · Развилки решений · Смешанный выбор · Вектор понимания</span>
+            <span className="hidden md:inline">React Flow · Развилки решений · Аудит токенов · Светлая/тёмная тема</span>
           </div>
         </footer>
 

@@ -17,13 +17,22 @@ import {
   detectDemoScenario,
   sleep,
 } from './demo'
-import { chatJson, chatText, getZai } from './llm'
+import { chatJsonDetailed, chatTextDetailed, getZai, LlmUsage } from './llm'
 import { loadConfig, providerInfoOf, resolveRole } from './llm-config'
 import { sanitizePlanData } from './plan-sanitizer'
 import { store } from './store'
 
 const now = () => Date.now()
 const trunc = (s: string, n: number) => (s && s.length > n ? s.slice(0, n - 1) + '…' : s || '')
+
+/** Формат числа токенов для журнала/итога: 940 → «940», 1200 → «1,2k» */
+const fmtK = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1).replace('.', ',')}k` : String(n))
+
+/** Хвост «· токены: ↑N / ↓M» для записей журнала (только если провайдер сообщил usage) */
+const usageNote = (u: LlmUsage | undefined) =>
+  u && ((u.promptTokens ?? 0) > 0 || (u.completionTokens ?? 0) > 0)
+    ? ` · токены: ↑${fmtK(u.promptTokens ?? 0)} / ↓${fmtK(u.completionTokens ?? 0)}`
+    : ''
 
 export class StoppedError extends Error {
   constructor() {
@@ -101,6 +110,33 @@ export class AgentEngine {
     if (status === 'completed' || status === 'stopped' || status === 'error') {
       this.emit('history:list', { runs: store.history() })
     }
+  }
+
+  /** Аудит токенов (ADR-015): сводка снапшота + событие llm:usage; nodeId — атрибуция узлу.
+   *  Событие сворачивается fold'ом на фронтенде — счётчики видны и в replay. */
+  private addUsage(rt: Runtime, role: string, usage: LlmUsage | undefined, nodeId?: string) {
+    if (!usage) return
+    const input = usage.promptTokens ?? 0
+    const output = usage.completionTokens ?? 0
+    if (!input && !output) return
+    const run = rt.snapshot
+    if (!run.usage) run.usage = { inputTokens: 0, outputTokens: 0, calls: 0, byRole: {} }
+    run.usage.inputTokens += input
+    run.usage.outputTokens += output
+    run.usage.calls += 1
+    const r = (run.usage.byRole[role] ??= { inputTokens: 0, outputTokens: 0, calls: 0 })
+    r.inputTokens += input
+    r.outputTokens += output
+    r.calls += 1
+    if (nodeId) {
+      const node = run.nodes.find((n) => n.id === nodeId)
+      if (node) {
+        const u = (node.usage ??= { input: 0, output: 0 })
+        u.input += input
+        u.output += output
+      }
+    }
+    this.emitEvent(rt, { type: 'llm:usage', ts: now(), role, nodeId, inputTokens: input, outputTokens: output })
   }
 
   // ─────────────────────────── Запуск ───────────────────────────
@@ -240,17 +276,22 @@ export class AgentEngine {
 - Итоговый узел зависит от хвостов ВСЕХ веток (перечисли их в dependsOn).
 - dependsOn ссылается только на id уже объявленных узлов. Массив nodes обязан быть закрыт перед концом объекта.`
     try {
-      const json = await chatJson(PLANNER_SYS, user, 60_000, 2, 'planner')
+      const { json, usage } = await chatJsonDetailed(PLANNER_SYS, user, 60_000, 2, 'planner')
+      this.addUsage(rt, 'planner', usage)
       const { nodes, certainty, notes } = sanitizePlanData(json)
       if (certainty !== undefined) rt.snapshot.certainty = certainty
       if (nodes) {
         const plannerInfo = providerInfoOf(resolveRole('planner', loadConfig()))
-        this.log(rt, 'plan', `Планировщик: ${plannerInfo.adapter} · ${plannerInfo.model}`)
+        this.log(rt, 'plan', `Планировщик: ${plannerInfo.adapter} · ${plannerInfo.model}${usageNote(usage)}`)
         // ADR-013 (аудит усечений): каждая структурная потеря плана — в журнал
         // ДО итоговой записи о построенном графе (сначала лимиты, потом итог)
         for (const note of notes) this.log(rt, 'limits', note.message)
         const decCount = nodes.filter((n) => n.kind === 'decision').length
-        this.log(rt, 'plan', `Планировщик LLM построил граф из ${nodes.length} узлов${decCount ? ` · развилок: ${decCount}` : ''}`)
+        this.log(
+          rt,
+          'plan',
+          `Планировщик LLM построил граф из ${nodes.length} узлов${decCount ? ` · развилок: ${decCount}` : ''}`
+        )
         return nodes
       }
       this.log(rt, 'info', 'Не удалось разобрать JSON плана — применён резервный план')
@@ -316,14 +357,23 @@ export class AgentEngine {
         }
 
         try {
-          const output =
-            run.mode === 'demo' ? await this.demoExecute(node, rt) : await this.llmExecute(run, node)
+          const result =
+            run.mode === 'demo'
+              ? { output: await this.demoExecute(node, rt), usage: undefined as LlmUsage | undefined }
+              : await this.llmExecute(run, node)
           node.status = 'done'
-          node.output = output
+          node.output = result.output
           node.finishedAt = now()
           node.durationMs = node.finishedAt - (node.startedAt ?? node.finishedAt)
+          // Аудит токенов (ADR-015): атрибуция исполнителя узлу ДО node:update,
+          // чтобы usage попал в событие и в инспектор replay
+          this.addUsage(rt, 'executor', result.usage, node.id)
           this.emitEvent(rt, { type: 'node:update', ts: now(), node: { ...node } })
-          this.log(rt, 'node-done', `✓ «${node.title}» — завершён за ${((node.durationMs ?? 0) / 1000).toFixed(1)} с`)
+          this.log(
+            rt,
+            'node-done',
+            `✓ «${node.title}» — завершён за ${((node.durationMs ?? 0) / 1000).toFixed(1)} с${usageNote(result.usage)}`
+          )
         } catch (err: any) {
           if (err instanceof StoppedError) {
             node.status = 'pending'
@@ -397,7 +447,7 @@ export class AgentEngine {
     return text
   }
 
-  private async llmExecute(run: RunSnapshot, node: GraphNode): Promise<string> {
+  private async llmExecute(run: RunSnapshot, node: GraphNode): Promise<{ output: string; usage?: LlmUsage }> {
     const user = `Задача пользователя: «${run.task}»
 
 Текущий шаг: «${node.title}»
@@ -408,7 +458,8 @@ ${trunc(node.input || `Задача: ${run.task}`, 12000)}
 Выполни текущий шаг и верни его результат.`
     // provenance узла: адаптер/модель исполнителя (без ключей)
     node.llm = providerInfoOf(resolveRole('executor', loadConfig()))
-    return chatText(EXECUTOR_SYS, user, 90_000, 1, 'executor')
+    const res = await chatTextDetailed(EXECUTOR_SYS, user, 90_000, 1, 'executor')
+    return { output: res.content, usage: res.usage }
   }
 
   // ───────────────────── Динамическая адаптация ─────────────────────
@@ -488,7 +539,10 @@ ${graphDesc}
 Домены: scope, specialization, product, architecture, tone, format, context, strategy. selection: single (один вариант) или mixed (смешанное решение из нескольких). Вариантов 2–4, шагов в ветке 1–3.`
 
     try {
-      const json = await chatJson(SUPERVISOR_SYS, user, 45_000, 0, 'supervisor')
+      const { json, usage } = await chatJsonDetailed(SUPERVISOR_SYS, user, 45_000, 0, 'supervisor')
+      // Аудит токенов (ADR-015): супервайзер вызывается после каждого шага —
+      // без записи в журнал (иначе шум), но с полным учётом в сводке запуска
+      this.addUsage(rt, 'supervisor', usage)
       if (typeof json?.certainty === 'number' && Number.isFinite(json.certainty)) {
         const c = Math.min(1, Math.max(0, json.certainty))
         if (Math.abs(c - (run.certainty ?? 0)) > 0.05) this.emitCertainty(rt, c)
@@ -822,7 +876,9 @@ ${node.input || ''}
 ${mixed ? 'Выбери один или несколько вариантов (id из списка) и обоснуй состав.' : 'Выбери один вариант (id из списка) и обоснуй выбор.'} Ответ строго JSON:
 ${mixed ? '{"optionIds":["<id1>","<id2>"],"reasoning":"краткое, но исчерпывающее обоснование без воды"}' : '{"optionIds":["<id>"],"reasoning":"краткое, но исчерпывающее обоснование без воды"}'}`
     try {
-      const json = await chatJson(DECIDER_SYS, user, 45_000, 1, 'decider')
+      const { json, usage } = await chatJsonDetailed(DECIDER_SYS, user, 45_000, 1, 'decider')
+      // Аудит токенов (ADR-015): вызовы решателя атрибутируются узлу-развилке
+      this.addUsage(rt, 'decider', usage, node.id)
       const rawIds: any[] = Array.isArray(json?.optionIds)
         ? json.optionIds
         : Array.isArray(json?.options)
@@ -1005,7 +1061,11 @@ ${mixed ? '{"optionIds":["<id1>","<id2>"],"reasoning":"краткое, но ис
     this.recalcProgress(rt)
     this.pushStatus(rt, 'stopped', run.progress)
     const doneCount = run.nodes.filter((n) => n.status === 'done').length
-    this.log(rt, 'run', `Выполнение остановлено пользователем · выполнено узлов: ${doneCount}, пропущено: ${skipped}`)
+    const u = run.usage
+    const usageTotal = u
+      ? ` · токены: ↑${fmtK(u.inputTokens)} / ↓${fmtK(u.outputTokens)} (${u.calls} вызов. LLM)`
+      : ''
+    this.log(rt, 'run', `Выполнение остановлено пользователем · выполнено узлов: ${doneCount}, пропущено: ${skipped}${usageTotal}`)
     run.finishedAt = now()
     store.save(run)
   }
@@ -1019,10 +1079,15 @@ ${mixed ? '{"optionIds":["<id1>","<id2>"],"reasoning":"краткое, но ис
     const dynamic = run.nodes.filter((n) => n.dynamic).length
     const durS = ((run.finishedAt - run.createdAt) / 1000).toFixed(1)
     const last = [...run.nodes].filter((n) => n.status === 'done').pop()
-    const summary = `Готово за ${durS} с: ${run.nodes.length} узлов, ${dynamic} добавлено динамически, версий графа — ${run.version}. Итог: ${trunc(last?.output || '—', 220)}`
+    // Аудит токенов (ADR-015): итог запуска в summary и журнале
+    const u = run.usage
+    const usageTotal = u
+      ? ` · токены: ↑${fmtK(u.inputTokens)} / ↓${fmtK(u.outputTokens)} (${u.calls} вызов. LLM)`
+      : ''
+    const summary = `Готово за ${durS} с: ${run.nodes.length} узлов, ${dynamic} добавлено динамически, версий графа — ${run.version}${usageTotal}. Итог: ${trunc(last?.output || '—', 220)}`
     run.summary = summary
     this.emitEvent(rt, { type: 'run:summary', ts: now(), summary })
-    this.log(rt, 'run', `✓ Задача выполнена за ${durS} с`)
+    this.log(rt, 'run', `✓ Задача выполнена за ${durS} с${usageTotal}`)
     store.save(run)
   }
 

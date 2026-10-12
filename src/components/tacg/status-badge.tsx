@@ -29,12 +29,13 @@ export function RunStatusBadge({ status, className }: { status: RunStatus; class
 }
 
 export const NODE_DOT: Record<NodeStatus, string> = {
-  pending: 'bg-amber-400/90',
-  running: 'bg-cyan-400',
-  done: 'bg-emerald-400',
+  // CR-009: ожидание — нейтральный цинк; amber отдан развилкам («ваш ход»)
+  pending: 'bg-zinc-400 dark:bg-zinc-400/80',
+  running: 'bg-cyan-500 dark:bg-cyan-400',
+  done: 'bg-emerald-500 dark:bg-emerald-400',
   error: 'bg-red-500',
-  skipped: 'bg-zinc-500',
-  discarded: 'bg-zinc-600',
+  skipped: 'bg-zinc-400 dark:bg-zinc-500',
+  discarded: 'bg-zinc-300 dark:bg-zinc-600',
 }
 
 export function NodeStatusBadge({ status }: { status: NodeStatus }) {
@@ -51,7 +52,9 @@ export function ModeBadge({ mode }: { mode: RunMode }) {
     <span
       className={cn(
         'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium',
-        mode === 'llm' ? 'bg-teal-500/15 text-teal-300' : 'bg-violet-500/15 text-violet-300'
+        mode === 'llm'
+          ? 'bg-teal-500/15 text-teal-700 dark:text-teal-300'
+          : 'bg-violet-500/15 text-violet-700 dark:text-violet-300'
       )}
     >
       {mode === 'llm' ? 'LLM · z-ai-web-dev-sdk' : 'Демо · симуляция'}
@@ -62,10 +65,10 @@ export function ModeBadge({ mode }: { mode: RunMode }) {
 const LEGEND: { color: string; label: string }[] = [
   { color: 'bg-emerald-400', label: 'Выполнено' },
   { color: 'bg-cyan-400', label: 'Выполняется' },
-  { color: 'bg-amber-400', label: 'Ожидает' },
+  { color: 'bg-zinc-400', label: 'Ожидает' },
   { color: 'bg-red-500', label: 'Ошибка' },
   { color: 'bg-violet-400', label: 'Добавлено динамически' },
-  { color: 'bg-fuchsia-400', label: 'Развилка решения' },
+  { color: 'bg-amber-400', label: 'Развилка решения' },
   { color: 'bg-zinc-500', label: 'Пропущено' },
   { color: 'bg-zinc-600', label: 'Ветка не выбрана' },
 ]

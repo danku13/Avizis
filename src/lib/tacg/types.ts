@@ -57,6 +57,26 @@ export interface LlmProviderInfo {
   model: string
 }
 
+/** Затраты токенов LLM-вызовов одного узла (ADR-015) */
+export interface NodeUsage {
+  input: number
+  output: number
+}
+
+/** Сводка использования токенов по запуску (ADR-015): totals + разбивка по ролям движка */
+export interface RunUsage {
+  inputTokens: number
+  outputTokens: number
+  calls: number
+  byRole: Record<string, { inputTokens: number; outputTokens: number; calls: number }>
+}
+
+/** Форматирование числа токенов: 940 → «940», 1200 → «1,2k» */
+export const fmtTokens = (n: number): string => {
+  if (n >= 1000) return `${(n / 1000).toFixed(1).replace('.', ',')}k`
+  return String(n)
+}
+
 /** Публичная (маскированная) конфигурация провайдера — apiKey здесь всегда маска */
 export interface LlmProviderConfigPublic {
   adapter: string
@@ -109,6 +129,8 @@ export interface GraphNode {
   branchOf?: { decisionId: string; optionId: string }
   /** Provenance: адаптер/модель, выполнившие LLM-вызов этого узла */
   llm?: LlmProviderInfo
+  /** Затраты токенов LLM-вызовов узла (ADR-015): исполнитель или решатель развилки */
+  usage?: NodeUsage
 }
 
 export interface LogEntry {
@@ -150,6 +172,8 @@ export type RunEvent =
   | { type: 'decision:mode'; ts: number; mode: DecisionMode }
   /** Агент переоценил «понимание задачи» (насколько узкий вектор решения) */
   | { type: 'run:certainty'; ts: number; certainty: number; note?: string }
+  /** Аудит токенов (ADR-015): один успешный LLM-вызов; nodeId — атрибуция узлу */
+  | { type: 'llm:usage'; ts: number; role: string; nodeId?: string; inputTokens: number; outputTokens: number }
 
 export interface RunSnapshot {
   id: string
@@ -170,6 +194,8 @@ export interface RunSnapshot {
   events: RunEvent[]
   logs: LogEntry[]
   summary?: string
+  /** Использование токенов LLM по запуску (демо-прогоны — без поля) */
+  usage?: RunUsage
 }
 
 export interface RunMeta {
@@ -200,6 +226,8 @@ export interface RunView {
   certainty?: number
   /** Provenance LLM (роль → адаптер/модель) — прокидывается из снапшота */
   llm?: Record<string, LlmProviderInfo>
+  /** Использование токенов LLM на момент свёртки (ADR-015) */
+  usage?: RunUsage
 }
 
 /** Выбранные варианты развилки как массив (совместимость со старыми прогонами: chosen мог быть строкой) */

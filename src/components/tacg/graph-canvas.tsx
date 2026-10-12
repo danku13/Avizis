@@ -23,6 +23,7 @@ import '@xyflow/react/dist/style.css'
 import { CheckCircle2, GitFork, Loader2, Network, PenLine, Plus, X } from 'lucide-react'
 import { chosenIds, GraphNode, selectionMode } from '@/lib/tacg/types'
 import { computeEdges } from '@/lib/tacg/fold'
+import { useIsDark } from '@/lib/tacg/theme'
 import { useTacgStore } from '@/store/tacg-store'
 import { cn } from '@/lib/utils'
 
@@ -33,38 +34,41 @@ const GAP_Y = 26
 
 type TacgFlowNode = Node<GraphNode, 'tacg'>
 
+// Палитра (CR-009): ожидание — нейтральный цинк (план-чертёж), развилки — amber
+// («ваш ход»), динамические узлы — violet. Раньше развилка была fuchsia —
+// соседний с violet оттенок, читался как «динамика».
 const CARD_STYLES: Record<GraphNode['status'], string> = {
-  pending: 'border-amber-400/50 bg-zinc-900/80',
-  running: 'border-cyan-400 bg-zinc-900',
-  done: 'border-emerald-500/70 bg-zinc-900/80',
-  error: 'border-red-500 bg-zinc-900',
-  skipped: 'border-zinc-600/60 bg-zinc-900/50',
-  discarded: 'border-zinc-600/40 bg-zinc-900/40',
+  pending: 'border-zinc-400 bg-white/90 dark:border-zinc-500/60 dark:bg-zinc-900/80',
+  running: 'border-cyan-500 bg-white dark:border-cyan-400 dark:bg-zinc-900',
+  done: 'border-emerald-500/70 bg-white/90 dark:bg-zinc-900/80',
+  error: 'border-red-500 bg-white dark:bg-zinc-900',
+  skipped: 'border-zinc-300 bg-zinc-100/70 dark:border-zinc-600/60 dark:bg-zinc-900/50',
+  discarded: 'border-zinc-300/80 bg-zinc-100/50 dark:border-zinc-600/40 dark:bg-zinc-900/40',
 }
 
 const BAR_STYLES: Record<GraphNode['status'], string> = {
-  pending: 'bg-amber-400/70',
-  running: 'bg-cyan-400',
-  done: 'bg-emerald-400',
+  pending: 'bg-zinc-400/80 dark:bg-zinc-400/70',
+  running: 'bg-cyan-500 dark:bg-cyan-400',
+  done: 'bg-emerald-500 dark:bg-emerald-400',
   error: 'bg-red-500',
-  skipped: 'bg-zinc-600',
-  discarded: 'bg-zinc-600/60',
+  skipped: 'bg-zinc-400 dark:bg-zinc-600',
+  discarded: 'bg-zinc-300 dark:bg-zinc-600/60',
 }
 
 const MINIMAP_NODE_COLORS: Record<GraphNode['status'], string> = {
-  pending: '#fbbf24',
+  pending: '#a1a1aa',
   running: '#22d3ee',
   done: '#34d399',
   error: '#ef4444',
-  skipped: '#52525b',
-  discarded: '#3f3f46',
+  skipped: '#71717a',
+  discarded: '#52525b',
 }
 
 /** Цвет чипа ветки по id варианта */
 const OPTION_STYLES: Record<string, string> = {
-  a: 'bg-sky-500/25 text-sky-300',
-  b: 'bg-fuchsia-500/25 text-fuchsia-300',
-  c: 'bg-orange-500/25 text-orange-300',
+  a: 'bg-sky-500/25 text-sky-700 dark:text-sky-300',
+  b: 'bg-fuchsia-500/25 text-fuchsia-700 dark:text-fuchsia-300',
+  c: 'bg-orange-500/25 text-orange-700 dark:text-orange-300',
 }
 
 /** Слоевой layout: колонка = глубина зависимости, узлы центрируются по вертикали */
@@ -117,20 +121,21 @@ function TacgNodeCard({ data: n, selected }: NodeProps<TacgFlowNode>) {
     <div
       className={cn(
         'relative w-[248px] rounded-xl border pl-4 pr-3.5 shadow-md backdrop-blur-sm transition-all',
+        // развилка в ожидании — amber (CR-009): «ваш ход», максимум контраста с violet-динамикой
         isDecision && offered
-          ? 'border-fuchsia-400 bg-zinc-900'
+          ? 'border-amber-500 bg-white dark:border-amber-400 dark:bg-zinc-900'
           : CARD_STYLES[n.status],
         n.dynamic && !isDecision && 'border-dashed',
         n.status === 'discarded' && 'opacity-55',
-        selected && 'ring-2 ring-zinc-300/70 ring-offset-2 ring-offset-zinc-950',
-        waitingUser && 'cursor-pointer hover:border-fuchsia-300',
+        selected && 'ring-2 ring-zinc-400/70 ring-offset-2 ring-offset-white dark:ring-zinc-300/70 dark:ring-offset-zinc-950',
+        waitingUser && 'cursor-pointer hover:border-amber-400 dark:hover:border-amber-300',
       )}
     >
       {(n.status === 'running' || offered) && (
         <div
           className={cn(
             'node-pulse pointer-events-none absolute -inset-1.5 rounded-2xl border',
-            offered ? 'border-fuchsia-400/60 bg-fuchsia-500/10' : 'border-cyan-400/50 bg-cyan-500/10'
+            offered ? 'border-amber-400/60 bg-amber-500/10' : 'border-cyan-400/50 bg-cyan-500/10'
           )}
         />
       )}
@@ -151,15 +156,15 @@ function TacgNodeCard({ data: n, selected }: NodeProps<TacgFlowNode>) {
       <div className="flex h-[84px] flex-col justify-between py-3">
         <div className="flex items-start justify-between gap-1.5">
           <div className="flex min-w-0 items-start gap-1.5">
-            {isDecision && <GitFork className={cn('mt-0.5 size-3.5 shrink-0', offered ? 'text-fuchsia-300' : 'text-fuchsia-400/80')} />}
-            <div className="line-clamp-2 text-[13px] font-medium leading-tight text-zinc-100">{n.title}</div>
+            {isDecision && <GitFork className={cn('mt-0.5 size-3.5 shrink-0', offered ? 'text-amber-500 dark:text-amber-300' : 'text-amber-600/80 dark:text-amber-400/80')} />}
+            <div className="line-clamp-2 text-[13px] font-medium leading-tight text-zinc-900 dark:text-zinc-100">{n.title}</div>
           </div>
           <div className="flex shrink-0 gap-1">
             {n.branchOf && (
               <span
                 className={cn(
                   'rounded px-1.5 py-0.5 text-[10px] font-bold uppercase',
-                  OPTION_STYLES[n.branchOf.optionId] ?? 'bg-zinc-500/20 text-zinc-300'
+                  OPTION_STYLES[n.branchOf.optionId] ?? 'bg-zinc-500/20 text-zinc-600 dark:text-zinc-300'
                 )}
                 title={`Ветка варианта «${n.branchOf.optionId}» развилки ${n.branchOf.decisionId}`}
               >
@@ -167,13 +172,13 @@ function TacgNodeCard({ data: n, selected }: NodeProps<TacgFlowNode>) {
               </span>
             )}
             {n.dynamic && (
-              <span className="flex items-center gap-0.5 rounded bg-violet-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-violet-300">
+              <span className="flex items-center gap-0.5 rounded bg-violet-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700 dark:text-violet-300">
                 <Plus className="size-2.5" />
                 v{n.addedAtVersion}
               </span>
             )}
             {n.overridden && !n.dynamic && (
-              <span className="flex items-center gap-0.5 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
+              <span className="flex items-center gap-0.5 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
                 <PenLine className="size-2.5" />
                 изм.
               </span>
@@ -182,7 +187,7 @@ function TacgNodeCard({ data: n, selected }: NodeProps<TacgFlowNode>) {
         </div>
 
         {/* строка состояния: у развилок — свой сюжет */}
-        <div className="flex items-center gap-1.5 text-[11px] text-zinc-500">
+        <div className="flex items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-500">
           {isDecision ? (
             <DecisionStatusRow
               status={n.status}
@@ -194,7 +199,7 @@ function TacgNodeCard({ data: n, selected }: NodeProps<TacgFlowNode>) {
               mixed={mixedSelection}
             />
           ) : n.status === 'running' ? (
-            <span className="flex items-center gap-1 text-cyan-300">
+            <span className="flex items-center gap-1 text-cyan-600 dark:text-cyan-300">
               <Loader2 className="size-3 animate-spin" />
               выполнение…
             </span>
@@ -218,7 +223,7 @@ function TacgNodeCard({ data: n, selected }: NodeProps<TacgFlowNode>) {
                       discarded: 'не реализовано',
                     }[n.status]}
               </span>
-              {(n.runs ?? 0) > 1 && <span className="text-amber-400/80">·×{n.runs}</span>}
+              {(n.runs ?? 0) > 1 && <span className="text-amber-600/80 dark:text-amber-400/80">·×{n.runs}</span>}
             </>
           )}
         </div>
@@ -228,7 +233,7 @@ function TacgNodeCard({ data: n, selected }: NodeProps<TacgFlowNode>) {
       <span
         className={cn(
           'absolute bottom-2.5 left-1.5 top-2.5 w-1 rounded-full',
-          isDecision && offered ? 'bg-fuchsia-400' : BAR_STYLES[n.status]
+          isDecision && offered ? 'bg-amber-500 dark:bg-amber-400' : BAR_STYLES[n.status]
         )}
       />
     </div>
@@ -256,7 +261,7 @@ function DecisionStatusRow({
   if (decisionStatus === 'resolved' && chosenLabels.length) {
     const isMixed = chosenLabels.length > 1
     return (
-      <span className="flex min-w-0 items-center gap-1.5 text-emerald-300">
+      <span className="flex min-w-0 items-center gap-1.5 text-emerald-600 dark:text-emerald-300">
         <CheckCircle2 className="size-3 shrink-0" />
         <span className="truncate">
           {isMixed ? `смешанное: ${chosenLabels.join(' + ')}` : `выбрано: ${chosenLabels[0]}`}
@@ -267,12 +272,12 @@ function DecisionStatusRow({
   }
   if (decisionStatus === 'offered') {
     return waitingUser ? (
-      <span className="flex animate-pulse items-center gap-1 text-fuchsia-300">
+      <span className="flex animate-pulse items-center gap-1 text-amber-600 dark:text-amber-300">
         <GitFork className="size-3 shrink-0" />
         {mixed ? `ждёт выбора (можно несколько)` : 'ждёт вашего выбора'}
       </span>
     ) : (
-      <span className="flex items-center gap-1 text-fuchsia-300">
+      <span className="flex items-center gap-1 text-amber-600 dark:text-amber-300">
         <Loader2 className="size-3 shrink-0 animate-spin" />
         агент выбирает…
       </span>
@@ -280,7 +285,7 @@ function DecisionStatusRow({
   }
   if (status === 'running') {
     return (
-      <span className="flex items-center gap-1 text-cyan-300">
+      <span className="flex items-center gap-1 text-cyan-600 dark:text-cyan-300">
         <Loader2 className="size-3 animate-spin" />
         агент рассуждает…
       </span>
@@ -312,6 +317,7 @@ function FlowStage({
   onOpenDecision: () => void
 }) {
   const rf = useReactFlow()
+  const isDark = useIsDark()
   const lastSig = useRef<string | null>(null)
   const fitTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -339,7 +345,8 @@ function FlowStage({
         const from = byId.get(e.from)
         const to = byId.get(e.to)
         if (!from || !to) return null
-        let stroke = 'rgba(82,82,91,0.75)'
+        // базовые цвета рёбер — от темы (CR-009/светлый стиль)
+        let stroke = isDark ? 'rgba(82,82,91,0.75)' : 'rgba(113,113,122,0.55)'
         let animated = false
         let dash: string | undefined
 
@@ -352,20 +359,21 @@ function FlowStage({
 
         if (deadBranch) {
           // нереализованная ветка: тихое пунктирное ребро
-          stroke = 'rgba(63,63,70,0.45)'
+          stroke = isDark ? 'rgba(63,63,70,0.45)' : 'rgba(161,161,170,0.45)'
           dash = '3 4'
         } else if (isBranchEdge) {
+          // ветка развилки — amber (CR-009): контраст с violet-рёбрами динамики
           if (chosen) {
-            stroke = from.status === 'done' ? 'rgba(52,211,153,0.65)' : 'rgba(217,70,239,0.65)'
+            stroke = from.status === 'done' ? 'rgba(52,211,153,0.65)' : 'rgba(245,158,11,0.7)'
           } else {
-            stroke = 'rgba(217,70,239,0.6)'
+            stroke = 'rgba(245,158,11,0.65)'
             dash = '6 4'
           }
         } else if (to.status === 'running') {
           stroke = '#22d3ee'
           animated = true
         } else if (to.dynamic && from.status !== 'done') {
-          stroke = 'rgba(167,139,250,0.7)'
+          stroke = 'rgba(167,139,250,0.75)'
         } else if (from.status === 'done') {
           stroke = 'rgba(52,211,153,0.6)'
         }
@@ -381,7 +389,7 @@ function FlowStage({
         } satisfies Edge
       })
       .filter((e): e is Edge => e !== null)
-  }, [nodes, byId])
+  }, [nodes, byId, isDark])
 
   // авто-вписывание при изменении формы графа (новые узлы/колонки)
   useEffect(() => {
@@ -428,23 +436,23 @@ function FlowStage({
         variant={BackgroundVariant.Dots}
         gap={26}
         size={1.4}
-        color="rgba(82,82,91,0.55)"
-        className="bg-[radial-gradient(circle_at_30%_20%,rgba(63,63,70,0.22),transparent_60%)]"
+        color={isDark ? 'rgba(82,82,91,0.55)' : 'rgba(113,113,122,0.5)'}
+        className="bg-[radial-gradient(circle_at_30%_20%,rgba(228,228,231,0.55),transparent_60%)] dark:bg-[radial-gradient(circle_at_30%_20%,rgba(63,63,70,0.22),transparent_60%)]"
       />
       <Controls showInteractive={false} position="bottom-left" />
       <MiniMap
         className="hidden md:block"
-        bgColor="#101013"
-        maskColor="rgba(9,9,11,0.72)"
+        bgColor={isDark ? '#101013' : '#fafafa'}
+        maskColor={isDark ? 'rgba(9,9,11,0.72)' : 'rgba(255,255,255,0.75)'}
         nodeColor={(n) =>
           (n as TacgFlowNode).data?.kind === 'decision'
-            ? '#d946ef'
+            ? '#f59e0b'
             : MINIMAP_NODE_COLORS[(n as TacgFlowNode).data?.status ?? 'pending'] ?? '#52525b'
         }
-        nodeStrokeColor="#3f3f46"
+        nodeStrokeColor={isDark ? '#3f3f46' : '#d4d4d8'}
         nodeStrokeWidth={2}
         nodeBorderRadius={6}
-        style={{ bottom: 34, right: 12, border: '1px solid rgba(63,63,70,0.9)', borderRadius: 10 }}
+        style={{ bottom: 34, right: 12, border: isDark ? '1px solid rgba(63,63,70,0.9)' : '1px solid rgba(212,212,216,0.9)', borderRadius: 10 }}
         pannable
         zoomable
       />
@@ -464,7 +472,7 @@ export function GraphCanvas({ nodes, selectedNodeId, onSelect, waitingDecisionId
   return (
     /* absolute inset-0: надёжнее h-full — проценты не резолвятся
        в flex-item, чья высота задана только min-height (мобильная раскладка) */
-    <div className="absolute inset-0 overflow-hidden rounded-lg border bg-zinc-950/60">
+    <div className="absolute inset-0 overflow-hidden rounded-lg border bg-zinc-50 dark:bg-zinc-950/60">
       {nodes.length === 0 ? (
         <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
           <div className="flex size-14 items-center justify-center rounded-2xl border border-dashed">

@@ -8,17 +8,18 @@ import { cn } from '@/lib/utils'
 import { useTacgStore } from '@/store/tacg-store'
 
 const KIND_STYLES: Record<LogEntry['kind'], string> = {
-  plan: 'text-zinc-400',
-  'node-start': 'text-cyan-300',
-  'node-done': 'text-emerald-300',
-  'node-error': 'text-red-300',
-  adapt: 'text-violet-300',
-  control: 'text-amber-300',
-  intervention: 'text-amber-300',
-  decision: 'text-fuchsia-300',
-  run: 'text-zinc-300',
-  info: 'text-zinc-500',
-  limits: 'text-orange-300',
+  // CR-009: решения (развилки) — amber в обеих темах; остальные акценты — 600/300
+  plan: 'text-zinc-500 dark:text-zinc-400',
+  'node-start': 'text-cyan-600 dark:text-cyan-300',
+  'node-done': 'text-emerald-600 dark:text-emerald-300',
+  'node-error': 'text-red-600 dark:text-red-300',
+  adapt: 'text-violet-600 dark:text-violet-300',
+  control: 'text-amber-600 dark:text-amber-300',
+  intervention: 'text-amber-600 dark:text-amber-300',
+  decision: 'text-amber-500 dark:text-amber-400',
+  run: 'text-zinc-700 dark:text-zinc-300',
+  info: 'text-zinc-500 dark:text-zinc-500',
+  limits: 'text-orange-600 dark:text-orange-300',
 }
 
 const KIND_LABELS: Record<LogEntry['kind'], string> = {
@@ -61,19 +62,19 @@ export function EventLog() {
   return (
     <div className="flex h-full flex-col">
       <div className="mb-2 flex items-center justify-between">
-        <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
+        <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
           Журнал событий · {isLive ? 'live' : `кадр ${cursor! + 1}`}
         </h4>
         <span className="text-xs tabular-foreground text-muted-foreground">{logs.length}</span>
       </div>
-      <ScrollArea className="h-0 flex-1 rounded-md border bg-zinc-950/50 p-2">
+      <ScrollArea className="h-0 flex-1 rounded-md border bg-white/60 p-2 dark:bg-zinc-950/50">
         <div className="space-y-1.5 pr-1">
           {logs.length === 0 && <p className="px-1 py-2 text-xs text-muted-foreground">События появятся во время выполнения…</p>}
           {logs.map((l) => (
             <div key={l.id} className="flex items-start gap-2 text-xs leading-relaxed">
-              <span className="shrink-0 tabular-nums text-zinc-600">{fmtTime(l.ts)}</span>
+              <span className="shrink-0 tabular-nums text-zinc-400 dark:text-zinc-600">{fmtTime(l.ts)}</span>
               <span className={cn('shrink-0 font-medium', KIND_STYLES[l.kind])}>[{KIND_LABELS[l.kind]}]</span>
-              <span className="min-w-0 break-words text-zinc-300">{l.message}</span>
+              <span className="min-w-0 break-words text-zinc-700 dark:text-zinc-300">{l.message}</span>
             </div>
           ))}
           <div ref={logsRef} />

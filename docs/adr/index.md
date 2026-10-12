@@ -19,6 +19,7 @@
 | 012 | [ADR-012-byok-llm-router.md](./ADR-012-byok-llm-router.md) | BYOK: LLM-роутер, адаптеры zai/openai-compatible, ключи, provenance | CR-007 |
 | 013 | [ADR-013-truncation-audit.md](./ADR-013-truncation-audit.md) | Аудит усечений структурных лимитов (конец «тихим потерям») | CR-008 |
 | 014 | [ADR-014-computable-certainty.md](./ADR-014-computable-certainty.md) | **задел**: вычислимая метрика понимания из состояния графа | — |
+| 015 | [ADR-015-token-usage.md](./ADR-015-token-usage.md) | Аудит использования токенов через событийный поток (llm:usage) | CR-009 |
 | — | [tech-stack.md](./tech-stack.md) | Сводка технологического стека | — |
 
 ## Правила ведения

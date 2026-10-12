@@ -131,27 +131,42 @@
   animation: node-pulse 1.7s ease-in-out infinite;
 }
 
-/* ─── React Flow (@xyflow/react) — тёмная тема ─── */
+/* ─── React Flow (@xyflow/react) — светлая база + .dark переопределения ─── */
 .react-flow__controls {
   border-radius: 10px;
   overflow: hidden;
-  border: 1px solid rgba(63, 63, 70, 0.9);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(212, 212, 216, 0.9);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
 }
 .react-flow__controls-button {
-  background: rgba(24, 24, 27, 0.92);
-  border-bottom: 1px solid rgba(63, 63, 70, 0.9);
-  color: #d4d4d8;
+  background: rgba(255, 255, 255, 0.95);
+  border-bottom: 1px solid rgba(212, 212, 216, 0.9);
+  color: #3f3f46;
   width: 26px;
   height: 26px;
 }
 .react-flow__controls-button:hover {
-  background: #27272a;
+  background: #f4f4f5;
 }
 .react-flow__controls-button svg {
   fill: currentColor;
 }
 .react-flow__controls-button:disabled {
+  background: rgba(255, 255, 255, 0.95);
+}
+.dark .react-flow__controls {
+  border: 1px solid rgba(63, 63, 70, 0.9);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+.dark .react-flow__controls-button {
+  background: rgba(24, 24, 27, 0.92);
+  border-bottom: 1px solid rgba(63, 63, 70, 0.9);
+  color: #d4d4d8;
+}
+.dark .react-flow__controls-button:hover {
+  background: #27272a;
+}
+.dark .react-flow__controls-button:disabled {
   background: rgba(24, 24, 27, 0.92);
 }
 .react-flow__edge-path {
@@ -167,23 +182,35 @@
   opacity: 0;
 }
 .react-flow__minimap {
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
+}
+.dark .react-flow__minimap {
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
 }
-/* атрибуция React Flow — видимая, но в тёмной палитре (под MiniMap) */
+/* атрибуция React Flow — видимая, но в палитре темы (под MiniMap) */
 .react-flow__attribution {
-  background: rgba(24, 24, 27, 0.85);
+  background: rgba(255, 255, 255, 0.9);
   border-radius: 6px 0 0 0;
   padding: 2px 5px;
 }
 .react-flow__attribution a {
-  color: #71717a;
+  color: #a1a1aa;
   font-size: 9px;
   text-decoration: none;
 }
+.dark .react-flow__attribution {
+  background: rgba(24, 24, 27, 0.85);
+}
+.dark .react-flow__attribution a {
+  color: #71717a;
+}
 
-/* аккуратные скроллбары */
+/* аккуратные скроллбары: светлые/тёмные от темы */
 * {
   scrollbar-width: thin;
+  scrollbar-color: oklch(0.72 0 0 / 0.7) transparent;
+}
+.dark * {
   scrollbar-color: oklch(0.44 0 0 / 0.5) transparent;
 }
 *::-webkit-scrollbar {
@@ -191,8 +218,11 @@
   height: 6px;
 }
 *::-webkit-scrollbar-thumb {
-  background: oklch(0.44 0 0 / 0.5);
+  background: oklch(0.72 0 0 / 0.7);
   border-radius: 3px;
+}
+.dark *::-webkit-scrollbar-thumb {
+  background: oklch(0.44 0 0 / 0.5);
 }
 *::-webkit-scrollbar-track {
   background: transparent;

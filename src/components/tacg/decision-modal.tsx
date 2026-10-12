@@ -16,13 +16,13 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
 const OPTION_STYLES: Record<string, { chip: string; stripe: string; ring: string }> = {
-  a: { chip: 'bg-sky-500/25 text-sky-300', stripe: 'bg-sky-400/80', ring: 'ring-sky-400/70 border-sky-400/60' },
-  b: { chip: 'bg-fuchsia-500/25 text-fuchsia-300', stripe: 'bg-fuchsia-400/80', ring: 'ring-fuchsia-400/70 border-fuchsia-400/60' },
-  c: { chip: 'bg-orange-500/25 text-orange-300', stripe: 'bg-orange-400/80', ring: 'ring-orange-400/70 border-orange-400/60' },
-  d: { chip: 'bg-teal-500/25 text-teal-300', stripe: 'bg-teal-400/80', ring: 'ring-teal-400/70 border-teal-400/60' },
+  a: { chip: 'bg-sky-500/25 text-sky-700 dark:text-sky-300', stripe: 'bg-sky-400/80', ring: 'ring-sky-400/70 border-sky-400/60' },
+  b: { chip: 'bg-fuchsia-500/25 text-fuchsia-700 dark:text-fuchsia-300', stripe: 'bg-fuchsia-400/80', ring: 'ring-fuchsia-400/70 border-fuchsia-400/60' },
+  c: { chip: 'bg-orange-500/25 text-orange-700 dark:text-orange-300', stripe: 'bg-orange-400/80', ring: 'ring-orange-400/70 border-orange-400/60' },
+  d: { chip: 'bg-teal-500/25 text-teal-700 dark:text-teal-300', stripe: 'bg-teal-400/80', ring: 'ring-teal-400/70 border-teal-400/60' },
 }
 const optStyle = (id: string) =>
-  OPTION_STYLES[id] ?? { chip: 'bg-zinc-500/25 text-zinc-300', stripe: 'bg-zinc-400/80', ring: 'ring-zinc-400/70 border-zinc-500/60' }
+  OPTION_STYLES[id] ?? { chip: 'bg-zinc-500/25 text-zinc-600 dark:text-zinc-300', stripe: 'bg-zinc-400/80', ring: 'ring-zinc-400/70 border-zinc-500/60' }
 
 export function DecisionModal() {
   const events = useTacgStore((s) => s.events)
@@ -96,34 +96,34 @@ export function DecisionModal() {
   return (
     <Dialog open={open} onOpenChange={close}>
       <DialogContent
-        className="flex h-[86dvh] max-h-[86dvh] w-[calc(100vw-1.5rem)] flex-col gap-0 overflow-hidden border-zinc-800 bg-zinc-950/95 p-0 backdrop-blur-md sm:max-w-none sm:w-[55vw] lg:w-[58vw] xl:w-[64vw]"
+        className="flex h-[86dvh] max-h-[86dvh] w-[calc(100vw-1.5rem)] flex-col gap-0 overflow-hidden border-zinc-200 bg-white/95 p-0 backdrop-blur-md sm:max-w-none sm:w-[55vw] lg:w-[58vw] xl:w-[64vw] dark:border-zinc-800 dark:bg-zinc-950/95"
       >
         <DialogDescription className="sr-only">
           Развилка графа вычислений: варианты агента с обоснованием, выбор активирует одну или несколько веток
         </DialogDescription>
 
         {/* ─── Шапка ─── */}
-        <DialogHeader className="border-b border-zinc-800/80 px-6 py-4 text-left">
+        <DialogHeader className="border-b border-zinc-200/80 px-6 py-4 text-left dark:border-zinc-800/80">
           <div className="flex items-start justify-between gap-4 pr-8">
             <DialogTitle className="flex items-center gap-2.5 text-lg font-semibold leading-tight">
-              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-fuchsia-500/15 text-fuchsia-300">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-600 dark:text-amber-300">
                 <GitFork className="size-4.5" />
               </span>
               {offered.title}
             </DialogTitle>
             <div className="mt-0.5 flex shrink-0 flex-wrap items-center gap-1.5">
               {decision.domain && (
-                <span className="rounded-md border border-violet-500/40 bg-violet-500/10 px-2 py-0.5 text-xs font-medium text-violet-300">
+                <span className="rounded-md border border-violet-500/40 bg-violet-500/10 px-2 py-0.5 text-xs font-medium text-violet-700 dark:text-violet-300">
                   {DECISION_DOMAIN_LABELS[decision.domain]}
                 </span>
               )}
-              <span className="flex items-center gap-1.5 rounded-md border border-fuchsia-500/40 bg-fuchsia-500/10 px-2 py-0.5 text-xs font-medium text-fuchsia-300">
-                {mixed ? <Layers className="size-3" /> : <span className="size-1.5 animate-pulse rounded-full bg-fuchsia-400" />}
+              <span className="flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300">
+                {mixed ? <Layers className="size-3" /> : <span className="size-1.5 animate-pulse rounded-full bg-amber-500 dark:bg-amber-400" />}
                 {mixed ? 'смешанный выбор' : 'один вариант'}
               </span>
             </div>
           </div>
-          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-zinc-300">{decision.question}</p>
+          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">{decision.question}</p>
         </DialogHeader>
 
         {/* ─── Варианты ─── */}
@@ -135,7 +135,7 @@ export function DecisionModal() {
                 : `Агент предлагает ${decision.options.length} варианта. Выбор определяет дальнейшие шаги — нереализованные ветки погаснут на графе сразу после решения.`}
             </p>
           ) : (
-            <div className="flex items-center gap-2 rounded-lg border border-fuchsia-500/30 bg-fuchsia-500/10 p-3 text-xs text-fuchsia-200">
+            <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">
               <Loader2 className="size-4 shrink-0 animate-spin" />
               Режим «авто»: агент взвешивает варианты{mixed ? ' (может собрать смешанное решение)' : ''} и примет решение
               самостоятельно. Обоснование появится в инспекторе узла и в журнале.
@@ -153,9 +153,9 @@ export function DecisionModal() {
                 disabled={!manual}
                 aria-pressed={isSel}
                 className={cn(
-                  'relative block w-full overflow-hidden rounded-xl border bg-zinc-900/60 p-4 pl-5 text-left transition-all',
-                  manual && 'cursor-pointer hover:border-zinc-500',
-                  isSel ? cn('border ring-2', st.ring) : 'border-zinc-700/70',
+                  'relative block w-full overflow-hidden rounded-xl border bg-white/80 p-4 pl-5 text-left transition-all dark:bg-zinc-900/60',
+                  manual && 'cursor-pointer hover:border-zinc-400 dark:hover:border-zinc-500',
+                  isSel ? cn('border ring-2', st.ring) : 'border-zinc-300 dark:border-zinc-700/70',
                   !manual && 'opacity-60'
                 )}
               >
@@ -170,7 +170,7 @@ export function DecisionModal() {
                     >
                       {o.id}
                     </span>
-                    <span className="min-w-0 text-sm font-semibold leading-snug break-words text-zinc-100">{o.label}</span>
+                    <span className="min-w-0 text-sm font-semibold leading-snug break-words text-zinc-900 dark:text-zinc-100">{o.label}</span>
                   </div>
                   {isSel && (
                     <span className="shrink-0 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-300">
@@ -178,13 +178,13 @@ export function DecisionModal() {
                     </span>
                   )}
                 </div>
-                <p className="mt-2 text-xs leading-relaxed text-zinc-400">{o.rationale}</p>
+                <p className="mt-2 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">{o.rationale}</p>
                 <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
                   <span className="text-[11px] text-zinc-500">дальше:</span>
                   {o.nextSteps.map((s, i) => (
                     <span
                       key={i}
-                      className="rounded border border-zinc-700 bg-zinc-900 px-1.5 py-0.5 text-[11px] text-zinc-300"
+                      className="rounded border border-zinc-300 bg-zinc-100 px-1.5 py-0.5 text-[11px] text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
                     >
                       {i + 1}. {s}
                     </span>
@@ -195,7 +195,7 @@ export function DecisionModal() {
             )
           })}
 
-          <p className="flex items-center gap-1.5 pt-1 text-[11px] text-zinc-600">
+          <p className="flex items-center gap-1.5 pt-1 text-[11px] text-zinc-500 dark:text-zinc-600">
             <MousePointerClick className="size-3" />
             {mixed ? 'Кликайте по нескольким карточкам, чтобы собрать смешанное решение. ' : ''}
             Esc скрывает окно — ожидание выбора не отменяется. Вернуться можно кликом по развилке на графе или баннером в
@@ -204,14 +204,16 @@ export function DecisionModal() {
         </div>
 
         {/* ─── Подвал: режим + принятие ─── */}
-        <footer className="flex flex-wrap items-center gap-3 border-t border-zinc-800/80 px-6 py-3.5">
-          <div className="flex items-center rounded-lg border border-zinc-700 p-0.5" role="group" aria-label="Режим принятия решений">
+        <footer className="flex flex-wrap items-center gap-3 border-t border-zinc-200/80 px-6 py-3.5 dark:border-zinc-800/80">
+          <div className="flex items-center rounded-lg border border-zinc-300 p-0.5 dark:border-zinc-700" role="group" aria-label="Режим принятия решений">
             <button
               type="button"
               onClick={() => switchMode('manual')}
               className={cn(
                 'flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
-                manual ? 'bg-fuchsia-500/20 text-fuchsia-200' : 'text-zinc-400 hover:text-zinc-200'
+                manual
+                  ? 'bg-amber-500/20 text-amber-700 dark:text-amber-200'
+                  : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'
               )}
               title="Агент предлагает варианты и ожидает вашего решения"
             >
@@ -223,7 +225,9 @@ export function DecisionModal() {
               onClick={() => switchMode('auto')}
               className={cn(
                 'flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
-                !manual ? 'bg-fuchsia-500/20 text-fuchsia-200' : 'text-zinc-400 hover:text-zinc-200'
+                !manual
+                  ? 'bg-amber-500/20 text-amber-700 dark:text-amber-200'
+                  : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'
               )}
               title="Агент принимает решения на развилках сам"
             >
@@ -236,7 +240,7 @@ export function DecisionModal() {
             <span className="hidden items-center gap-1.5 text-xs text-zinc-500 sm:flex" title="Оценка агентом «понимания задачи»">
               понимание: {Math.round(certaintyNow * 100)}%
               {certaintyAfter != null && (
-                <span className="text-emerald-400/80">→ ~{Math.round(Math.max(certaintyNow, certaintyAfter) * 100)}%</span>
+                <span className="text-emerald-600/80 dark:text-emerald-400/80">→ ~{Math.round(Math.max(certaintyNow, certaintyAfter) * 100)}%</span>
               )}
             </span>
           )}

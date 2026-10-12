@@ -2,13 +2,13 @@
 'use client'
 
 import { useMemo } from 'react'
-import { Pause, Play, Square, Download, Radio, Bot, Hand, GitFork, Compass, Settings2, Cpu } from 'lucide-react'
+import { Pause, Play, Square, Download, Radio, Bot, Hand, GitFork, Compass, Settings2, Cpu, Coins } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { RunStatusBadge, ModeBadge } from './status-badge'
 import { findOfferedDecision, foldEvents, versionMarkers } from '@/lib/tacg/fold'
-import { chosenIds, certaintyLabel, DECISION_DOMAIN_LABELS, DecisionMode, LLM_ROLE_LABELS, LlmProviderInfo, selectionMode } from '@/lib/tacg/types'
+import { chosenIds, certaintyLabel, DECISION_DOMAIN_LABELS, DecisionMode, fmtTokens, LLM_ROLE_LABELS, LlmProviderInfo, selectionMode } from '@/lib/tacg/types'
 import { getSocket } from '@/lib/tacg/socket'
 import { useTacgStore } from '@/store/tacg-store'
 import { toast } from 'sonner'
@@ -31,9 +31,9 @@ function LlmChip() {
             onClick={openSettings}
             role="status"
             aria-label={`Активный LLM-провайдер: ${label}. Открыть настройки`}
-            className="inline-flex h-8 max-w-[300px] items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-900/60 px-2.5 text-xs font-medium text-zinc-300 transition-colors hover:border-teal-500/50 hover:text-teal-300"
+            className="inline-flex h-8 max-w-[300px] items-center gap-1.5 rounded-lg border border-zinc-300 bg-white/70 px-2.5 text-xs font-medium text-zinc-700 transition-colors hover:border-teal-500/50 hover:text-teal-600 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-300 dark:hover:text-teal-300"
           >
-            <Cpu className="size-3.5 shrink-0 text-teal-400" />
+            <Cpu className="size-3.5 shrink-0 text-teal-500 dark:text-teal-400" />
             <span className="hidden truncate sm:inline">{label}</span>
           </button>
         </TooltipTrigger>
@@ -131,6 +131,11 @@ export function RunToolbar() {
     }
     lines.push(`- **Событий записано:** ${events.length}`)
     if (elapsed != null) lines.push(`- **Длительность:** ${elapsed.toFixed(1)} с`)
+    if (view.usage && view.usage.calls > 0) {
+      lines.push(
+        `- **Токены LLM:** ↑ ${view.usage.inputTokens} / ↓ ${view.usage.outputTokens} (${view.usage.calls} вызов.)`
+      )
+    }
     lines.push('')
 
     // Provenance моделей (BYOK): роль → адаптер · модель
@@ -144,15 +149,30 @@ export function RunToolbar() {
       lines.push('')
     }
 
+    // Использование токенов (ADR-015): разбивка по ролям + итог
+    if (view.usage && view.usage.calls > 0) {
+      lines.push('## Использование токенов')
+      lines.push('')
+      lines.push('| Роль | Вызовы | Токены (вход) | Токены (выход) |')
+      lines.push('|---|---|---|---|')
+      const roles = Object.entries(view.usage.byRole).sort((a, b) => b[1].calls - a[1].calls)
+      roles.forEach(([role, u]) => {
+        lines.push(`| ${LLM_ROLE_LABELS[role] ?? role} | ${u.calls} | ↑ ${u.inputTokens} | ↓ ${u.outputTokens} |`)
+      })
+      lines.push(`| **Итого** | **${view.usage.calls}** | **↑ ${view.usage.inputTokens}** | **↓ ${view.usage.outputTokens}** |`)
+      lines.push('')
+    }
+
     lines.push('## Граф вычислений')
     lines.push('')
-    lines.push('| # | Шаг | Статус | Зависимости | Длительность | Добавлен |')
-    lines.push('|---|-----|--------|-------------|--------------|----------|')
+    lines.push('| # | Шаг | Статус | Зависимости | Длительность | Токены ↑/↓ | Добавлен |')
+    lines.push('|---|-----|--------|-------------|--------------|------------|----------|')
     view.nodes.forEach((n, i) => {
       const dur = n.durationMs ? `${(n.durationMs / 1000).toFixed(1)} с` : '—'
+      const tokens = n.usage ? `↑ ${n.usage.input} / ↓ ${n.usage.output}` : '—'
       const added = n.dynamic ? `динамически (v${n.addedAtVersion})` : 'план (v1)'
       lines.push(
-        `| ${i + 1} | ${n.title} | ${n.status} | ${n.dependsOn.join(', ') || '—'} | ${dur} | ${added} |`
+        `| ${i + 1} | ${n.title} | ${n.status} | ${n.dependsOn.join(', ') || '—'} | ${dur} | ${tokens} | ${added} |`
       )
     })
     lines.push('')
@@ -249,19 +269,15 @@ export function RunToolbar() {
         <div className="ml-auto flex items-center gap-2">
           <Tooltip>
             <TooltipTrigger asChild>
-              <div
-                className="flex items-center rounded-lg border border-zinc-700 p-0.5"
-                role="group"
-                aria-label="Режим решений на развилках"
-              >
+              <div className="flex items-center rounded-lg border border-zinc-300 p-0.5 dark:border-zinc-700" role="group" aria-label="Режим решений на развилках">
                 <button
                   onClick={() => setDecisionMode('manual')}
                   disabled={!canControl}
                   className={cn(
                     'flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50',
                     (decisionMode ?? 'manual') === 'manual'
-                      ? 'bg-fuchsia-500/20 text-fuchsia-200'
-                      : 'text-zinc-400 hover:text-zinc-200'
+                      ? 'bg-amber-500/20 text-amber-700 dark:text-amber-200'
+                      : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'
                   )}
                 >
                   <Hand className="size-3.5" />
@@ -274,8 +290,8 @@ export function RunToolbar() {
                   className={cn(
                     'flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50',
                     decisionMode === 'auto'
-                      ? 'bg-fuchsia-500/20 text-fuchsia-200'
-                      : 'text-zinc-400 hover:text-zinc-200'
+                      ? 'bg-amber-500/20 text-amber-700 dark:text-amber-200'
+                      : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'
                   )}
                 >
                   <Bot className="size-3.5" />
@@ -331,7 +347,11 @@ export function RunToolbar() {
                 <Compass
                   className={cn(
                     'size-3.5 shrink-0',
-                    certainty < 0.35 ? 'text-amber-400' : certainty < 0.7 ? 'text-yellow-300' : 'text-emerald-400'
+                    certainty < 0.35
+                      ? 'text-amber-500 dark:text-amber-400'
+                      : certainty < 0.7
+                        ? 'text-yellow-500 dark:text-yellow-300'
+                        : 'text-emerald-500 dark:text-emerald-400'
                   )}
                 />
                 <div className="min-w-0 flex-1">
@@ -351,7 +371,7 @@ export function RunToolbar() {
                   {Math.round(certainty * 100)}% · {certaintyInfo.label}
                 </span>
                 {openQuestions > 0 && (
-                  <span className="shrink-0 rounded border border-fuchsia-500/40 bg-fuchsia-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-fuchsia-300">
+                  <span className="shrink-0 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
                     ждёт уточнений: {openQuestions}
                   </span>
                 )}
@@ -361,7 +381,7 @@ export function RunToolbar() {
               <p className="font-semibold">Понимание задачи — {certaintyInfo.label}</p>
               <p className="mt-1 text-xs opacity-90">{certaintyInfo.hint}</p>
               {openQuestions > 0 && (
-                <p className="mt-1 text-xs text-fuchsia-300">Открытых вопросов агента: {openQuestions}</p>
+                <p className="mt-1 text-xs text-amber-600 dark:text-amber-300">Открытых вопросов агента: {openQuestions}</p>
               )}
             </TooltipContent>
           </Tooltip>
@@ -371,6 +391,46 @@ export function RunToolbar() {
           <span className="text-xs tabular-nums text-muted-foreground">
             {['completed', 'stopped', 'error'].includes(view.status) ? 'длительность' : 'прошло'}: {elapsed.toFixed(1)} с
           </span>
+        )}
+
+        {/* ─── Аудит токенов (ADR-015): счётчики запуска, live и replay ─── */}
+        {view.usage && view.usage.calls > 0 && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                role="status"
+                aria-label={`Токены LLM: вход ${view.usage.inputTokens}, выход ${view.usage.outputTokens}, вызовов ${view.usage.calls}`}
+                className="inline-flex items-center gap-1.5 rounded-md border border-zinc-300 bg-white/70 px-2 py-0.5 text-xs font-medium tabular-nums text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-200"
+              >
+                <Coins className="size-3.5 shrink-0 text-teal-500 dark:text-teal-400" />
+                <span className="whitespace-nowrap">
+                  ↑ {fmtTokens(view.usage.inputTokens)} · ↓ {fmtTokens(view.usage.outputTokens)} ·{' '}
+                  {view.usage.calls} вызов.
+                </span>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-xs">
+              <p className="font-semibold">Использование токенов LLM</p>
+              <div className="mt-1.5 space-y-0.5">
+                {Object.entries(view.usage.byRole)
+                  .sort((a, b) => b[1].calls - a[1].calls)
+                  .map(([role, u]) => (
+                    <p key={role} className="flex items-center justify-between gap-4 text-xs tabular-nums">
+                      <span>{LLM_ROLE_LABELS[role] ?? role}</span>
+                      <span>
+                        ↑ {u.inputTokens} / ↓ {u.outputTokens} · {u.calls} вызов.
+                      </span>
+                    </p>
+                  ))}
+              </div>
+              <p className="mt-1.5 border-t border-border pt-1.5 text-xs font-semibold tabular-nums">
+                Итого: ↑ {view.usage.inputTokens} / ↓ {view.usage.outputTokens} · {view.usage.calls} вызовов
+              </p>
+              <p className="mt-1 text-[11px] leading-relaxed opacity-80">
+                Данные провайдера (вход/выход) по каждому LLM-вызову; шаги — в инспекторе узлов, детализация — в MD-отчёте
+              </p>
+            </TooltipContent>
+          </Tooltip>
         )}
         {markers.length > 0 && (
           <div className="flex items-center gap-1">
@@ -386,8 +446,8 @@ export function RunToolbar() {
                 className={cn(
                   'rounded px-1.5 py-0.5 text-[11px] font-semibold transition-colors',
                   view.version === m.version
-                    ? 'bg-violet-500/25 text-violet-200'
-                    : 'bg-secondary text-muted-foreground hover:bg-violet-500/15 hover:text-violet-300'
+                    ? 'bg-violet-500/25 text-violet-700 dark:text-violet-200'
+                    : 'bg-secondary text-muted-foreground hover:bg-violet-500/15 hover:text-violet-600 dark:hover:text-violet-300'
                 )}
               >
                 v{m.version}
@@ -411,16 +471,16 @@ export function RunToolbar() {
 
       {/* Баннер ожидания выбора: агент замер на развилке */}
       {offered && (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-fuchsia-500/40 bg-fuchsia-500/10 px-3.5 py-2.5">
-          <GitFork className="size-4 shrink-0 animate-pulse text-fuchsia-300" />
-          <span className="min-w-0 flex-1 text-sm text-fuchsia-100">
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3.5 py-2.5">
+          <GitFork className="size-4 shrink-0 animate-pulse text-amber-500 dark:text-amber-300" />
+          <span className="min-w-0 flex-1 text-sm text-amber-900 dark:text-amber-100">
             {(decisionMode ?? 'manual') === 'manual'
               ? 'Агент ждёт вашего решения на развилке'
               : 'Агент принимает решение на развилке…'}
-            <span className="ml-2 hidden text-xs text-fuchsia-300/70 md:inline">{offered.title}</span>
+            <span className="ml-2 hidden text-xs text-amber-700/80 dark:text-amber-300/70 md:inline">{offered.title}</span>
           </span>
           {(decisionMode ?? 'manual') === 'manual' && (
-            <Button size="sm" variant="secondary" className="h-7 gap-1.5 border-fuchsia-500/40 bg-fuchsia-500/15 px-3 text-xs text-fuchsia-100 hover:bg-fuchsia-500/25" onClick={openDecision}>
+            <Button size="sm" variant="secondary" className="h-7 gap-1.5 border-amber-500/40 bg-amber-500/15 px-3 text-xs text-amber-900 hover:bg-amber-500/25 dark:text-amber-100" onClick={openDecision}>
               <GitFork className="size-3" />
               Открыть выбор
             </Button>

@@ -13,6 +13,7 @@
 | 006 | [CR-006-unbounded-questions-soft-limits.md](./CR-006-unbounded-questions-soft-limits.md) | Снятие лимитов вопросов/объёмов, промпт-дисциплина | 7 |
 | 007 | [CR-007-byok-mvp.md](./CR-007-byok-mvp.md) | BYOK-MVP: роутер LLM, ключи, provenance, UI настроек | 10-a |
 | 008 | [CR-008-truncation-audit.md](./CR-008-truncation-audit.md) | Аудит усечений структурных лимитов | 10-b |
+| 009 | [CR-009-tokens-theme-colors.md](./CR-009-tokens-theme-colors.md) | Токены по шагам/ролям/запуску, светлая тема, разведение цветов + PRODUCT-001 | 12 |
 
 ## Сводка объёма изменений
 

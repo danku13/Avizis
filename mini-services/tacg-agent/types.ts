@@ -55,6 +55,20 @@ export interface LlmProviderInfo {
   model: string
 }
 
+/** Затраты токенов LLM-вызовов одного узла (исполнитель/решатель, с повторами) */
+export interface NodeUsage {
+  input: number
+  output: number
+}
+
+/** Сводка использования токенов по запуску (ADR-015): totals + разбивка по ролям движка */
+export interface RunUsage {
+  inputTokens: number
+  outputTokens: number
+  calls: number
+  byRole: Record<string, { inputTokens: number; outputTokens: number; calls: number }>
+}
+
 export interface GraphNode {
   id: string
   title: string
@@ -85,6 +99,8 @@ export interface GraphNode {
   branchOf?: { decisionId: string; optionId: string }
   /** Provenance: адаптер/модель, выполнившие LLM-вызов этого узла */
   llm?: LlmProviderInfo
+  /** Затраты токенов LLM-вызовов узла (ADR-015): исполнитель или решатель развилки */
+  usage?: NodeUsage
 }
 
 export interface GraphVersion {
@@ -133,6 +149,8 @@ export type RunEvent =
   | { type: 'decision:mode'; ts: number; mode: DecisionMode }
   /** Агент переоценил «понимание задачи» (насколько узкий вектор решения) */
   | { type: 'run:certainty'; ts: number; certainty: number; note?: string }
+  /** Аудит токенов (ADR-015): один успешный LLM-вызов; nodeId — атрибуция узлу */
+  | { type: 'llm:usage'; ts: number; role: string; nodeId?: string; inputTokens: number; outputTokens: number }
 
 export interface RunSnapshot {
   id: string
@@ -154,6 +172,8 @@ export interface RunSnapshot {
   events: RunEvent[]
   logs: LogEntry[]
   summary?: string
+  /** Использование токенов LLM по запуску (появляется с первым вызовом; демо — отсутствует) */
+  usage?: RunUsage
 }
 
 export interface RunMeta {

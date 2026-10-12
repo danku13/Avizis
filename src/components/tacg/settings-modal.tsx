@@ -158,21 +158,21 @@ export function SettingsModal() {
   return (
     <Dialog open={open} onOpenChange={close}>
       <DialogContent
-        className="flex max-h-[86dvh] w-[calc(100vw-1.5rem)] flex-col gap-0 overflow-hidden border-zinc-800 bg-zinc-950/95 p-0 backdrop-blur-md sm:max-w-none sm:w-[55vw] lg:w-[58vw] xl:w-[64vw]"
+        className="flex max-h-[86dvh] w-[calc(100vw-1.5rem)] flex-col gap-0 overflow-hidden border-zinc-200 bg-white/95 dark:border-zinc-800 dark:bg-zinc-950/95 p-0 backdrop-blur-md sm:max-w-none sm:w-[55vw] lg:w-[58vw] xl:w-[64vw]"
       >
         <DialogDescription className="sr-only">
           Настройки LLM-провайдеров (BYOK): пресет, адрес, модель, ключ с маской, проверка подключения и модели по ролям
         </DialogDescription>
 
         {/* ─── Шапка ─── */}
-        <DialogHeader className="border-b border-zinc-800/80 px-6 py-4 text-left">
+        <DialogHeader className="border-b border-zinc-200/80 dark:border-zinc-800/80 px-6 py-4 text-left">
           <DialogTitle className="flex items-center gap-2.5 text-lg font-semibold leading-tight">
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-teal-500/15 text-teal-300">
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-teal-500/15 text-teal-700 dark:text-teal-300">
               <Settings2 className="size-4.5" />
             </span>
             Настройки LLM · BYOK
           </DialogTitle>
-          <p className="mt-1.5 max-w-2xl text-sm text-zinc-400">
+          <p className="mt-1.5 max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
             Свои модели и ключи для агента: планировщика, исполнителя, супервайзера и решателя. Ключ хранится только на
             сервере и отображается маской.
           </p>
@@ -197,7 +197,7 @@ export function SettingsModal() {
           </div>
 
           {isZai ? (
-            <div className="flex items-start gap-2.5 rounded-lg border border-teal-500/30 bg-teal-500/10 p-3.5 text-xs leading-relaxed text-teal-100">
+            <div className="flex items-start gap-2.5 rounded-lg border border-teal-500/30 bg-teal-500/10 p-3.5 text-xs leading-relaxed text-teal-900 dark:text-teal-100">
               <Cpu className="mt-0.5 size-4 shrink-0" />
               <span>
                 z-ai SDK — встроенный провайдер стенда: работает без конфигурации и ключей. Выберите другой пресет, чтобы
@@ -258,7 +258,7 @@ export function SettingsModal() {
                     type="button"
                     onClick={() => setShowKey((v) => !v)}
                     aria-label={showKey ? 'Скрыть ключ' : 'Показать ключ'}
-                    className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-zinc-500 transition-colors hover:text-zinc-300"
+                    className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-zinc-500 transition-colors hover:text-zinc-700 dark:hover:text-zinc-300"
                   >
                     {showKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                   </button>
@@ -280,8 +280,8 @@ export function SettingsModal() {
                     className={cn(
                       'max-w-full break-words gap-1.5 normal-case',
                       llmStatus.ok
-                        ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
-                        : 'border-red-500/40 bg-red-500/10 text-red-300'
+                        ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                        : 'border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300'
                     )}
                   >
                     {llmStatus.ok ? <Plug className="size-3" /> : <AlertTriangle className="size-3" />}
@@ -295,13 +295,13 @@ export function SettingsModal() {
           )}
 
           {/* ─── Расширенный режим: per-role модели ─── */}
-          <Collapsible open={rolesOpen} onOpenChange={setRolesOpen} className="rounded-lg border border-zinc-800">
-            <CollapsibleTrigger className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-sm font-medium text-zinc-200 transition-colors hover:bg-zinc-900/60">
+          <Collapsible open={rolesOpen} onOpenChange={setRolesOpen} className="rounded-lg border border-zinc-200 dark:border-zinc-800">
+            <CollapsibleTrigger className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-900/60">
               <ChevronRight className={cn('size-4 shrink-0 text-zinc-500 transition-transform', rolesOpen && 'rotate-90')} />
               Роли: своя модель на каждую точку вызова
               <span className="ml-auto text-xs font-normal text-zinc-500">пусто = наследовать дефолт</span>
             </CollapsibleTrigger>
-            <CollapsibleContent className="space-y-3 border-t border-zinc-800 px-3.5 py-3">
+            <CollapsibleContent className="space-y-3 border-t border-zinc-200 dark:border-zinc-800 px-3.5 py-3">
               {ROLES.map(({ role, label, hint }) => (
                 <div key={role} className="space-y-1.5">
                   <Label htmlFor={`llm-role-${role}`} className="flex items-baseline gap-2">
@@ -324,7 +324,7 @@ export function SettingsModal() {
         </div>
 
         {/* ─── Подвал ─── */}
-        <DialogFooter className="flex-row flex-wrap items-center gap-3 border-t border-zinc-800/80 px-6 py-3.5">
+        <DialogFooter className="flex-row flex-wrap items-center gap-3 border-t border-zinc-200 dark:border-zinc-800/80 px-6 py-3.5">
           <p className="mr-auto hidden text-[11px] text-zinc-500 sm:block">
             Сохранение сопровождается пробным запросом — неверный ключ или адрес не сохранятся.
           </p>

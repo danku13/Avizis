@@ -65,7 +65,7 @@ export function HistoryPanel() {
   return (
     <div className="flex h-full flex-col">
       <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold">
-        <Zap className="size-4 text-teal-400" />
+        <Zap className="size-4 text-teal-500 dark:text-teal-400" />
         Задача агенту
       </h3>
 
@@ -103,13 +103,13 @@ export function HistoryPanel() {
           <SelectContent>
             <SelectItem value="manual">
               <span className="flex items-center gap-2">
-                <Hand className="size-3.5 text-fuchsia-400" />
+                <Hand className="size-3.5 text-amber-500 dark:text-amber-400" />
                 Решения: вручную
               </span>
             </SelectItem>
             <SelectItem value="auto">
               <span className="flex items-center gap-2">
-                <Bot className="size-3.5 text-fuchsia-400" />
+                <Bot className="size-3.5 text-amber-500 dark:text-amber-400" />
                 Решения: авто
               </span>
             </SelectItem>
@@ -120,7 +120,7 @@ export function HistoryPanel() {
           {starting ? 'Агент стартует…' : 'Запустить агента'}
         </Button>
         <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-muted-foreground">
-          <GitFork className="mt-0.5 size-3.5 shrink-0 text-fuchsia-400/70" />
+          <GitFork className="mt-0.5 size-3.5 shrink-0 text-amber-500/80 dark:text-amber-400/70" />
           <span>
             Демо-режим даёт сценарий с адаптацией графа и развилкой из 3 вариантов. «Вручную» — агент предлагает
             варианты и ждёт, «авто» — решает сам. LLM-режим строит план и решает через вызовы SDK.
@@ -150,7 +150,7 @@ export function HistoryPanel() {
               key={r.id}
               onClick={() => load(r.id)}
               className={cn(
-                'group cursor-pointer rounded-lg border p-2.5 transition-colors hover:border-zinc-600',
+                'group cursor-pointer rounded-lg border p-2.5 transition-colors hover:border-zinc-400 dark:hover:border-zinc-600',
                 r.id === currentRunId ? 'border-teal-500/50 bg-teal-500/5' : 'border-border bg-secondary/30'
               )}
             >
@@ -162,8 +162,8 @@ export function HistoryPanel() {
                   </p>
                   <p className="mt-1 text-[11px] text-muted-foreground">
                     {fmtDate(r.createdAt)} · {r.mode === 'llm' ? 'LLM' : 'демо'} · {r.nodesCount} узл.
-                    {r.dynamicCount > 0 && <span className="text-violet-400"> (+{r.dynamicCount} дин.)</span>}
-                    {r.version > 1 && <span className="text-violet-400"> v{r.version}</span>}
+                    {r.dynamicCount > 0 && <span className="text-violet-600 dark:text-violet-400"> (+{r.dynamicCount} дин.)</span>}
+                    {r.version > 1 && <span className="text-violet-600 dark:text-violet-400"> v{r.version}</span>}
                   </p>
                 </div>
                 <button

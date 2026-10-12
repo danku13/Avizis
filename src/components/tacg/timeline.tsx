@@ -84,7 +84,7 @@ export function Timeline() {
               {ticks.map((t) => (
                 <span
                   key={t}
-                  className={cn('absolute size-1 -translate-x-1/2 rounded-full', t <= position ? 'bg-cyan-400/80' : 'bg-zinc-600')}
+                  className={cn('absolute size-1 -translate-x-1/2 rounded-full', t <= position ? 'bg-cyan-500/80 dark:bg-cyan-400/80' : 'bg-zinc-400 dark:bg-zinc-600')}
                   style={{ left: `${(t / (total - 1)) * 100}%` }}
                 />
               ))}
