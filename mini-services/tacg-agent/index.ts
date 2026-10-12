@@ -17,10 +17,16 @@ import {
 } from './llm-config'
 
 const httpServer = createServer()
+
+// CORS: по умолчанию открыт (веб-превью через Caddy-шлюз). В десктоп-режиме
+// (Tauri sidecar, ADR-018) оболочка передаёт TACG_CORS_ORIGINS с точными
+// origin'ами webview (tauri://localhost, http://tauri.localhost) — защита от
+// drive-by подключений к локальному движку из браузера пользователя.
+const corsOrigins = (process.env.TACG_CORS_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean)
 const io = new Server(httpServer, {
   // Путь '/' обязателен — по нему Caddy проксирует запросы к сервису
   path: '/',
-  cors: { origin: '*', methods: ['GET', 'POST'] },
+  cors: { origin: corsOrigins.length ? corsOrigins : '*', methods: ['GET', 'POST'] },
   pingTimeout: 60_000,
   pingInterval: 25_000,
 })
@@ -175,9 +181,12 @@ io.on('connection', (socket) => {
   })
 })
 
-const PORT = 3003
-httpServer.listen(PORT, () => {
-  console.log(`[tacg] Движок агента TACG запущен на порту ${PORT}`)
+// Порт и адрес: TACG_PORT/TACG_BIND задаёт десктоп-оболочка (Tauri sidecar);
+// TACG_BIND=127.0.0.1 в десктопе — движок виден только локально (не в LAN)
+const PORT = Number(process.env.TACG_PORT || process.env.PORT) || 3003
+const HOST = process.env.TACG_BIND || '0.0.0.0'
+httpServer.listen(PORT, HOST, () => {
+  console.log(`[tacg] Движок агента TACG запущен: ${HOST}:${PORT}`)
 })
 
 process.on('SIGTERM', () => {
