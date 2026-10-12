@@ -16,12 +16,14 @@ export interface LlmProviderConfig {
   temperature?: number
 }
 
-/** Полная конфигурация: дефолт + per-role переопределения + ручной прайсинг (ADR-016) */
+/** Полная конфигурация: дефолт + per-role переопределения + ручной прайсинг (ADR-016) + ручные курсы валют (ADR-019) */
 export interface LlmConfig {
   default?: LlmProviderConfig
   roles?: Partial<Record<LlmRole, Partial<LlmProviderConfig>>>
   /** Ручные цены моделей (USD за 1M токенов): приоритет выше сетевых каталогов */
   pricing?: { models?: Record<string, { inputPer1M?: number; outputPer1M?: number }> }
+  /** Ручные курсы валют (единиц за 1 USD): приоритет выше сетевых источников ЦБ/er-api */
+  currency?: { rates?: Record<string, number> }
 }
 
 // Портативный каталог данных (ADR-017): data/ рядом с exe в скомпилированном бинарнике
@@ -64,6 +66,12 @@ export function looksLikeMask(v?: string): boolean {
 const cleanPrice = (v: any): number | undefined => {
   if (typeof v !== 'number' || !Number.isFinite(v)) return undefined
   return Math.min(10_000, Math.max(0, v))
+}
+
+/** Курс валюты: положительное конечное число < 1e8 (единиц за 1 USD) */
+const cleanRate = (v: any): number | undefined => {
+  if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0 || v >= 1e8) return undefined
+  return v
 }
 
 const PRICING_LABELS: Record<string, string> = { manual: 'вручную (конфиг)', openrouter: 'OpenRouter', litellm: 'каталог LiteLLM' }
@@ -135,7 +143,18 @@ export function sanitizeConfigInput(raw: any): LlmConfig | null {
       if (inputPer1M === undefined && outputPer1M === undefined) continue
       models[key] = { inputPer1M, outputPer1M }
     }
-    out.pricing = { models }
+    if (Object.keys(models).length) out.pricing = { models }
+  }
+  // Ручные курсы валют (ADR-019): код A-Z{3} → положительный курс за 1 USD, ≤ 20
+  if (raw.currency && typeof raw.currency === 'object' && raw.currency.rates && typeof raw.currency.rates === 'object') {
+    const rates: NonNullable<LlmConfig['currency']>['rates'] = {}
+    for (const [k, v] of Object.entries(raw.currency.rates as Record<string, any>).slice(0, 20)) {
+      const code = String(k).trim().toUpperCase().slice(0, 3)
+      const rate = cleanRate(v)
+      if (!/^[A-Z]{3}$/.test(code) || rate === undefined) continue
+      rates[code] = rate
+    }
+    if (Object.keys(rates).length) out.currency = { rates }
   }
   return out
 }
@@ -184,6 +203,12 @@ export function mergeSavedApiKey(incoming: LlmConfig, saved: LlmConfig): LlmConf
   if (incoming.pricing?.models || saved.pricing?.models) {
     const models = { ...(saved.pricing?.models ?? {}), ...(incoming.pricing?.models ?? {}) }
     if (Object.keys(models).length) merged.pricing = { models }
+  }
+  // Курсы валют: per-key merge — вход перекрывает сохранённые поимённо
+  // (в UI редактируется курс только выбранной валюты; удаление — правкой файла)
+  if (incoming.currency?.rates || saved.currency?.rates) {
+    const rates = { ...(saved.currency?.rates ?? {}), ...(incoming.currency?.rates ?? {}) }
+    if (Object.keys(rates).length) merged.currency = { rates }
   }
   return merged
 }
@@ -275,6 +300,8 @@ export function publicConfig(cfg: LlmConfig): Record<string, any> {
   }
   // прайсинг не секретен — отдаём как есть (для префилла полей цены в настройках)
   if (cfg.pricing?.models && Object.keys(cfg.pricing.models).length) out.pricing = cfg.pricing
+  // курсы валют тоже не секретны (для префилла поля курса в настройках)
+  if (cfg.currency?.rates && Object.keys(cfg.currency.rates).length) out.currency = cfg.currency
   return out
 }
 

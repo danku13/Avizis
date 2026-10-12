@@ -22,6 +22,8 @@
 | 015 | [ADR-015-token-usage.md](./ADR-015-token-usage.md) | Аудит использования токенов через событийный поток (llm:usage) | CR-009 |
 | 016 | [ADR-016-dynamic-pricing-cost-audit.md](./ADR-016-dynamic-pricing-cost-audit.md) | Динамический прайсинг (OpenRouter/LiteLLM/manual) и аудит стоимости в USD | CR-011 |
 | 017 | [ADR-017-single-file-executable.md](./ADR-017-single-file-executable.md) | Упаковка в однофайловые исполняемые файлы: bun compile, портативные данные, уровни | CR-011 |
+| 018 | [ADR-018-tauri-desktop-exe.md](./ADR-018-tauri-desktop-exe.md) | Десктоп Tauri v2: единый exe с UI + движок-sidecar + CI/релиз | CR-012 |
+| 019 | [ADR-019-currency-conversion.md](./ADR-019-currency-conversion.md) | Конвертация валюты стоимости: ЦБ РФ (XML+зеркало)/er-api/ручной, USD-базис | CR-012 |
 | — | [tech-stack.md](./tech-stack.md) | Сводка технологического стека | — |
 
 ## Правила ведения

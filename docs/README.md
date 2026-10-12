@@ -43,11 +43,12 @@
 - Движок: `mini-services/tacg-agent/` (bun + socket.io :3003, z-ai-web-dev-sdk, режимы demo/llm).
 - Фронтенд: `src/components/tacg/` (React Flow граф, модалки инспектора/выбора, тулбар, timeline),
   `src/lib/tacg/` (типы, сокет-клиент, fold), `src/store/tacg-store.ts`.
-- Тесты: `scripts/test-tacg-{client,llm,decision,clarity,byok,truncation,usage,pricing}.ts`; E2E-скриншоты: `scripts/tacg-*.png`.
-- Сборка exe: `bash scripts/build-executables.sh` (bun compile, 4 таргета, ADR-017).
+- Тесты: `scripts/test-tacg-{client,llm,decision,clarity,byok,truncation,usage,pricing,currency}.ts`; E2E-скриншоты: `scripts/tacg-*.png`.
+- Сборка exe движка: `bash scripts/build-executables.sh` (bun compile, 4 таргета, ADR-017).
+- Десктоп: `src-tauri/` (Tauri v2, ADR-018); CI `.github/workflows/desktop.yml` — артефакты на push, релиз по тегу `v*` (workflow-файл ждёт токен со scope `workflow`, шаблон — `docs/ci/desktop-workflow.yml`).
 - Рабочий журнал агентов: `/home/z/my-project/worklog.md` (вне репозитория — локальный артефакт сессии).
 
-## Текущее состояние (v0.9)
+## Текущее состояние (v0.10)
 
 - Развилки решений (auto/manual, на ходу), эмерджентные вопросы по доменам, метр «понимания задачи»,
   смешанные решения — реализованы и покрыты тестами (см. `cr/CR-003`, `cr/CR-004`).
@@ -76,6 +77,15 @@
 - **Однофайловые исполняемые файлы движка**: `bun build --compile` (Windows/macOS/Linux,
   кросс-компиляция из любого окружения), портативные данные рядом с exe; рецепт полного
   «одного файла» (статический экспорт Next.js + встраивание) — `adr/ADR-017`.
+- **Десктоп-приложение Tauri (единый exe с UI)**: статический Next.js вшит в бинарник, движок —
+  sidecar-процесс на свободном порту 127.0.0.1 (гасится при выходе), данные — в каталоге
+  приложения ОС; CI GitHub Actions (windows-latest): артефакты на каждый push,
+  NSIS-установщик `TACG_0.10.0_x64-setup.exe` + portable zip в релиз по тегу v* —
+  `adr/ADR-018`, `cr/CR-012`.
+- **Конвертация валюты стоимости**: курсы ЦБ РФ (официальный XML + JSON-зеркало) с фолбэком на
+  open.er-api и ручным override, кэш (TTL 6 ч); базис аудита — USD, конвертация на отображении:
+  чип «≈$0,0027 · ₽0,263», инспектор, MD-отчёт с источником и датой котировки; селектор валюты
+  (дефолт ₽, 15 валют) — `adr/ADR-019`, `cr/CR-012`, FR-910.
 - Задел на будущее: вычислимая метрика понимания из состояния графа вместо самооценки LLM —
-  `adr/ADR-014`, FR-810; нативные адаптеры anthropic/gemini и стриминг — FR-907; «один файл
-  совсем» (уровень 2 ADR-017); Tauri-обёртка — уровень 3 ADR-017.
+  `adr/ADR-014`, FR-810; нативные адаптеры anthropic/gemini и стриминг — FR-907; матрица CI
+  macOS/Linux для десктопа — ADR-018 (последствия).

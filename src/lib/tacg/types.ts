@@ -117,6 +117,66 @@ export interface PricingStatus {
   disabled: boolean
 }
 
+// ─────────────────────── Конвертация валюты (ADR-019, FR-910) ───────────────────────
+
+/** Валюты отображения стоимости: символы для форматирования */
+export const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: '$', EUR: '€', RUB: '₽', KZT: '₸', CNY: '¥', GBP: '£', TRY: '₺',
+  AED: 'DH', INR: '₹', BYN: 'Br', UAH: '₴', GEL: '₾', JPY: '¥', CHF: 'Fr', KRW: '₩',
+}
+
+export const CURRENCY_SOURCE_LABELS: Record<string, string> = {
+  manual: 'вручную (конфиг)',
+  cbr: 'ЦБ РФ',
+  'cbr-mirror': 'ЦБ РФ (зеркало)',
+  'er-api': 'open.er-api',
+}
+
+/** Курс одной валюты (сколько единиц за 1 USD; rate 0 = курса нет) */
+export interface CurrencyEntry {
+  code: string
+  rate: number
+  source: string
+  asOf?: string
+  fetchedAt?: number
+}
+
+export interface CurrencySourceStatus {
+  id: string
+  label: string
+  currencies?: number
+  asOf?: string
+  fetchedAt?: number
+  ok?: boolean
+  error?: string
+}
+
+/** Статус курсов с сервера (socket 'currency:status') */
+export interface CurrencyStatus {
+  entries: CurrencyEntry[]
+  sources: CurrencySourceStatus[]
+  ttlHours: number
+  disabled: boolean
+}
+
+/**
+ * Формат суммы в валюте: «₽0,29» / «₽12,5» / «₽123» — 3 значащих цифры до 1
+ * (согласовано с fmtUsd). Курс — единиц валюты за 1 USD.
+ */
+export const fmtCurrency = (v: number, code: string): string => {
+  const symbol = CURRENCY_SYMBOLS[code] ?? code
+  if (!Number.isFinite(v) || v <= 0) return `${symbol}0`
+  let s: string
+  if (v >= 100) s = v.toFixed(0)
+  else if (v >= 1) s = v.toFixed(1)
+  else s = String(parseFloat(v.toPrecision(3)))
+  return symbol + s.replace('.', ',')
+}
+
+/** Конвертация USD → выбранная валюта; null — курса нет */
+export const convertUsd = (usd: number, rate: number): number | null =>
+  Number.isFinite(usd) && Number.isFinite(rate) && rate > 0 ? usd * rate : null
+
 /** Публичная (маскированная) конфигурация LLM: apiKey здесь всегда маска */
 export interface LlmProviderConfigPublic {
   adapter: string
@@ -132,11 +192,13 @@ export interface PricingOverridesPublic {
   models?: Record<string, { inputPer1M?: number; outputPer1M?: number }>
 }
 
-/** Публичная конфигурация LLM: дефолт + per-role переопределения + прайсинг */
+/** Публичная конфигурация LLM: дефолт + per-role переопределения + прайсинг + курсы валют */
 export interface LlmConfigPublic {
   default?: LlmProviderConfigPublic
   roles?: Partial<Record<LlmRole, Partial<LlmProviderConfigPublic>>>
   pricing?: PricingOverridesPublic
+  /** Ручные курсы валют (единиц за 1 USD; не секретны — префилл поля в настройках) */
+  currency?: { rates?: Record<string, number> }
 }
 
 export const LLM_ROLE_LABELS: Record<string, string> = {

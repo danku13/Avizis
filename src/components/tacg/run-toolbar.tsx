@@ -11,10 +11,13 @@ import { findOfferedDecision, foldEvents, versionMarkers } from '@/lib/tacg/fold
 import {
   chosenIds,
   certaintyLabel,
+  convertUsd,
+  CURRENCY_SOURCE_LABELS,
   DECISION_DOMAIN_LABELS,
   DecisionMode,
   fmtTokens,
   fmtUsd,
+  fmtCurrency,
   LLM_ROLE_LABELS,
   LlmProviderInfo,
   PRICE_SOURCE_LABELS,
@@ -37,6 +40,18 @@ export function RunToolbar() {
   const decisionMode = useTacgStore((s) => s.decisionMode)
   const openDecision = useTacgStore((s) => s.openDecision)
   const runLlm = useTacgStore((s) => s.runLlm)
+  const currencyStatus = useTacgStore((s) => s.currencyStatus)
+  const displayCurrency = useTacgStore((s) => s.displayCurrency)
+
+  // Конвертация стоимости (FR-910): USD-базис + курс выбранной валюты на отображение
+  const curRate =
+    displayCurrency !== 'USD'
+      ? currencyStatus?.entries.find((e) => e.code === displayCurrency && e.rate > 0) ?? null
+      : null
+  const fmtCost = (usd: number): string =>
+    curRate
+      ? `≈ ${fmtUsd(usd)} · ${fmtCurrency(convertUsd(usd, curRate.rate) ?? 0, curRate.code)}`
+      : `≈ ${fmtUsd(usd)}`
 
   const isLive = cursor === null
   const view = useMemo(
@@ -109,7 +124,19 @@ export function RunToolbar() {
       lines.push(
         `- **Токены LLM:** ↑ ${view.usage.inputTokens} / ↓ ${view.usage.outputTokens} (${view.usage.calls} вызов.)`
       )
-      if (view.usage.costUsd) lines.push(`- **Стоимость LLM:** ≈ ${fmtUsd(view.usage.costUsd)} (динамический прайсинг)`)
+      if (view.usage.costUsd) {
+        const store = useTacgStore.getState()
+        const entry =
+          store.displayCurrency !== 'USD'
+            ? store.currencyStatus?.entries.find((e) => e.code === store.displayCurrency && e.rate > 0) ?? null
+            : null
+        const curPart = entry ? ` · ${fmtCurrency(convertUsd(view.usage.costUsd, entry.rate) ?? 0, entry.code)}` : ''
+        lines.push(
+          `- **Стоимость LLM:** ≈ ${fmtUsd(view.usage.costUsd)}${curPart} (динамический прайсинг${
+            entry ? `, курс ${CURRENCY_SOURCE_LABELS[entry.source] ?? entry.source}` : ''
+          })`
+        )
+      }
     }
     lines.push('')
 
@@ -139,10 +166,10 @@ export function RunToolbar() {
       const roles = Object.entries(view.usage.byRole).sort((a, b) => b[1].calls - a[1].calls)
       roles.forEach(([role, u]) => {
         const base = `| ${LLM_ROLE_LABELS[role] ?? role} | ${u.calls} | ↑ ${u.inputTokens} | ↓ ${u.outputTokens}`
-        lines.push(hasCost ? `${base} | ${u.costUsd ? `≈ ${fmtUsd(u.costUsd)}` : '—'} |` : `${base} |`)
+        lines.push(hasCost ? `${base} | ${u.costUsd ? fmtCost(u.costUsd) : '—'} |` : `${base} |`)
       })
       const total = `| **Итого** | **${view.usage.calls}** | **↑ ${view.usage.inputTokens}** | **↓ ${view.usage.outputTokens}**`
-      lines.push(hasCost ? `${total} | **${view.usage.costUsd ? `≈ ${fmtUsd(view.usage.costUsd)}` : '—'}** |` : `${total} |`)
+      lines.push(hasCost ? `${total} | **${view.usage.costUsd ? fmtCost(view.usage.costUsd) : '—'}** |` : `${total} |`)
       lines.push('')
 
       // Provenance прайсов (ADR-016): источник и свежесть — обязательная часть аудита
@@ -165,6 +192,31 @@ export function RunToolbar() {
         }
         lines.push('')
       }
+
+      // Конвертация валюты (FR-910): курс, источник и дата — часть аудита
+      const store = useTacgStore.getState()
+      if (store.displayCurrency !== 'USD') {
+        const entry = store.currencyStatus?.entries.find((e) => e.code === store.displayCurrency && e.rate > 0)
+        const netSources = (store.currencyStatus?.sources ?? []).filter((s) => s.id !== 'manual')
+        if (entry) {
+          lines.push('Курс конвертации:')
+          lines.push(
+            `- ${entry.code} за 1 USD: ${entry.rate} — ${CURRENCY_SOURCE_LABELS[entry.source] ?? entry.source}${
+              entry.asOf ? `, котировка ${entry.asOf}` : ''
+            }`
+          )
+          netSources.forEach((s) => {
+            const when = s.fetchedAt ? new Date(s.fetchedAt).toLocaleString('ru-RU') : '—'
+            lines.push(
+              `- ${s.label}: ${s.currencies ?? 0} валют, обновлён ${when}${
+                s.ok === false ? ` (последнее обновление не удалось: ${s.error ?? 'сетевая ошибка'})` : ''
+              }`
+            )
+          })
+          lines.push('- базис аудита — USD; конвертация на отображение по текущему курсу')
+          lines.push('')
+        }
+      }
     }
 
     lines.push('## Граф вычислений')
@@ -184,7 +236,7 @@ export function RunToolbar() {
       const base = `| ${i + 1} | ${n.title} | ${n.status} | ${n.dependsOn.join(', ') || '—'} | ${dur} | ${tokens}`
       lines.push(
         nodesHaveCost
-          ? `${base} | ${n.usage?.costUsd ? `≈ ${fmtUsd(n.usage.costUsd)}` : '—'} | ${added} |`
+          ? `${base} | ${n.usage?.costUsd ? fmtCost(n.usage.costUsd) : '—'} | ${added} |`
           : `${base} | ${added} |`
       )
     })
@@ -414,7 +466,7 @@ export function RunToolbar() {
                 <Coins className="size-3.5 shrink-0 text-teal-500 dark:text-teal-400" />
                 <span className="whitespace-nowrap">
                   ↑ {fmtTokens(view.usage.inputTokens)} · ↓ {fmtTokens(view.usage.outputTokens)} ·{' '}
-                  {view.usage.calls} вызов.{view.usage.costUsd ? ` · ≈${fmtUsd(view.usage.costUsd)}` : ''}
+                  {view.usage.calls} вызов.{view.usage.costUsd ? ` · ${fmtCost(view.usage.costUsd)}` : ''}
                 </span>
               </span>
             </TooltipTrigger>
@@ -428,19 +480,24 @@ export function RunToolbar() {
                       <span>{LLM_ROLE_LABELS[role] ?? role}</span>
                       <span>
                         ↑ {u.inputTokens} / ↓ {u.outputTokens} · {u.calls} вызов.
-                        {u.costUsd ? ` · ≈${fmtUsd(u.costUsd)}` : ''}
+                        {u.costUsd ? ` · ${fmtCost(u.costUsd)}` : ''}
                       </span>
                     </p>
                   ))}
               </div>
               <p className="mt-1.5 border-t border-border pt-1.5 text-xs font-semibold tabular-nums">
                 Итого: ↑ {view.usage.inputTokens} / ↓ {view.usage.outputTokens} · {view.usage.calls} вызовов
-                {view.usage.costUsd ? ` · ≈${fmtUsd(view.usage.costUsd)}` : ''}
+                {view.usage.costUsd ? ` · ${fmtCost(view.usage.costUsd)}` : ''}
               </p>
               {view.usage.costUsd ? (
                 <p className="mt-1 text-[11px] leading-relaxed opacity-80">
-                  Оценка в USD по динамическому прайсу ({Object.values(PRICE_SOURCE_LABELS).join(' / ')}); цены
-                  подтягиваются с провайдеров, шаги — в инспекторе узлов, детализация — в MD-отчёте
+                  Оценка в USD по динамическому прайсу ({Object.values(PRICE_SOURCE_LABELS).join(' / ')});
+                  {curRate
+                    ? ` конвертация — ${CURRENCY_SOURCE_LABELS[curRate.source] ?? curRate.source}${
+                        curRate.asOf ? `, котировка ${curRate.asOf}` : ''
+                      }`
+                    : ' конвертация в выбранную валюту недоступна — курса нет'}
+                  ; цены и курсы подтягиваются в рантайме, шаги — в инспекторе узлов, детализация — в MD-отчёте
                 </p>
               ) : (
                 <p className="mt-1 text-[11px] leading-relaxed opacity-80">

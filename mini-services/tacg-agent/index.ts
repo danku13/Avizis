@@ -3,6 +3,7 @@ import { createServer } from 'node:http'
 import { Server } from 'socket.io'
 import { AgentEngine } from './engine'
 import { store } from './store'
+import { currency } from './currency'
 import { DecisionMode, RunMode } from './types'
 import { pricing } from './pricing'
 import {
@@ -36,11 +37,15 @@ const engine = new AgentEngine(io)
 // Динамический прайсинг (ADR-016): дисковый кэш сразу, устаревшие источники — фоном
 pricing.init()
 
+// Конвертация валюты (ADR-019): кэш сразу, устаревшие курсы — фоном (ЦБ обновляет раз в день)
+currency.init()
+
 io.on('connection', (socket) => {
   console.log(`[tacg] клиент подключился: ${socket.id}`)
   socket.emit('connected', { ok: true, ts: Date.now(), service: 'tacg-agent' })
   socket.emit('history:list', { runs: store.history() })
   socket.emit('pricing:status', pricing.status())
+  socket.emit('currency:status', currency.status())
 
   socket.on('run:start', async (data: any) => {
     try {
@@ -173,6 +178,22 @@ io.on('connection', (socket) => {
       io.emit('pricing:status', pricing.status())
     } catch (e: any) {
       socket.emit('pricing:refresh:result', { ok: false, error: e?.message || 'Ошибка обновления прайсов' })
+    }
+  })
+
+  // ─────────────────────── Конвертация валюты (ADR-019) ───────────────────────
+
+  socket.on('currency:get', () => {
+    socket.emit('currency:status', currency.status())
+  })
+
+  socket.on('currency:refresh', async () => {
+    try {
+      const result = await currency.refresh()
+      socket.emit('currency:refresh:result', result)
+      io.emit('currency:status', currency.status())
+    } catch (e: any) {
+      socket.emit('currency:refresh:result', { ok: false, error: e?.message || 'Ошибка обновления курсов' })
     }
   })
 

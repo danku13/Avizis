@@ -4,7 +4,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { AlertTriangle, ChevronRight, Cpu, DollarSign, Eye, EyeOff, KeyRound, Loader2, Plug, RefreshCw, Settings2, ShieldCheck } from 'lucide-react'
+import { AlertTriangle, Banknote, ChevronRight, Cpu, DollarSign, Eye, EyeOff, KeyRound, Loader2, Plug, RefreshCw, Settings2, ShieldCheck } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -19,7 +19,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { LlmConfigPublic, LlmRole } from '@/lib/tacg/types'
+import { CURRENCY_SYMBOLS, LlmConfigPublic, LlmRole } from '@/lib/tacg/types'
 import { getSocket } from '@/lib/tacg/socket'
 import { useTacgStore } from '@/store/tacg-store'
 import { toast } from 'sonner'
@@ -36,6 +36,8 @@ interface FormState {
   /** Ручная цена текущей модели, USD за 1M токенов (пусто = каталог/нет цены) */
   priceIn: string
   priceOut: string
+  /** Ручной курс выбранной валюты (единиц за 1 USD; пусто = сетевой курс) */
+  currencyRate: string
 }
 
 const PRESETS: { id: PresetId; label: string; baseUrl: string; modelHint: string }[] = [
@@ -70,8 +72,9 @@ function pricingKey(cfg: LlmConfigPublic | null): string {
 }
 
 /** Черновик формы из публичного конфига: ключ всегда пустой (пусто = «не менять») */
-function seedForm(cfg: LlmConfigPublic | null): FormState {
+function seedForm(cfg: LlmConfigPublic | null, displayCurrency: string): FormState {
   const price = cfg?.pricing?.models?.[pricingKey(cfg)]
+  const rate = cfg?.currency?.rates?.[displayCurrency]
   return {
     preset: detectPreset(cfg),
     baseUrl: cfg?.default?.baseUrl || '',
@@ -85,6 +88,7 @@ function seedForm(cfg: LlmConfigPublic | null): FormState {
     },
     priceIn: typeof price?.inputPer1M === 'number' ? String(price.inputPer1M) : '',
     priceOut: typeof price?.outputPer1M === 'number' ? String(price.outputPer1M) : '',
+    currencyRate: typeof rate === 'number' ? String(rate) : '',
   }
 }
 
@@ -149,6 +153,9 @@ export function SettingsModal() {
   const llmSaving = useTacgStore((s) => s.llmSaving)
   const llmTesting = useTacgStore((s) => s.llmTesting)
   const pricingStatus = useTacgStore((s) => s.pricingStatus)
+  const currencyStatus = useTacgStore((s) => s.currencyStatus)
+  const displayCurrency = useTacgStore((s) => s.displayCurrency)
+  const setDisplayCurrency = useTacgStore((s) => s.setDisplayCurrency)
   const setLlmSaving = useTacgStore((s) => s.setLlmSaving)
   const setLlmTesting = useTacgStore((s) => s.setLlmTesting)
   const setLlmStatus = useTacgStore((s) => s.setLlmStatus)
@@ -157,30 +164,32 @@ export function SettingsModal() {
   const [showKey, setShowKey] = useState(false)
   const [rolesOpen, setRolesOpen] = useState(false)
   const [pricingRefreshing, setPricingRefreshing] = useState(false)
-  const [seen, setSeen] = useState<{ open: boolean; cfg: LlmConfigPublic | null } | undefined>(undefined)
+  const [currencyRefreshing, setCurrencyRefreshing] = useState(false)
+  const [seen, setSeen] = useState<{ open: boolean; cfg: LlmConfigPublic | null; cur: string } | undefined>(undefined)
 
-  // Сброс черновика при открытии модалки или обновлении конфига — паттерн
+  // Сброс черновика при открытии модалки или обновлении конфига/валюты — паттерн
   // «Adjusting state when a prop changes» из документации React (без эффектов)
-  if (seen === undefined || seen.open !== open || seen.cfg !== llmConfig) {
-    setSeen({ open, cfg: llmConfig })
+  if (seen === undefined || seen.open !== open || seen.cfg !== llmConfig || seen.cur !== displayCurrency) {
+    setSeen({ open, cfg: llmConfig, cur: displayCurrency })
     setForm(null)
     setShowKey(false)
   }
 
-  const values: FormState = form ?? seedForm(llmConfig)
+  const values: FormState = form ?? seedForm(llmConfig, displayCurrency)
   const setField = <K extends keyof FormState>(key: K, v: FormState[K]) => setForm({ ...values, [key]: v })
 
-  const { preset, baseUrl, model, apiKey, roleModels, priceIn, priceOut } = values
+  const { preset, baseUrl, model, apiKey, roleModels, priceIn, priceOut, currencyRate } = values
 
   const isZai = preset === 'zai'
   const presetMeta = PRESETS.find((p) => p.id === preset)!
   const keyMask = llmConfig?.default?.apiKey
 
-  // при открытии — запросить актуальный конфиг и статус прайсов с сервера
+  // при открытии — запросить актуальный конфиг, статус прайсов и курсов с сервера
   useEffect(() => {
     if (open) {
       getSocket().emit('llm:config:get')
       getSocket().emit('pricing:get')
+      getSocket().emit('currency:get')
     }
   }, [open])
 
@@ -216,6 +225,11 @@ export function SettingsModal() {
         },
       }
     }
+    // ручной курс выбранной валюты (ADR-019): единиц за 1 USD, приоритет выше ЦБ/er-api
+    const rate = parseFloat(currencyRate.replace(',', '.'))
+    if (displayCurrency !== 'USD' && Number.isFinite(rate) && rate > 0) {
+      config.currency = { rates: { [displayCurrency]: rate } }
+    }
     return config
   }
 
@@ -231,6 +245,19 @@ export function SettingsModal() {
     // страховка от потерянного ответа — снимаем спиннер через 20 с
     setTimeout(done, 20_000)
     s.emit('pricing:refresh')
+  }
+
+  const refreshCurrency = () => {
+    if (currencyRefreshing) return
+    setCurrencyRefreshing(true)
+    const s = getSocket()
+    const done = () => {
+      s.off('currency:refresh:result', done)
+      setCurrencyRefreshing(false)
+    }
+    s.once('currency:refresh:result', done)
+    setTimeout(done, 20_000)
+    s.emit('currency:refresh')
   }
 
   const testConnection = () => {
@@ -485,6 +512,91 @@ export function SettingsModal() {
                   Цены подтягиваются с провайдеров в рантайме (не захардкожены), кэшируются на диске, обновление — при
                   старте и раз в {pricingStatus?.ttlHours ?? 24} ч. Стоимость в тулбаре, инспекторе и отчётах — оценка
                   (≈) по этим ценам.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* ─── Конвертация валюты (ADR-019, FR-910): валюта отображения, источники курсов ─── */}
+          <div className="space-y-2.5 rounded-lg border border-zinc-200 dark:border-zinc-800 p-3.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <Banknote className="size-4 shrink-0 text-teal-500 dark:text-teal-400" />
+              <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">Валюта стоимости</span>
+              <Select value={displayCurrency} onValueChange={(v) => setDisplayCurrency(v)}>
+                <SelectTrigger aria-label="Валюта отображения стоимости" className="ml-auto h-8 w-[150px] text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(currencyStatus?.entries ?? [{ code: 'USD', rate: 1, source: 'manual' }]).map((e) => (
+                    <SelectItem key={e.code} value={e.code} disabled={e.code !== 'USD' && !(e.rate > 0)}>
+                      {CURRENCY_SYMBOLS[e.code] ?? e.code} · {e.code}
+                      {e.rate > 0 ? '' : ' — нет курса'}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={refreshCurrency}
+                disabled={currencyRefreshing || currencyStatus?.disabled}
+                className="h-7 gap-1.5"
+              >
+                {currencyRefreshing ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+                {currencyRefreshing ? 'Обновляю…' : 'Курсы'}
+              </Button>
+            </div>
+            {displayCurrency !== 'USD' && (
+              <div className="space-y-1.5">
+                <Label htmlFor="llm-currency-rate" className="flex flex-wrap items-baseline gap-x-2 text-xs">
+                  Ручной курс: {CURRENCY_SYMBOLS[displayCurrency] ?? displayCurrency} за 1 $
+                  <span className="font-normal text-zinc-500">пусто — курс из источников ниже</span>
+                </Label>
+                <Input
+                  id="llm-currency-rate"
+                  value={currencyRate}
+                  onChange={(e) => setField('currencyRate', e.target.value)}
+                  placeholder={
+                    currencyStatus?.entries.find((e) => e.code === displayCurrency && e.rate > 0)
+                      ? String(currencyStatus.entries.find((e) => e.code === displayCurrency)!.rate)
+                      : 'курса нет'
+                  }
+                  inputMode="decimal"
+                  className="font-mono text-xs tabular-nums"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+              </div>
+            )}
+            {currencyStatus?.disabled ? (
+              <p className="text-[11px] leading-relaxed text-zinc-500">
+                Сетевые источники курсов выключены (TACG_CURRENCY_DISABLED=1) — конвертация только по ручному курсу.
+              </p>
+            ) : (
+              <div className="space-y-1">
+                {(currencyStatus?.sources ?? []).map((s) => (
+                  <div key={s.id} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs tabular-nums">
+                    <span
+                      className={cn(
+                        'inline-flex items-center gap-1',
+                        s.ok === false ? 'text-red-600 dark:text-red-400' : 'text-zinc-700 dark:text-zinc-300'
+                      )}
+                    >
+                      {s.ok === false && <AlertTriangle className="size-3 shrink-0" />}
+                      {s.label}:
+                    </span>
+                    <span className="text-zinc-500">
+                      {s.currencies ?? 0} валют
+                      {s.asOf ? ` · котировка ${s.asOf}` : ''}
+                      {s.fetchedAt ? ` · обновлён ${new Date(s.fetchedAt).toLocaleString('ru-RU')}` : ''}
+                      {s.ok === false ? ` · ${s.error ?? 'недоступен'}` : ''}
+                    </span>
+                  </div>
+                ))}
+                <p className="pt-0.5 text-[11px] leading-relaxed text-zinc-500">
+                  Курсы подтягиваются в рантайме (приоритет: ручной → ЦБ РФ → зеркало ЦБ → open.er-api), кэшируются на
+                  диске, обновление — при старте и раз в {currencyStatus?.ttlHours ?? 6} ч. Базис аудита — USD;
+                  конвертация только на отображение (чип, инспектор, MD-отчёт).
                 </p>
               </div>
             )}

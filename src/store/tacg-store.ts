@@ -3,6 +3,7 @@
 
 import { create } from 'zustand'
 import {
+  CurrencyStatus,
   DecisionMode,
   LlmConfigPublic,
   LlmProviderInfo,
@@ -55,6 +56,10 @@ interface TacgStore {
   runLlm: Record<string, LlmProviderInfo> | null
   /** Динамический прайсинг (ADR-016): статус источников с сервера */
   pricingStatus: PricingStatus | null
+  /** Конвертация валюты (ADR-019): статусы курсов с сервера */
+  currencyStatus: CurrencyStatus | null
+  /** Валюта отображения стоимости (localStorage 'tacg-currency', дефолт ₽ — FR-910) */
+  displayCurrency: string
 
   setConnected: (v: boolean) => void
   setRuns: (runs: RunMeta[]) => void
@@ -77,6 +82,8 @@ interface TacgStore {
   setLlmSaving: (v: boolean) => void
   setLlmTesting: (v: boolean) => void
   setPricingStatus: (status: PricingStatus | null) => void
+  setCurrencyStatus: (status: CurrencyStatus | null) => void
+  setDisplayCurrency: (code: string) => void
   openSettings: () => void
   closeSettings: () => void
 }
@@ -100,6 +107,8 @@ export const useTacgStore = create<TacgStore>()((set, get) => ({
   settingsOpen: false,
   runLlm: null,
   pricingStatus: null,
+  currencyStatus: null,
+  displayCurrency: 'RUB',
 
   setConnected: (v) => set({ connected: v }),
 
@@ -187,6 +196,19 @@ export const useTacgStore = create<TacgStore>()((set, get) => ({
   setLlmTesting: (v) => set({ llmTesting: v }),
 
   setPricingStatus: (status) => set({ pricingStatus: status }),
+
+  setCurrencyStatus: (status) => set({ currencyStatus: status }),
+
+  setDisplayCurrency: (code) => {
+    const c = (code || '').trim().toUpperCase().slice(0, 3)
+    if (!/^[A-Z]{3}$/.test(c)) return
+    try {
+      localStorage.setItem('tacg-currency', c)
+    } catch {
+      /* приватный режим — просто не запоминаем */
+    }
+    set({ displayCurrency: c })
+  },
 
   openSettings: () => set({ settingsOpen: true, llmStatus: null }),
 

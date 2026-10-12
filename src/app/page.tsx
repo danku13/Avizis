@@ -172,11 +172,42 @@ export default function Home() {
           })
         },
       ],
+      // ─── Конвертация валюты (ADR-019): статус курсов и результат обновления ───
+      [
+        'currency:status',
+        (data: any) => {
+          useTacgStore.getState().setCurrencyStatus(data ?? null)
+        },
+      ],
+      [
+        'currency:refresh:result',
+        (data: any) => {
+          import('sonner').then(({ toast }) => {
+            if (data?.ok) {
+              toast.success('Курсы валют обновлены', {
+                description: 'Конвертация стоимости — по свежим курсам',
+              })
+            } else {
+              toast.error('Не удалось обновить курсы', {
+                description: data?.error || 'Источники недоступны — работает кэш/ручной курс',
+              })
+            }
+          })
+        },
+      ],
     ]
     handlers.forEach(([ev, fn]) => s.on(ev, fn))
     if (s.connected) {
       useTacgStore.getState().setConnected(true)
       getSocket().emit('llm:config:get')
+      getSocket().emit('currency:get')
+    }
+    // Валюта отображения (FR-910): выбор переживает перезагрузку (localStorage)
+    try {
+      const saved = localStorage.getItem('tacg-currency')
+      if (saved && /^[A-Z]{3}$/.test(saved)) useTacgStore.getState().setDisplayCurrency(saved)
+    } catch {
+      /* приватный режим */
     }
     return () => {
       handlers.forEach(([ev, fn]) => s.off(ev, fn))
@@ -272,11 +303,11 @@ export default function Home() {
         {/* ─── Подвал ─── */}
         <footer className="mt-auto shrink-0 border-t border-zinc-200/80 bg-white/80 dark:border-zinc-800/80 dark:bg-zinc-950/80">
           <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5 text-xs text-zinc-500">
-            <span>TACG Prototype v0.9 · прототип для тестирования концепции</span>
+            <span>TACG Prototype v0.10 · прототип для тестирования концепции</span>
             <span className="hidden sm:inline">·</span>
             <span className="hidden sm:inline">Движок: socket.io мини-сервис + z-ai-web-dev-sdk (LLM)</span>
             <span className="hidden md:inline">·</span>
-            <span className="hidden md:inline">React Flow · Развилки решений · Аудит токенов · Светлая/тёмная тема</span>
+            <span className="hidden md:inline">React Flow · Развилки решений · Аудит токенов и стоимости · Валюта · Светлая/тёмная тема</span>
           </div>
         </footer>
 
