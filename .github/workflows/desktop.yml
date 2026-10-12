@@ -101,6 +101,7 @@ jobs:
             download/tacg-demo-en.srt
             download/tacg-demo-ru.srt
             download/tacg-demo-preview.gif
+            download/tacg-gifs/tacg-gif-*.gif
           body_path: .github/release-notes.md
           fail_on_unmatched_files: true
           draft: false
