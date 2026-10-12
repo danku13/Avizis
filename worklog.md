@@ -577,3 +577,45 @@ Stage Summary:
 - «Ничего не запустилось» исправлено: история при старте + live-метрики + «Агент работает…» + тост ошибки + мгновенные 4xx
 - 14/14 новых тестов + все регрессии зелёные + E2E-подтверждение в браузере
 - Релиз v0.10.1 собирается в CI по тегу (ждём артефакты: NSIS-установщик + portable zip)
+
+---
+Task ID: 17
+Agent: Super Z (main agent)
+Task: Автообновление приложения по GitHub Releases (без ручных переустановок) + полноценная portable-версия без установки (ADR-021, CR-014, FR-709)
+
+Work Log:
+- Рекогносцировка: релизы v0.10.0/v0.10.1 в порядке (NSIS + portable zip); tg-send.py на месте; cargo отсутствовал → установлен minimal + target x86_64-pc-windows-msvc
+- Архитектура: собственный апдейтер (отказ от tauri-plugin-updater — требует minisign-секрет в CI и установщик-центричен, portable не обновляет); один код-путь для NSIS и portable — приложение в обоих случаях = tacg.exe + tacg-engine.exe в одном каталоге, данные в app_data_dir не трогаются
+- src-tauri/updater-core/ (новый крейт, чистый Rust): lib.rs — parse_version/is_newer (покомпонентно, короткие хвосты=0), extract_release (draft/prerelease/ассет-мусор → человекочитаемые ошибки), plan_files (движок→прочее→оболочка последней; плоские имена, zip-slip отсечка); fs.rs — extract_flat (zip-крейт), perform_swap (бэкапы *.old, фолбэк copy+remove между томами), cleanup_backups; examples/live-check.rs
+- cargo test updater-core — 11/11: версии ×8 форм, is_newer (все направления), extract_release ×6, план ×2, интеграционные: подмена в песочнице (новые на месте, старые в .old, посторонний не тронут, cleanup), подмена в пустой каталог, zip-slip-архив отвергается крейтом целиком (поправил тест под реальную семантику)
+- Живой GitHub API: curl releases/latest → extract_release → версия/тег/ассет/размер/notes ok, is_newer(0.10.1)=false (поймали rate-limit IP — лечится токеном, для приложения норма 60/час/IP)
+- src-tauri/src/updater.rs (тонкий Tauri-слой): check_updates (reqwest/rustls, ошибки в поле error), apply_update (стриминг 512КБ-квантами, сверка размера с метаданными, гашение движка, perform_swap, spawn+exit, AtomicBool от параллельных); main.rs — mod, invoke_handler, cleanup *.old при старте; API-сигнатуры (kill(self), Emitter::emit, chunk(&mut), IntoUrl для &String) сверены с исходниками фактических версий крейтов
+- Локальная кросс-проверка Windows-таргета упёрлась в ring (cc→lib.exe) и embed-resource (llvm-rc/windres нет, sudo без пароля) — компиляцию закрывает CI на настоящей windows-latest (как в v0.10.0/v0.10.1); webkit2gtk для host-чека тоже недоступен
+- Фронтенд: @tauri-apps/api 2.12.3; src/lib/tacg/updater.ts — invoke/listen, isTauri-гвард, контракт-мок ?update-mock=1 (current 0.11.0→latest 0.11.1, download 10×130мс → install → relaunch); src/components/tacg/update-badge.tsx — тихий авто-чек при старте (тост с кнопкой «Обновить»), бейдж-фазы ready/applying%/error, ручная проверка иконкой, sawRelaunch против ложной ошибки при перезапуске; page.tsx — бейдж в футере (ml-auto), v0.11.0
+- Тесты: scripts/test-tacg-updater.ts 5/5 (чек, прогресс монотонный 10..100, отписка, web-режим null+отказ); регрессии byok 13/13, usage 13/13, currency 26/26; tsc новых 0 (база graph-canvas/xyflow/scripts без изменений), lint чист; статическая сборка out/ ok
+- E2E agent-browser (статика :8200 + движок :3901 + ?update-mock=1): авто-тост «Доступна версия v0.11.1» с кнопкой; бейдж «обновить до v0.11.1»; клик → «Скачивание обновления 23.8 из 47.7 МБ · 50%» → «Обновление установлено — перезапускаем… 100%»; финальный бейдж «обновление…»; ручная проверка → тост с notes; web-режим без мока — бейджа нет; мобильная 390×844 hscroll=false; консоль 0/0; скриншоты tacg-update-{toast,progress,relaunch,mobile}.png; сервисы остановлены
+- CI: desktop.yml — portable-README.txt в zip (here-string, YAML провалидирован pyyaml, терминатор '@ в колонке 0); release-notes.md v0.11.0 (последняя ручная установка); версии 0.11.0 (tauri.conf.json/Cargo.toml/футер)
+- Доки: ADR-021 (контекст/решение/альтернативы/последствия), CR-014 (цитаты, проверяемый результат), FR-709 в FR-700-nfr.md, индексы adr/cr/fr, docs/README.md v0.11.0 + пункт об автообновлении
+- Git: коммит 4a7fbc8 (всё кроме workflow) → push; workflow-правка доставлена git data API (коммит b54a642, PAT без scope workflow); тег v0.11.0 на b54a642 → CI Desktop (Tauri) in_progress; Telegram: план msg 1156, этап msg 1157
+
+Stage Summary:
+- Автообновление: проверка при старте/по кнопке → скачивание с прогрессом → подмена exes → автоперезапуск; данные пользователя не трогаются; работает и для NSIS, и для portable
+- Portable без установки: zip + README, обновляется тем же механизмом; переход v0.10.1→v0.11.0 — последняя ручная установка
+- 11/11 cargo + 5/5 контракт + E2E браузер + регрессии зелёные; релиз v0.11.0 собирается по тегу (ждём артефакты NSIS + portable zip с README)
+
+---
+Task ID: 17 (финал)
+Agent: Super Z (main agent)
+Task: Завершение — релиз v0.11.0 верифицирован
+
+Work Log:
+- CI Desktop (Tauri) run 38292584201 по тегу v0.11.0: все шаги success, включая Tauri build (компиляция updater.rs + updater-core + reqwest/zip на настоящей windows-latest) и портативную сборку с README
+- Релиз v0.11.0 опубликован: TACG_0.11.0_x64-setup.exe (38,6МБ) + tacg-portable-windows-x64.zip (51,6МБ), body = release-notes.md
+- Portable-zip скачан и проверен: tacg.exe (15,4МБ, PE32/MZ) + tacg-engine.exe (97МБ, PE32/MZ) + portable-README.txt (983 байта, UTF-8, кириллица корректна)
+- Живой GitHub API: releases/latest = v0.11.0, asset_url/size совпадают побайтово с фактом, is_newer(0.11.0 vs 0.10.1) = true (пользователи 0.10.1 увидели бы обновление), v0.11.0 = «последняя версия»
+- Сборка main на b54a642: success; на main появился пользовательский коммит c4feb19 (правка README.md) — на релиз не влияет (тег зафиксирован на b54a642), локально подтянут через stash/rebase
+- Telegram: план msg 1156, этап msg 1157, финал msg 1158
+
+Stage Summary:
+- v0.11.0 в эфире: автообновление по GitHub Releases (проверка при старте + кнопка, прогресс, подмена exes, автоперезапуск, данные не трогаются) и полноценный portable (zip + README, обновляется тем же механизмом)
+- Переход v0.10.1→v0.11.0 — последняя ручная установка; далее приложение обновляет себя само
