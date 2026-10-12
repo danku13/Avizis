@@ -461,3 +461,26 @@ Stage Summary:
 - Палитра разведена: развилки amber («ваш ход») vs динамика violet (максимально удалённые), ожидание — нейтральный цинк
 - Новый тип документов product/ (PRODUCT-001): возможности, 10 гипотез, VPM, 4 ЦА — база для приоритизации и питчей
 - Артефакты: mini-services/tacg-agent/{llm.ts, types.ts, engine.ts}, src/lib/tacg/{types.ts, fold.ts, theme.ts (новый)}, src/components/tacg/* (dark:-варианты, amber, токены), src/app/{page.tsx, layout.tsx, globals.css}, scripts/test-tacg-usage.ts (новый) + tacg-{usage-dark, usage-inspector, colors-dark, light-graph, light-persist, light-mobile}.png + tacg-usage-report.md, docs/{product/ (новый тип), adr/ADR-015, cr/CR-009, fr/FR-600|FR-700|FR-200, README.md v0.7}
+
+---
+Task ID: 13
+Agent: Super Z (main agent)
+Task: Сворачиваемый «Журнал событий» (максимизация графа) + эффективная шапка сайта (статус движка, тема, LLM-чип)
+
+Work Log:
+- Шаг 0: прочитан worklog (задачи 1–12), page.tsx/event-log/run-toolbar/theme-toggle/graph-canvas, FR-700/index, CR-009 (формат), README v0.7; git status — рабочее дерево чисто по контенту
+- Диагностика вертикального бюджета: журнал 260px всегда виден + шапка ~61px с неэффективным подзаголовком; LlmChip занимает строку тулбара, хотя BYOK — глобальная настройка. React Flow warning 004 = «parent container needs a width and a height» (возможен при resize) — сворачивание только растит канву, риска нет
+- event-log.tsx: сворачиваемый самостоятельный контейнер (обёртка убрана из page.tsx): 260px ↔ h-11 (44px), transition-[height] 200ms + motion-reduce; вся строка-заголовок — button с aria-expanded/aria-controls (таргет 44px), chevron с поворотом; состояние в localStorage 'tacg-log-collapsed' через useSyncExternalStore + подписка (паттерн theme.ts: SSR-снимок false — без рассинхрона гидратации, lint clean — изначальный useState-в-эффекте поймал react-hooks/set-state-in-effect, переписан); свёрнутый вид: live/кадр + счётчик + превью последней записи [вид] сообщение (≥md); тело остаётся в DOM (h-0, aria-hidden) — анимация без перемонтирования
+- llm-chip.tsx (новый): LlmChip перенесён из run-toolbar в шапку (глобальная настройка BYOK, не свойство прогона), компакт h-7/size-7; run-toolbar.tsx — LlmChip удалён из обоих состояний (нет прогона — только подсказка; есть прогон — строка данных прогона)
+- page.tsx: шапка — одна строка h-11 (~61→45px): лого size-6, заголовок text-sm, подзаголовок удалён (VLM-проверка подтвердила шум), статус движка компактный h-7 (на <sm — иконка; role=status + aria-label сохранены), LlmChip + ThemeToggle size-7; футер v0.7 → v0.8
+- Верификация: lint — чисто; tsc — 30 ошибок ДО (git stash) = 30 ПОСЛЕ, все преждесуществующие (graph-canvas 8, store 1, скрипты 19, skills 2), 0 новых
+- E2E agent-browser (:81, viewport 1440×900): чистая загрузка — консоль 0 ошибок/0 предупреждений; шапка 45px, статусы «LLM: z-ai SDK» + «движок: подключён», подзаголовка нет; демо-прогон (авто нет — ручной, 15 записей): канва 241px → сворачивание журнала → 44px → канва 457px (+216 = ровно 260−44); превью свёрнутого: «[решение] Режим «ручной выбор»… 15»; персистентность: reload — журнал свёрнут (44px, ls=1), консоль чистая (нет предупреждений гидратации); разворачивание — 260px, ls=0; настройки LLM открываются из шапки (шестерёнка и чип); тема — компактная кнопка работает (light/dark + localStorage); React Flow warning 004 при сворачивании НЕ возникает (консоль чистая на всех шагах); мобильная 390×844: hscroll=false, шапка 45px, журнал 44px, таргет работает; VLM-проверка 2 скриншотов (тёмный свёрнутый, мобильный): дефектов вёрстки нет
+- Регрессии: test-tacg-clarity 17/17 ✅, test-tacg-decision — все сценарии ✅, test-tacg-byok 13/13 ✅, test-tacg-usage 13/13 ✅
+- Документация: CR-010 (цитаты мотивации, изменения, верифицированный результат с числами), FR-708 (блок NFR: 7 ✅ + 1 ⬜ — счётчик заголовка поправлен, был устаревшим после CR-009), индексы fr/cr (+строки CR-010 в таблицы), README v0.8 (+пункт «Максимум места графу»)
+- Скриншоты: scripts/tacg-{dark-collapsed,dark-expanded,light-collapsed,collapse-mobile}.png
+
+Stage Summary:
+- Журнал событий сворачивается в строку 44px (клик по заголовку, анимация, персист в localStorage, SSR-безопасно через useSyncExternalStore): граф получает +216px высоты (замер E2E 241→457px), в свёрнутом виде счётчик и превью последней записи — информация не теряется
+- Шапка ужата с ~61px до 45px: подзаголовок удалён, статус движка и тема компактные; чип LLM-провайдера и шестерёнка BYOK перенесены в шапку из тулбара (глобальная настройка), тулбар отдаёт строку данным прогона
+- Протокол события/движок/снапшоты не менялись — все 46 регрессионных проверок зелёные, tsc = база, консоль чистая (включая сворачивание/resize)
+- Артефакты: src/components/tacg/{event-log.tsx, llm-chip.tsx (новый), run-toolbar.tsx, theme-toggle.tsx}, src/app/page.tsx, docs/{cr/CR-010 (новый), fr/FR-700 (FR-708), cr/index.md, fr/index.md, README.md v0.8}, scripts/tacg-{dark-collapsed,dark-expanded,light-collapsed,collapse-mobile}.png

@@ -1,11 +1,38 @@
-// TACG — живой журнал событий запуска
+// TACG — живой журнал событий запуска. CR-010: сворачиваемый контейнер —
+// сворачивание освобождает высоту под граф выполнения (главный элемент экрана).
+// Контейнер владеет своей высотой сам; выбор пользователя — в localStorage
+// 'tacg-log-collapsed'; в свёрнутом виде показываем превью последней записи.
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useSyncExternalStore } from 'react'
+import { ChevronDown } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { LogEntry } from '@/lib/tacg/types'
 import { cn } from '@/lib/utils'
 import { useTacgStore } from '@/store/tacg-store'
+
+const COLLAPSE_KEY = 'tacg-log-collapsed'
+
+// ─── Свернутое состояние: внешнее хранилище localStorage + подписка ───
+// (как theme.ts: SSR-снимок false — согласовано с серверным HTML, после
+// гидратации синхронизируется с localStorage без setState-в-эффекте)
+const listeners = new Set<() => void>()
+
+const readCollapsed = (): boolean => {
+  if (typeof document === 'undefined') return false
+  try {
+    return localStorage.getItem(COLLAPSE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+const notifyCollapsed = () => listeners.forEach((l) => l())
+
+function subscribeCollapsed(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
+}
 
 const KIND_STYLES: Record<LogEntry['kind'], string> = {
   // CR-009: решения (развилки) — amber в обеих темах; остальные акценты — 600/300
@@ -45,6 +72,18 @@ export function EventLog() {
   const logsRef = useRef<HTMLDivElement>(null)
   const isLive = cursor === null
 
+  // ─── Сворачивание (CR-010): выбор в localStorage, дефолт — развёрнут ───
+  const collapsed = useSyncExternalStore(subscribeCollapsed, readCollapsed, () => false)
+  const toggleCollapsed = () => {
+    const next = !readCollapsed()
+    try {
+      localStorage.setItem(COLLAPSE_KEY, next ? '1' : '0')
+    } catch {
+      /* приватный режим — состояние до перезагрузки */
+    }
+    notifyCollapsed()
+  }
+
   // журнал — из свёртки событий до курсора (или всех, если live)
   const logs: LogEntry[] = []
   const limit = isLive ? events.length : cursor! + 1
@@ -59,15 +98,52 @@ export function EventLog() {
     }
   }, [logs.length, isLive])
 
+  const last = logs[logs.length - 1]
+
   return (
-    <div className="flex h-full flex-col">
-      <div className="mb-2 flex items-center justify-between">
-        <h4 className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-          Журнал событий · {isLive ? 'live' : `кадр ${cursor! + 1}`}
-        </h4>
-        <span className="text-xs tabular-foreground text-muted-foreground">{logs.length}</span>
-      </div>
-      <ScrollArea className="h-0 flex-1 rounded-md border bg-white/60 p-2 dark:bg-zinc-950/50">
+    <div
+      className={cn(
+        'flex shrink-0 flex-col overflow-hidden rounded-xl border border-zinc-200/80 bg-white/60 transition-[height] duration-200 motion-reduce:transition-none dark:border-zinc-800/80 dark:bg-zinc-900/40',
+        collapsed ? 'h-11' : 'h-[260px]'
+      )}
+    >
+      {/* Вся строка заголовка — кнопка-переключатель (зона клика 44px, a11y) */}
+      <button
+        type="button"
+        onClick={toggleCollapsed}
+        aria-expanded={!collapsed}
+        aria-controls="tacg-event-log-body"
+        title={collapsed ? 'Развернуть журнал событий' : 'Свернуть журнал — освободить место под граф'}
+        className="flex h-11 w-full shrink-0 items-center gap-2 px-3.5 text-left transition-colors hover:bg-zinc-100/70 dark:hover:bg-zinc-800/40"
+      >
+        <ChevronDown
+          className={cn('size-3.5 shrink-0 text-zinc-400 transition-transform duration-200', collapsed && '-rotate-90')}
+        />
+        <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+          Журнал событий
+        </span>
+        <span className="shrink-0 text-xs text-zinc-500 dark:text-zinc-400">· {isLive ? 'live' : `кадр ${cursor! + 1}`}</span>
+
+        {/* превью последней записи в свёрнутом виде — информация не теряется */}
+        {collapsed && last && (
+          <span className="ml-1 hidden min-w-0 items-center gap-1.5 text-xs md:flex">
+            <span className={cn('shrink-0 font-medium', KIND_STYLES[last.kind])}>[{KIND_LABELS[last.kind]}]</span>
+            <span className="truncate text-zinc-500 dark:text-zinc-400" title={last.message}>
+              {last.message}
+            </span>
+          </span>
+        )}
+
+        <span className="ml-auto shrink-0 text-xs tabular-nums text-zinc-500 dark:text-zinc-400">{logs.length}</span>
+      </button>
+
+      {/* Тело журнала: остаётся в DOM (плавная анимация высоты контейнера),
+          при сворачивании — нулевая высота + aria-hidden */}
+      <ScrollArea
+        id="tacg-event-log-body"
+        aria-hidden={collapsed}
+        className="mt-1.5 h-0 flex-1 rounded-md border bg-white/60 p-2 dark:bg-zinc-950/50"
+      >
         <div className="space-y-1.5 pr-1">
           {logs.length === 0 && <p className="px-1 py-2 text-xs text-muted-foreground">События появятся во время выполнения…</p>}
           {logs.map((l) => (

@@ -16,7 +16,9 @@ import { HistoryPanel } from '@/components/tacg/history-panel'
 import { Timeline } from '@/components/tacg/timeline'
 import { GraphLegend } from '@/components/tacg/status-badge'
 import { ThemeToggle } from '@/components/tacg/theme-toggle'
+import { LlmChip } from '@/components/tacg/llm-chip'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { cn } from '@/lib/utils'
 
 export default function Home() {
   const connected = useTacgStore((s) => s.connected)
@@ -173,29 +175,30 @@ export default function Home() {
       {/* app-shell: на десктопе занимает весь экран без прокрутки страницы,
           на мобиле — обычная вертикальная прокрутка */}
       <div className="flex min-h-dvh w-full flex-col bg-zinc-50 text-zinc-900 lg:h-dvh lg:overflow-hidden dark:bg-zinc-950 dark:text-zinc-100">
-        {/* ─── Шапка ─── */}
+        {/* ─── Шапка (CR-010): одна компактная строка h-11 — лого, чип LLM (BYOK),
+            статус движка и тема; подзаголовок убран как неэффективный, LLM-чип
+            перенесён из тулбара (глобальная настройка, а не свойство прогона) ─── */}
         <header className="z-20 shrink-0 border-b border-zinc-200/80 bg-white/80 backdrop-blur dark:border-zinc-800/80 dark:bg-zinc-950/80">
-          <div className="flex w-full items-center gap-3 px-4 py-3">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-teal-400 to-emerald-600 text-zinc-950">
-              <Activity className="size-5" />
+          <div className="flex h-11 w-full items-center gap-2.5 px-3 sm:px-4">
+            <div className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-teal-400 to-emerald-600 text-zinc-950">
+              <Activity className="size-3.5" />
             </div>
-            <div className="min-w-0">
-              <h1 className="truncate text-base font-bold leading-tight">TACG Playground</h1>
-              <p className="hidden truncate text-xs text-zinc-500 xl:block">
-                Transparent Agent Computation Graph · живая карта мышления агента
-              </p>
-            </div>
-            <div className="ml-auto flex items-center gap-2">
+            <h1 className="shrink-0 text-sm font-bold leading-none">TACG Playground</h1>
+            <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
+              <LlmChip />
               <span
-                className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium ${
+                className={cn(
+                  'inline-flex h-7 items-center gap-1.5 rounded-lg border px-2 text-xs font-medium',
                   connected
                     ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
                     : 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300'
-                }`}
+                )}
                 role="status"
+                aria-label={connected ? 'Движок агента: подключён' : 'Движок агента: офлайн'}
+                title={connected ? 'Мини-сервис socket.io :3003 — подключён' : 'Движок агента недоступен — проверьте сервис'}
               >
-                {connected ? <Wifi className="size-3.5" /> : <WifiOff className="size-3.5" />}
-                {connected ? 'движок агента: подключён' : 'движок офлайн'}
+                {connected ? <Wifi className="size-3.5 shrink-0" /> : <WifiOff className="size-3.5 shrink-0" />}
+                <span className="hidden sm:inline">{connected ? 'движок: подключён' : 'движок: офлайн'}</span>
               </span>
               <ThemeToggle />
             </div>
@@ -237,16 +240,16 @@ export default function Home() {
 
             <Timeline />
 
-            <div className="flex h-[260px] shrink-0 flex-col rounded-xl border border-zinc-200/80 bg-white/60 p-3.5 dark:border-zinc-800/80 dark:bg-zinc-900/40">
-              <EventLog />
-            </div>
+            {/* Журнал событий — сворачиваемый (CR-010): компонент владеет высотой сам,
+                сворачивание отдаёт место графу; выбор — в localStorage */}
+            <EventLog />
           </section>
         </main>
 
         {/* ─── Подвал ─── */}
         <footer className="mt-auto shrink-0 border-t border-zinc-200/80 bg-white/80 dark:border-zinc-800/80 dark:bg-zinc-950/80">
           <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5 text-xs text-zinc-500">
-            <span>TACG Prototype v0.7 · прототип для тестирования концепции</span>
+            <span>TACG Prototype v0.8 · прототип для тестирования концепции</span>
             <span className="hidden sm:inline">·</span>
             <span className="hidden sm:inline">Движок: socket.io мини-сервис + z-ai-web-dev-sdk (LLM)</span>
             <span className="hidden md:inline">·</span>

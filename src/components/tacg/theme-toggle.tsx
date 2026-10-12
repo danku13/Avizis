@@ -14,12 +14,12 @@ export function ThemeToggle() {
         <Button
           variant="outline"
           size="icon"
-          className="size-8"
+          className="size-7"
           onClick={toggleTheme}
           aria-label={isDark ? 'Включить светлую тему' : 'Включить тёмную тему'}
           title={isDark ? 'Светлая тема' : 'Тёмная тема'}
         >
-          {isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
+          {isDark ? <Sun className="size-3.5" /> : <Moon className="size-3.5" />}
         </Button>
       </TooltipTrigger>
       <TooltipContent side="bottom">
