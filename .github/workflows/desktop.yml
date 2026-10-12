@@ -28,7 +28,10 @@ jobs:
         uses: oven-sh/setup-bun@v2
 
       - name: Зависимости
-        run: bun install --frozen-lockfile
+        run: |
+          bun install --frozen-lockfile
+          # движок — отдельный пакет (socket.io, z-ai-web-dev-sdk в своих node_modules)
+          cd mini-services/tacg-agent && bun install
 
       - name: Сайдкар движка (bun compile → Windows exe)
         run: bun run compile:engine:win
@@ -52,10 +55,15 @@ jobs:
       - name: Портативная сборка (zip с оболочкой и сайдкаром)
         shell: pwsh
         run: |
-          $files = @('src-tauri/target/release/tacg.exe')
-          $sidecar = Get-ChildItem 'src-tauri/target/release' -Filter 'tacg-engine*' -ErrorAction SilentlyContinue
-          if ($sidecar) { $files += $sidecar.FullName }
-          Compress-Archive -Path $files -DestinationPath tacg-portable-windows-x64.zip
+          $rel = 'src-tauri/target/release'
+          # tauri копирует сайдкар без тройки целевой платформы; если нет — приводим сами
+          if (-not (Test-Path "$rel/tacg-engine.exe") -and (Test-Path "$rel/tacg-engine-x86_64-pc-windows-msvc.exe")) {
+            Copy-Item "$rel/tacg-engine-x86_64-pc-windows-msvc.exe" "$rel/tacg-engine.exe"
+          }
+          if (-not (Test-Path "$rel/tacg.exe") -or -not (Test-Path "$rel/tacg-engine.exe")) {
+            Write-Error "нет компонентов портативной сборки: tacg.exe / tacg-engine.exe"; exit 1
+          }
+          Compress-Archive -Path "$rel/tacg.exe", "$rel/tacg-engine.exe" -DestinationPath tacg-portable-windows-x64.zip
           Get-Item tacg-portable-windows-x64.zip | Select-Object Name, Length
 
       - name: Артефакты проверочной сборки
