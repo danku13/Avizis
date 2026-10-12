@@ -553,3 +553,27 @@ Stage Summary:
 - Первый релиз TACG v0.10.0 опубликован: единый exe-установщик с UI (Tauri v2) + движок-sайдкар + portable zip; сборка полностью в GitHub Actions (windows-latest), артефакты на каждый push в main
 - Все 5 этапов сессии выполнены; всего прогонов CI: 4 (2 пойманных и исправленных бага: engine-deps в CI, тег на старом коммите)
 - Ключевой инженерный трюк сессии: доставка workflow-файла через git data API при PAT без scope workflow — задокументирован в scripts/push-workflow-via-git-api.py
+
+---
+Task ID: 16
+Agent: Super Z (main agent)
+Task: Заставить работать thinkingmachines/inkling:free (гейт OpenRouter «agentic harnesses») + исправить «при запуске агента история не обновляется и TACG не переключает на новый запуск»
+
+Work Log:
+- Диагностика inkling:free: живой каталог openrouter.ai/api/v1/models + страница модели → формулировка гейта «The free Inkling endpoint is only available for use with agentic harnesses»; supported_parameters free-варианта содержит tools, но НЕ tool_choice → признак агентного запроса для гейта; probe-валидация настроек падала в тот же гейт → конфиг было невозможно сохранить
+- Диагностика UX: history:list транслировался только по терминальному статусу (pushStatus); прогон попадал в store после планирования; при 4xx движок гонял все 5 ретраев (минуты «мёртвого» экрана); socket-протокол и переключение проверены диагностическим клиентом (scripts/diag-run-start.ts) + браузером в 3 режимах (web :81, статика ?port=, LLM с мок-провайдером) — воспроизведено и локализовано
+- openai-client.ts (новый общий модуль): chatCompletionsRequest с обходом гейта (маркер в 403-теле или error внутри 200 → один повтор с tools submit_final_answer, без tool_choice → кэш Set<baseUrl|model> до рестарта); extractMessageContent (content + tool_calls: answer/result/output/raw, мультивызовы); NonRetryableProviderError для не-транзиентных 4xx; validateProvider перенесён сюда (проба проходит гейт, конфиг сохраняем)
+- llm.ts: openaiCompatibleChat через общий клиент; chatTextDetailed — break на NonRetryableProviderError (4xx мгновенно, было ≥1800мс ретраев); llm-config.ts — validateProvider убран (импорт в index.ts переключён)
+- engine.ts: store.save + broadcast history:list сразу после run:created/planning; pushStatus(..., reason) → run:status.reason для ошибок (SDK init / узел / цикл); types.ts ×2 — reason в RunEvent
+- Фронтенд: tacg-store onRunCreated — оптимистичный инсерт записи в историю (planning, верх списка); applyEvent — live-обновление status/progress/nodesCount записи текущего прогона; page.tsx — тост «Прогон завершился ошибкой» с reason; GraphCanvas planning-состояние «Агент работает…» (Compass + пульсация); status-badge/run-toolbar — реальная модель прогона в бейдже и MD вместо «z-ai-web-dev-sdk»; футер v0.10.1
+- Тесты: scripts/test-tacg-openrouter-gate.ts (новый) 14/14: A1-A9 unit (гейт→tools, кэш, 200-inline, 404 NonRetryable, 429 транзиентно, 4xx без ретраев 1мс, extractMessageContent ×7, validateProvider с гейтом и без) + B1-B5 интеграция (config:test/save ok, история при старте planning, прогон completed 7/7 с tools, provenance inkling:free); mock-openai.ts расширен (agentic-gate/agentic-inline/reject-429, MOCK_DELAY_MS, toolsCount в stats)
+- Регрессии: byok 13/13, clarity 17/17, usage 13/13, truncation 31/31, pricing 26/26, currency 26/26, decision все, llm-auto полный прогон; tsc новых 0 (базовые graph-canvas/xyflow без изменений), lint чист
+- E2E браузер (статика :8200 + движок 3901 + мок гейта с задержкой 5с): «Агент работает…» + запись в истории при старте; прогон completed 40,8с (7 вызовов LLM, решение агентом, токены/стоимость); переключение со старого прогона на новый — мгновенное (статус/метрики/вторая запись сверху); ошибка провайдера → статус «Ошибка»; консоль 0; скриншоты e2e-gate-{planning,completed,switch,error-toast}.png
+- Доки: ADR-020 (гейт: контекст/решение/альтернативы/последствия), CR-013 (цитаты, проверяемый результат), FR-911, индексы adr/cr/fr, docs/README.md v0.10.1, .github/release-notes.md v0.10.1; .gitignore + tg-send.py (токен!) + currency-cache.json
+- Коммит 22e96c7 → push main; тег v0.10.1 (на 22e96c7) → CI Desktop (Tauri) in_progress; Telegram: план msg 1149, этапы 2-3 msg 1150
+
+Stage Summary:
+- inkling:free работает «из коробки»: первый вызов платит один 403, дальше кэш; настройки сохраняются; tool_calls разворачиваются в текст
+- «Ничего не запустилось» исправлено: история при старте + live-метрики + «Агент работает…» + тост ошибки + мгновенные 4xx
+- 14/14 новых тестов + все регрессии зелёные + E2E-подтверждение в браузере
+- Релиз v0.10.1 собирается в CI по тегу (ждём артефакты: NSIS-установщик + portable zip)
