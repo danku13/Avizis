@@ -4,7 +4,7 @@
 
 > **Status:** working concept prototype for AI-agent transparency, human-in-the-loop control, and reproducible execution. Not production-ready yet.
 
-![TACG live AI agent computation graph](./scripts/tacg-rf-live.png)
+![TACG is live AI agent computation graph](./download/tacg-gifs/tacg-gif-01-launch-planning.gif)
 
 ## Why TACG
 
