@@ -1,4 +1,5 @@
 # TACG — Transparent Agent Computation Graph
+<a href="https://youtube.com"><kbd>📺 YouTube Demo Video</kbd></a>
 
 **Interactive debugger and execution playground for AI agents.** Visualize an LLM agent's plan as a live DAG, inspect every step, pause execution, steer decision branches, override node outputs, replay runs, and export an auditable Markdown trail.
 
@@ -6,7 +7,7 @@
 
 ![TACG is live AI agent computation graph](./download/tacg-gifs/tacg-gif-01-launch-planning.gif)
 
-[![Transparent Agent Computation Graph](https://youtube.com)](https://www.youtube.com/watch?v=5dTs4wgIuic)
+
 
 ## Why TACG
 
