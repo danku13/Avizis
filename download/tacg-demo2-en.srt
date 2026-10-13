@@ -1,0 +1,107 @@
+1
+00:00:00,400 --> 00:00:07,000
+TACG — Transparent Agent Computation Graph
+A live debugger for AI agents: watch, steer, replay.
+
+2
+00:00:07,200 --> 00:00:10,800
+Task: find anomalies in Q3 sales data.
+
+3
+00:00:11,000 --> 00:00:20,800
+Launch: planning and first steps —
+the graph grows in real time.
+
+4
+00:00:20,900 --> 00:00:31,900
+A decision fork: the agent asks the user
+to choose a verification strategy.
+
+5
+00:00:32,000 --> 00:00:36,500
+Chosen: «Deep investigation» —
+the unused branches fade out.
+
+6
+00:00:36,700 --> 00:00:44,000
+The branch activates; the supervisor
+adds steps dynamically (graph v2).
+
+7
+00:00:44,100 --> 00:00:53,500
+Run 1 complete: 9 nodes (+1 dynamic),
+full token and cost audit.
+
+8
+00:00:53,700 --> 00:01:03,000
+Node inspector: inputs, output, rationale —
+every step is transparent.
+
+9
+00:01:03,200 --> 00:01:13,000
+Agent options and result override —
+a human can step in at any node.
+
+10
+00:01:19,800 --> 00:01:30,000
+Timeline: any moment of the run
+can be replayed frame by frame.
+
+11
+00:01:30,200 --> 00:01:34,300
+The run is fully reproducible —
+from planning to the final report.
+
+12
+00:01:38,200 --> 00:01:45,000
+Run 2: a new task — write a post.
+This time decisions go to the agent.
+
+13
+00:01:45,300 --> 00:01:55,300
+Launch: the agent plans and refines
+the vague request step by step.
+
+14
+00:01:55,400 --> 00:02:03,100
+A fork — publication format:
+the agent waits for a human decision.
+
+15
+00:02:03,300 --> 00:02:11,000
+Switching decisions to «Auto» —
+from here the agent decides on its own.
+
+16
+00:02:11,200 --> 00:02:23,500
+The plan grows dynamically: format, content blocks,
+tone — graph versions v2…v4.
+
+17
+00:02:23,700 --> 00:02:34,500
+Run 2 complete: 16 nodes, 14 of them
+added dynamically.
+
+18
+00:02:34,700 --> 00:02:42,500
+The result: usage metrics,
+event log, graph versions.
+
+19
+00:02:42,700 --> 00:02:49,800
+History: both runs are saved —
+replay and audit.
+
+20
+00:02:50,000 --> 00:02:56,600
+Switching to run 1: the graph and metrics
+restore instantly.
+
+21
+00:02:56,800 --> 00:02:59,800
+Back to run 2. Every step
+is documented and reproducible.
+
+22
+00:03:00,000 --> 00:03:03,000
+github.com/danku13/TACG

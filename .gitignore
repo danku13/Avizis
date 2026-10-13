@@ -69,3 +69,4 @@ mini-services/tacg-agent/data/currency-cache.json
 scripts/tg-send-gifs-hd*.sh
 scripts/build-hd.sh
 scripts/hd-stash/
+scripts/rec/tg-send-demo2*.sh
