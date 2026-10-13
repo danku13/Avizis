@@ -6,6 +6,8 @@
 
 ![TACG is live AI agent computation graph](./download/tacg-gifs/tacg-gif-01-launch-planning.gif)
 
+[![Transparent Agent Computation Graph](https://youtube.com)](https://www.youtube.com/watch?v=5dTs4wgIuic)
+
 ## Why TACG
 
 Most AI-agent observability tools help you inspect traces after a run. TACG explores a complementary workflow: **understand and influence an agent while it is running**.
