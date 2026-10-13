@@ -66,3 +66,6 @@ mini-services/tacg-agent/data/pricing-cache.json
 mini-services/tacg-agent/dist/
 scripts/tg-send.py
 mini-services/tacg-agent/data/currency-cache.json
+scripts/tg-send-gifs-hd*.sh
+scripts/build-hd.sh
+scripts/hd-stash/
