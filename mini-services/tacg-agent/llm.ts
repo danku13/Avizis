@@ -1,16 +1,19 @@
-// TACG — слой роутера LLM-вызовов (ADR-012): адаптеры zai (дефолт) и
-// openai-compatible (baseUrl + apiKey + model), резолв по ролям.
+// TACG — слой роутера LLM-вызовов (ADR-012, ADR-024): адаптеры zai (дефолт),
+// openai-compatible (baseUrl + apiKey + model), anthropic (Messages API) и
+// google-gemini (generateContent API) — резолв по ролям.
 // extractJson/repairJson/таймауты/ретраи — НАД адаптерами (провайдер-агностичны).
 import ZAI, { ChatMessage } from 'z-ai-web-dev-sdk'
 import type { LlmProviderConfig } from './llm-config'
 import { loadConfig, resolveRole, describeHttpError } from './llm-config'
 import { chatCompletionsRequest, chatCompletionsStreamRequest, extractMessageContent, NonRetryableProviderError } from './openai-client'
+import { anthropicRequest, anthropicStreamRequest, extractAnthropicContent, consumeAnthropicSse, ANTHROPIC_DEFAULT_BASE } from './anthropic-client'
+import { geminiRequest, geminiStreamRequest, extractGeminiContent, geminiUsageOf, consumeGeminiSse, GEMINI_DEFAULT_BASE } from './gemini-client'
 
 /** Роль движка: какая точка делает вызов */
 export type LlmRole = 'planner' | 'executor' | 'supervisor' | 'decider'
 
-/** Идентификатор адаптера провайдера */
-export type LlmAdapterId = 'zai' | 'openai-compatible'
+/** Идентификатор адаптера провайдера (anthropic/google-gemini — нативные, CR-017) */
+export type LlmAdapterId = 'zai' | 'openai-compatible' | 'anthropic' | 'google-gemini'
 
 /** Использование токенов (прокидывается из ответа провайдера для будущих счётчиков) */
 export interface LlmUsage {
@@ -283,8 +286,107 @@ async function openaiCompatibleChatStream(cfg: LlmProviderConfig, system: string
 /** Роутер: резолв конфигурации по роли → диспетчеризация в адаптер */
 async function callLlm(system: string, user: string, timeoutMs: number, role?: LlmRole): Promise<LlmChatResult> {
   const cfg = resolveRole(role, loadConfig())
+  if (cfg.adapter === 'anthropic') return anthropicChat(cfg, system, user, timeoutMs)
+  if (cfg.adapter === 'google-gemini') return geminiChat(cfg, system, user, timeoutMs)
   if (cfg.adapter === 'openai-compatible') return openaiCompatibleChat(cfg, system, user, timeoutMs)
   return zaiChat(system, user, timeoutMs)
+}
+
+/** Адаптер anthropic (Messages API, CR-017): system отдельным полем; max_tokens
+ *  обязателен — по эвристике «opus → 4096, остальное → 8192» (кэпы моделей
+ *  различаются, выходим в максимум, не ломая старые модели; ADR-024 §4). */
+async function anthropicChat(cfg: LlmProviderConfig, system: string, user: string, timeoutMs: number): Promise<LlmChatResult> {
+  const model = (cfg.model || '').trim()
+  if (!model) throw new Error('Модель провайдера не задана (настройки LLM)')
+  const body: Record<string, unknown> = {
+    model,
+    max_tokens: /opus/i.test(model) ? 4096 : 8192,
+    system,
+    messages: [{ role: 'user', content: user }],
+  }
+  if (typeof cfg.temperature === 'number' && Number.isFinite(cfg.temperature)) {
+    body.temperature = cfg.temperature
+  }
+  const data = await anthropicRequest(cfg, body, timeoutMs)
+  const content = extractAnthropicContent(data)
+  if (!content) throw new Error('Пустой ответ модели')
+  return { content, adapter: 'anthropic', model, usage: extractUsage(data) }
+}
+
+/** Адаптер anthropic в режиме стриминга: SSE с content_block_delta (CR-016-паттерн). */
+async function anthropicChatStream(cfg: LlmProviderConfig, system: string, user: string, timeoutMs: number, sink: StreamSink): Promise<LlmChatResult> {
+  const model = (cfg.model || '').trim()
+  if (!model) throw new Error('Модель провайдера не задана (настройки LLM)')
+  const body: Record<string, unknown> = {
+    model,
+    max_tokens: /opus/i.test(model) ? 4096 : 8192,
+    system,
+    messages: [{ role: 'user', content: user }],
+  }
+  if (typeof cfg.temperature === 'number' && Number.isFinite(cfg.temperature)) {
+    body.temperature = cfg.temperature
+  }
+  const { res, errorText } = await anthropicStreamRequest(cfg, body, timeoutMs)
+  if (!res.ok) throw new NonRetryableProviderError(describeHttpError(res.status, errorText))
+  const contentType = String(res.headers?.get?.('content-type') || '')
+  if (!contentType.includes('event-stream')) {
+    throw new Error('Провайдер не вернул SSE-поток для стримингового запроса')
+  }
+  const { content, usage } = await withTimeout(
+    consumeAnthropicSse(res.body, sink),
+    timeoutMs,
+    `Таймаут чтения стрима (${Math.round(timeoutMs / 1000)} с)`
+  )
+  if (!content.trim()) throw new Error('Пустой ответ модели')
+  return { content: content.trim(), adapter: 'anthropic', model, usage }
+}
+
+/** Адаптер google-gemini (generateContent API, CR-017): systemInstruction.parts,
+ *  temperature — в generationConfig; usage — из usageMetadata. */
+async function geminiChat(cfg: LlmProviderConfig, system: string, user: string, timeoutMs: number): Promise<LlmChatResult> {
+  const model = (cfg.model || '').trim()
+  if (!model) throw new Error('Модель провайдера не задана (настройки LLM)')
+  const body: Record<string, unknown> = {
+    systemInstruction: { parts: [{ text: system }] },
+    contents: [{ role: 'user', parts: [{ text: user }] }],
+  }
+  const genCfg: Record<string, unknown> = {}
+  if (typeof cfg.temperature === 'number' && Number.isFinite(cfg.temperature)) {
+    genCfg.temperature = cfg.temperature
+  }
+  if (Object.keys(genCfg).length) body.generationConfig = genCfg
+  const data = await geminiRequest(cfg, body, timeoutMs)
+  const content = extractGeminiContent(data)
+  if (!content) throw new Error('Пустой ответ модели')
+  return { content, adapter: 'google-gemini', model, usage: geminiUsageOf(data) }
+}
+
+/** Адаптер google-gemini в режиме стриминга: streamGenerateContent?alt=sse (CR-016-паттерн). */
+async function geminiChatStream(cfg: LlmProviderConfig, system: string, user: string, timeoutMs: number, sink: StreamSink): Promise<LlmChatResult> {
+  const model = (cfg.model || '').trim()
+  if (!model) throw new Error('Модель провайдера не задана (настройки LLM)')
+  const body: Record<string, unknown> = {
+    systemInstruction: { parts: [{ text: system }] },
+    contents: [{ role: 'user', parts: [{ text: user }] }],
+  }
+  const genCfg: Record<string, unknown> = {}
+  if (typeof cfg.temperature === 'number' && Number.isFinite(cfg.temperature)) {
+    genCfg.temperature = cfg.temperature
+  }
+  if (Object.keys(genCfg).length) body.generationConfig = genCfg
+  const { res, errorText } = await geminiStreamRequest(cfg, body, timeoutMs)
+  if (!res.ok) throw new NonRetryableProviderError(describeHttpError(res.status, errorText))
+  const contentType = String(res.headers?.get?.('content-type') || '')
+  if (!(contentType.includes('event-stream') || contentType.includes('text/plain'))) {
+    throw new Error('Провайдер не вернул SSE-поток для стримингового запроса')
+  }
+  const { content, usage } = await withTimeout(
+    consumeGeminiSse(res.body, sink),
+    timeoutMs,
+    `Таймаут чтения стрима (${Math.round(timeoutMs / 1000)} с)`
+  )
+  if (!content.trim()) throw new Error('Пустой ответ модели')
+  return { content: content.trim(), adapter: 'google-gemini', model, usage }
 }
 
 /** Детальный результат LLM-вызова: текст + usage (для аудита токенов) */
@@ -338,9 +440,13 @@ export async function chatTextDetailedStream(
   if (sink) {
     try {
       const cfg = resolveRole(role, loadConfig())
-      const res = cfg.adapter === 'openai-compatible'
-        ? await openaiCompatibleChatStream(cfg, system, user, timeoutMs, sink)
-        : await zaiChatStream(system, user, timeoutMs, sink)
+      const res = cfg.adapter === 'anthropic'
+        ? await anthropicChatStream(cfg, system, user, timeoutMs, sink)
+        : cfg.adapter === 'google-gemini'
+          ? await geminiChatStream(cfg, system, user, timeoutMs, sink)
+          : cfg.adapter === 'openai-compatible'
+            ? await openaiCompatibleChatStream(cfg, system, user, timeoutMs, sink)
+            : await zaiChatStream(system, user, timeoutMs, sink)
       sink(res.content)
       return { content: res.content, usage: res.usage, model: res.model, adapter: res.adapter }
     } catch (e: any) {

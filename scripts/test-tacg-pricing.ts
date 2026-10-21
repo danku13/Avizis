@@ -312,64 +312,69 @@ socket.on('connect', async () => {
 
     const snap: any = await loadSnapshot(id)
 
-    // C4: сводка. Мок: 7 вызовов по 100/20; цена 2.5/10 $/1M → 0.00045 за вызов → 0.00315
+    // C4: сводка. Мок после CR-016: полный вызов 100/20 → $0,00045 (планировщик ×1, супервайзер ×2, решатель ×1);
+    //     стрим исполнителя 111/42 → $0,0006975 за вызов (×3): 0,0018 + 0,0020925 = $0,0038925 ≈ $0,00389
     const u = snap?.usage
     push(
-      'C4 сводка: costUsd запуска = 7 × $0,00045 = $0,00315',
-      u?.calls === 7 && near(u?.costUsd, 0.00315, 1e-12) && u?.unpricedCalls === undefined,
-      [`calls=${u?.calls}`, `cost=${u?.costUsd} (ожид. 0.00315)`, `unpriced=${u?.unpricedCalls}`]
+      'C4 сводка: costUsd запуска = 4×$0,00045 + 3×$0,0006975 ≈ $0,00389',
+      u?.calls === 7 && near(u?.costUsd, 0.0038925, 1e-12) && u?.unpricedCalls === undefined,
+      [`calls=${u?.calls}`, `cost=${u?.costUsd} (ожид. 0.0038925)`, `unpriced=${u?.unpricedCalls}`]
     )
 
-    // C5: разбивка по ролям (1/3/2/1 вызовов)
+    // C5: разбивка по ролям (1/3/2/1 вызовов; исполнитель — стрим)
     push(
       'C5 разбивка costUsd по ролям',
       near(u?.byRole?.planner?.costUsd, 0.00045) &&
-        near(u?.byRole?.executor?.costUsd, 0.00135) &&
+        near(u?.byRole?.executor?.costUsd, 0.0020925) &&
         near(u?.byRole?.supervisor?.costUsd, 0.0009) &&
         near(u?.byRole?.decider?.costUsd, 0.00045),
       [JSON.stringify(u?.byRole)]
     )
 
-    // C6: события llm:usage несут provenance и стоимость
+    // C6: события llm:usage несут provenance и стоимость (исполнитель — стрим-цена)
     const usageEvents = (snap?.events ?? []).filter((e: any) => e.type === 'llm:usage')
     push(
       'C6 события llm:usage: adapter/model/costUsd/priceSource',
       usageEvents.length === 7 &&
         usageEvents.every(
           (e: any) =>
-            e.adapter === 'openai-compatible' && e.model === 'mock-model' && near(e.costUsd, 0.00045) && e.priceSource === 'manual'
+            e.adapter === 'openai-compatible' && e.model === 'mock-model' && e.priceSource === 'manual' &&
+            near(e.costUsd, e.role === 'executor' ? 0.0006975 : 0.00045)
         ),
       [`событий=${usageEvents.length}`, JSON.stringify(usageEvents[0])]
     )
 
-    // C7: атрибуция узлам
-    const byId = new Map((snap?.nodes ?? []).map((n: any) => [n.id, n]))
-    const expNodes = ['n1', 'dec1', 'ba1', 'nfin']
+    // C7: атрибуция узлам (исполнитель — стрим-цена, decider — полный вызов)
+    const byId = new Map<string, any>((snap?.nodes ?? []).map((n: any) => [n.id, n] as [string, any]))
+    const expStream = ['n1', 'ba1', 'nfin']
+    const expFull = ['dec1']
     push(
       'C7 атрибуция стоимости узлам',
-      expNodes.every((nid) => near(byId.get(nid)?.usage?.costUsd, 0.00045)) && !byId.get('bb1')?.usage,
-      expNodes.map((nid) => `${nid}=${byId.get(nid)?.usage?.costUsd}`)
+      expStream.every((nid) => near(byId.get(nid)?.usage?.costUsd, 0.0006975)) &&
+        expFull.every((nid) => near(byId.get(nid)?.usage?.costUsd, 0.00045)) &&
+        !byId.get('bb1')?.usage,
+      [...expStream, ...expFull].map((nid) => `${nid}=${byId.get(nid)?.usage?.costUsd}`)
     )
 
-    // C8: журнал — стоимость в записях шагов и итогах
+    // C8: журнал — стоимость в записях шагов (исполнитель ≈$0,000698) и итога (≈$0,00389)
     const logs: any[] = snap?.logs ?? []
     const doneLogs = logs.filter((l: any) => l.kind === 'node-done')
     const finalLog = logs.find((l: any) => l.kind === 'run' && l.message.includes('Задача выполнена'))
     push(
-      'C8 журнал: «· ≈$0,00045» в шагах, ≈$0,00315 в итоге',
-      doneLogs.length === 3 && doneLogs.every((l: any) => l.message.includes('· ≈$0,00045')) &&
-        !!finalLog?.message.includes('≈$0,00315'),
+      'C8 журнал: «· ≈$0,000697» в шагах, ≈$0,00389 в итоге',
+      doneLogs.length === 3 && doneLogs.every((l: any) => l.message.includes('· ≈$0,000697')) &&
+        !!finalLog?.message.includes('≈$0,00389'),
       [`шаг: ${doneLogs[0]?.message.slice(-60)}`, `итог: ${finalLog?.message}`]
     )
 
     // C9: summary содержит стоимость
-    push('C9 summary: стоимость в итоге запуска', !!snap?.summary?.includes('≈$0,00315'), [snap?.summary?.slice(0, 160)])
+    push('C9 summary: стоимость в итоге запуска', !!snap?.summary?.includes('≈$0,00389'), [snap?.summary?.slice(0, 160)])
 
     // C10: fold по событиям = сводка движка (replay-честность)
     const view = foldEvents(snap.events)
     push(
       'C10 fold = сводка движка: стоимость воспроизводится из потока',
-      near(view.usage?.costUsd, 0.00315, 1e-12) && near(view.nodes.find((n: any) => n.id === 'n1')?.usage?.costUsd, 0.00045),
+      near(view.usage?.costUsd, 0.0038925, 1e-12) && near(view.nodes.find((n: any) => n.id === 'n1')?.usage?.costUsd, 0.0006975),
       [`fold.cost=${view.usage?.costUsd}`]
     )
 
@@ -380,7 +385,7 @@ socket.on('connect', async () => {
     const persistedRun = (Array.isArray(persisted) ? persisted : persisted.runs ?? []).find((r: any) => r.id === id)
     push(
       'C11 runs.json: costUsd сохранён, ключа нет',
-      near(persistedRun?.usage?.costUsd, 0.00315, 1e-12) && !raw.includes(TEST_KEY),
+      near(persistedRun?.usage?.costUsd, 0.0038925, 1e-12) && !raw.includes(TEST_KEY),
       [`cost=${persistedRun?.usage?.costUsd}`, `ключ в runs.json: ${raw.includes(TEST_KEY)}`]
     )
 

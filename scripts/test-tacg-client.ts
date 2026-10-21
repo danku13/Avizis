@@ -8,7 +8,7 @@ let runId = null
 
 socket.on('connect', () => {
   console.log('[test] подключено к движку')
-  socket.emit('run:start', { task: 'Проанализируй данные о продажах за Q3 и найди аномалии', mode: 'demo' })
+  socket.emit('run:start', { task: 'Проанализируй данные о продажах за Q3 и найди аномалии', mode: 'demo', decisionMode: 'auto' })
 })
 
 socket.on('run:created', (d) => {
@@ -89,9 +89,9 @@ setTimeout(() => {
   console.log('\n[test] ─── ИТОГИ ПРОВЕРКИ ───')
   console.log(`всего событий: ${events.length}`)
   console.log(`выполненных узлов: ${nodeEvents.length}`)
-  console.log(`адаптаций графа: ${adapts.length} (ожидалось 2)`)
+  console.log(`адаптаций графа: ${adapts.length} (ожидалось 1 — DEMO_ADAPTATIONS: «Валидация данных» после n1)`)
   console.log(`override-событий: ${overrides.length}, пересчётов: ${reruns.length}`)
-  const ok = adapts.length === 2 && nodeEvents.length >= 7 && reruns.length >= 4
+  const ok = adapts.length === 1 && nodeEvents.length >= 7 && reruns.length >= 4 && overrides.length >= 1
   console.log(ok ? '✅ ТЕСТ ПРОЙДЕН' : '❌ ТЕСТ ПРОВАЛЕН')
   socket.disconnect()
   process.exit(ok ? 0 : 1)

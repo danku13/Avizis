@@ -21,6 +21,7 @@
 | 014 | [CR-014-github-releases-autoupdate.md](./CR-014-github-releases-autoupdate.md) | Автообновление по GitHub Releases + полноценный portable | 17 |
 | 015 | [CR-015-i18n-bilingual.md](./CR-015-i18n-bilingual.md) | Двуязычность RU/EN (UI ⇄ язык прогона) + демо-видео с субтитрами | 18 |
 | 016 | [CR-016-streaming-node-outputs.md](./CR-016-streaming-node-outputs.md) | Стриминг выхода исполнителя: node:stream-снапшоты (эфемерные, ADR-023), оба адаптера, демо-симуляция | 22 |
+| 017 | [CR-017-native-adapters.md](./CR-017-native-adapters.md) | Нативные адаптеры anthropic Messages API + google-gemini generateContent (ADR-024): пресеты, probe, стриминг, актуализация регрессий под контракт CR-016 | 23 |
 
 ## Сводка объёма изменений
 

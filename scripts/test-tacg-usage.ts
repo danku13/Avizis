@@ -165,51 +165,59 @@ socket.on('connect', async () => {
 
     const snap: any = await loadSnapshot(id)
 
-    // B3: сводка по запуску. Ожидаемая арифметика мока (usage 100/20 на вызов):
-    // planner 1 + executor 3 (n1, ba1, nfin) + supervisor 2 (после n1 и ba1) + decider 1 = 7 вызовов
+    // B3: сводка по запуску. Ожидаемая арифметика мока после CR-016 (исполнитель — стрим,
+    // usage его SSE-хвоста 111/42 на вызов; остальные роли — полный вызов 100/20):
+    // planner 1×(100/20) + executor 3×(111/42) + supervisor 2×(100/20) + decider 1×(100/20)
+    // = 7 вызовов, ↑733 / ↓206
     const u = snap?.usage
     push(
       'B3 сводка usage: итоги и разбивка по ролям',
-      u?.calls === 7 && u?.inputTokens === 700 && u?.outputTokens === 140 &&
+      u?.calls === 7 && u?.inputTokens === 733 && u?.outputTokens === 206 &&
         u.byRole?.planner?.calls === 1 && u.byRole?.executor?.calls === 3 &&
         u.byRole?.supervisor?.calls === 2 && u.byRole?.decider?.calls === 1,
       [
         `calls=${u?.calls} (ожид. 7)`,
-        `input=${u?.inputTokens} (ожид. 700)`,
-        `output=${u?.outputTokens} (ожид. 140)`,
+        `input=${u?.inputTokens} (ожид. 733)`,
+        `output=${u?.outputTokens} (ожид. 206)`,
         `roles=${JSON.stringify(u?.byRole)}`,
       ]
     )
 
-    // B4: события llm:usage в потоке (для replay)
+    // B4: события llm:usage в потоке (для replay): исполнитель — 111/42 (стрим-хвост), прочие — 100/20
     const usageEvents = (snap?.events ?? []).filter((e: any) => e.type === 'llm:usage')
+    const sumIn = usageEvents.reduce((acc: number, e: any) => acc + (e.inputTokens || 0), 0)
+    const sumOut = usageEvents.reduce((acc: number, e: any) => acc + (e.outputTokens || 0), 0)
     push(
       'B4 события llm:usage в потоке прогона',
-      usageEvents.length === 7 && usageEvents.every((e: any) => e.inputTokens === 100 && e.outputTokens === 20),
-      [`событий=${usageEvents.length} (ожид. 7)`]
+      usageEvents.length === 7 && sumIn === 733 && sumOut === 206 && usageEvents.every((e: any) => e.inputTokens > 0 && e.outputTokens > 0),
+      [`событий=${usageEvents.length} (ожид. 7), Σin=${sumIn} Σout=${sumOut}`]
     )
 
-    // B5: атрибуция узлам: n1/dec1/ba1/nfin по 100/20; гаснут ветки — без usage
-    const byId = new Map((snap?.nodes ?? []).map((n: any) => [n.id, n]))
-    const expNodes = ['n1', 'dec1', 'ba1', 'nfin']
-    const nodesOk = expNodes.every((nid) => byId.get(nid)?.usage?.input === 100 && byId.get(nid)?.usage?.output === 20)
+    // B5: атрибуция узлам: исполнитель n1/ba1/nfin — 111/42 (стрим), decider dec1 — 100/20;
+    //     гаснут ветки — без usage
+    const byId = new Map<string, any>((snap?.nodes ?? []).map((n: any) => [n.id, n] as [string, any]))
+    const expStream = ['n1', 'ba1', 'nfin']
+    const expFull = ['dec1']
+    const nodesOk =
+      expStream.every((nid) => byId.get(nid)?.usage?.input === 111 && byId.get(nid)?.usage?.output === 42) &&
+      expFull.every((nid) => byId.get(nid)?.usage?.input === 100 && byId.get(nid)?.usage?.output === 20)
     const discardedClean = ['bb1', 'bb2', 'bc1'].every((nid) => !byId.get(nid)?.usage)
     push(
       'B5 атрибуция usage узлам (исполнитель/решатель)',
       nodesOk && discardedClean,
-      expNodes.map((nid) => `${nid}=${JSON.stringify(byId.get(nid)?.usage)}`),
+      [...expStream, ...expFull].map((nid) => `${nid}=${JSON.stringify(byId.get(nid)?.usage)}`),
     )
 
-    // B6: журнал — токены в записях шагов, плана и итога
+    // B6: журнал — токены в записях шагов (исполнитель — стрим 111/42), плана и итога
     const logs: any[] = snap?.logs ?? []
     const doneLogs = logs.filter((l: any) => l.kind === 'node-done')
     const planLog = logs.find((l: any) => l.kind === 'plan' && l.message.includes('Планировщик:'))
     const finalLog = logs.find((l: any) => l.kind === 'run' && l.message.includes('Задача выполнена'))
     push(
       'B6 журнал: «· токены: ↑N / ↓M» в шагах/плане/итоге',
-      doneLogs.length === 3 && doneLogs.every((l: any) => l.message.includes('· токены: ↑100 / ↓20')) &&
+      doneLogs.length === 3 && doneLogs.every((l: any) => l.message.includes('· токены: ↑111 / ↓42')) &&
         !!planLog?.message.includes('· токены: ↑100 / ↓20') &&
-        !!finalLog?.message.includes('токены: ↑700 / ↓140 (7 вызов. LLM)'),
+        !!finalLog?.message.includes('токены: ↑733 / ↓206 (7 вызов. LLM)'),
       [
         `node-done с токенами: ${doneLogs.filter((l: any) => l.message.includes('токены')).length}/3`,
         `план: ${planLog?.message.slice(0, 80)}`,
@@ -220,7 +228,7 @@ socket.on('connect', async () => {
     // B7: summary прогона содержит итог
     push(
       'B7 summary прогона с итогом токенов',
-      !!snap?.summary?.includes('токены: ↑700 / ↓140 (7 вызов. LLM)'),
+      !!snap?.summary?.includes('токены: ↑733 / ↓206 (7 вызов. LLM)'),
       [snap?.summary?.slice(0, 120)]
     )
 
@@ -228,8 +236,8 @@ socket.on('connect', async () => {
     const view = foldEvents(snap.events)
     push(
       'B8 fold по событиям снапшота = сводка движка',
-      view.usage?.calls === 7 && view.usage?.inputTokens === 700 && view.usage?.outputTokens === 140 &&
-        view.nodes.find((n: any) => n.id === 'n1')?.usage?.input === 100,
+      view.usage?.calls === 7 && view.usage?.inputTokens === 733 && view.usage?.outputTokens === 206 &&
+        view.nodes.find((n: any) => n.id === 'n1')?.usage?.input === 111,
       [`fold.calls=${view.usage?.calls}`, `fold.input=${view.usage?.inputTokens}`]
     )
 
@@ -240,7 +248,7 @@ socket.on('connect', async () => {
     const persistedRun = (Array.isArray(persisted) ? persisted : persisted.runs ?? []).find((r: any) => r.id === id)
     push(
       'B9 runs.json: usage сохранён, ключа нет',
-      persistedRun?.usage?.calls === 7 && persistedRun?.usage?.inputTokens === 700 && !raw.includes(TEST_KEY),
+      persistedRun?.usage?.calls === 7 && persistedRun?.usage?.inputTokens === 733 && !raw.includes(TEST_KEY),
       [`usage.calls=${persistedRun?.usage?.calls}`, `ключ в runs.json: ${raw.includes(TEST_KEY)}`]
     )
 

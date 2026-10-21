@@ -267,6 +267,8 @@ export const en: Record<string, string> = {
   'sm.priceOut': 'Output (answer)',
   'sm.fromCatalog': 'from catalog',
   'sm.baseUrlHint': 'Requests go to {baseUrl}/chat/completions on behalf of the agent engine.',
+  'sm.nativeAnthropicNote': 'Anthropic — native Messages API protocol: requests go to {baseUrl}/v1/messages (key — x-api-key header). Executor step streaming is supported (CR-016); output is capped at 8192 tokens (4096 for opus).',
+  'sm.nativeGeminiNote': 'Google Gemini — native generateContent API protocol: requests go to {baseUrl}/v1beta/models/{model}:generateContent (key — x-goog-api-key header). Executor step streaming is supported (CR-016).',
   'sm.modelLabel': 'Model',
   'sm.modelPriceLabel': 'Model price per 1M tokens, $',
   'sm.modelPriceHint': 'Empty — the price comes from OpenRouter / the LiteLLM catalog; manual — takes priority (z-ai, Ollama, custom tariff)',

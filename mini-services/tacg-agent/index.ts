@@ -16,7 +16,18 @@ import {
   saveConfig,
 } from './llm-config'
 import { validateProvider } from './openai-client'
+import { validateAnthropic } from './anthropic-client'
+import { validateGemini } from './gemini-client'
 import { Lang, L } from './i18n'
+
+/** Диспетчеризация probe-валидации по адаптеру (CR-017): zai — без пробы,
+ *  openai-compatible / anthropic / google-gemini — короткий «ping» их API. */
+async function validateAdapter(cfg: LlmConfig['default'] | undefined): Promise<{ ok: boolean; error?: string; latencyMs?: number }> {
+  if (!cfg || cfg.adapter === 'zai') return { ok: true }
+  if (cfg.adapter === 'anthropic') return validateAnthropic(cfg)
+  if (cfg.adapter === 'google-gemini') return validateGemini(cfg)
+  return validateProvider(cfg)
+}
 
 const httpServer = createServer()
 
@@ -130,10 +141,10 @@ io.on('connection', (socket) => {
       }
       // пустой apiKey в поле = «не менять»: сохраняем прежний ключ
       const merged = mergeSavedApiKey(incoming, loadConfig())
-      // валидация пробным запросом (openai-compatible); zai — без пробы
+      // валидация пробным запросом (ключевые адаптеры); zai — без пробы
       let latencyMs: number | undefined
-      if (merged.default?.adapter === 'openai-compatible') {
-        const probe = await validateProvider(merged.default)
+      if (merged.default && merged.default.adapter !== 'zai') {
+        const probe = await validateAdapter(merged.default)
         if (!probe.ok) {
           socket.emit('llm:config:saved', { ok: false, error: probe.error })
           return
@@ -162,7 +173,7 @@ io.on('connection', (socket) => {
       } else {
         cfgToTest = resolveRole(undefined, loadConfig())
       }
-      const result = await validateProvider(cfgToTest)
+      const result = await validateAdapter(cfgToTest)
       socket.emit('llm:config:test:result', result)
     } catch (e: any) {
       socket.emit('llm:config:test:result', { ok: false, error: e?.message || L(clientLang, 'Ошибка проверки', 'Test error') })

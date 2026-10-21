@@ -20,6 +20,8 @@ interface MockRequest {
   systemPreview: string
   userPreview: string
   toolsCount: number
+  /** CR-016: стрим-запрос исполнителя (гейт мок не проверяет для стримов — как и реальный путь ADR-023: откат на полный вызов) */
+  stream: boolean
 }
 
 let requests: MockRequest[] = []
@@ -244,6 +246,7 @@ export function start(): Promise<void> {
             systemPreview: String(systemMsg).slice(0, 120),
             userPreview: String(userMsg).slice(0, 120),
             toolsCount,
+            stream: parsed?.stream === true,
           })
           const mode = process.env.MOCK_MODE || 'normal'
           // Имитация долгого reasoning-ответа (для E2E состояния «планирование»)

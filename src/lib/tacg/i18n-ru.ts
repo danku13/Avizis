@@ -268,6 +268,8 @@ export const ru: Record<string, string> = {
   'sm.priceOut': 'Выход (ответ)',
   'sm.fromCatalog': 'из каталога',
   'sm.baseUrlHint': 'Запросы идут в {baseUrl}/chat/completions от имени движка агента.',
+  'sm.nativeAnthropicNote': 'Anthropic — нативный протокол Messages API: запросы идут в {baseUrl}/v1/messages (ключ — заголовок x-api-key). Стриминг шагов исполнителя поддержан (CR-016); вывод ограничен 8192 токенами (4096 для opus).',
+  'sm.nativeGeminiNote': 'Google Gemini — нативный протокол generateContent API: запросы идут в {baseUrl}/v1beta/models/{model}:generateContent (ключ — заголовок x-goog-api-key). Стриминг шагов исполнителя поддержан (CR-016).',
   'sm.modelLabel': 'Модель',
   'sm.modelPriceLabel': 'Цена модели за 1M токенов, $',
   'sm.modelPriceHint': 'Пусто — цена подтягивается с OpenRouter / из каталога LiteLLM; вручную — приоритет выше (z-ai, Ollama, свой тариф)',

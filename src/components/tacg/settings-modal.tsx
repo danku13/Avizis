@@ -26,7 +26,7 @@ import { useTacgStore } from '@/store/tacg-store'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
-type PresetId = 'zai' | 'openai' | 'deepseek' | 'openrouter' | 'ollama' | 'custom'
+type PresetId = 'zai' | 'openai' | 'deepseek' | 'openrouter' | 'ollama' | 'anthropic' | 'gemini' | 'custom'
 
 interface FormState {
   preset: PresetId
@@ -47,8 +47,19 @@ const PRESETS: { id: PresetId; labelKey: string; baseUrl: string; modelHint: str
   { id: 'deepseek', labelKey: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', modelHint: 'deepseek-chat' },
   { id: 'openrouter', labelKey: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', modelHint: 'deepseek/deepseek-chat' },
   { id: 'ollama', labelKey: 'sm.presetOllama', baseUrl: 'http://localhost:11434/v1', modelHint: 'llama3.1' },
+  { id: 'anthropic', labelKey: 'Anthropic', baseUrl: 'https://api.anthropic.com', modelHint: 'claude-sonnet-4-5-20250929' },
+  { id: 'gemini', labelKey: 'Google Gemini', baseUrl: 'https://generativelanguage.googleapis.com', modelHint: 'gemini-2.5-flash' },
   { id: 'custom', labelKey: 'sm.presetCustom', baseUrl: '', modelHint: 'sm.providerModelHint' },
 ]
+
+/** Адаптер, который уйдёт в конфиг для выбранного пресета (нативные протоколы —
+ *  anthropic Messages API и gemini generateContent, CR-017; остальное — OpenAI-compatible) */
+function adapterOfPreset(preset: PresetId): 'zai' | 'openai-compatible' | 'anthropic' | 'google-gemini' {
+  if (preset === 'zai') return 'zai'
+  if (preset === 'anthropic') return 'anthropic'
+  if (preset === 'gemini') return 'google-gemini'
+  return 'openai-compatible'
+}
 
 const ROLES: { role: LlmRole; labelKey: string; hintKey: string }[] = [
   { role: 'planner', labelKey: 'role.planner', hintKey: 'role.plannerHint' },
@@ -203,7 +214,7 @@ export function SettingsModal() {
   }
 
   const buildPayload = () => {
-    const config: any = { default: { adapter: isZai ? 'zai' : 'openai-compatible' } }
+    const config: any = { default: { adapter: adapterOfPreset(preset) } }
     if (!isZai) {
       config.default.baseUrl = baseUrl.trim()
       config.default.model = model.trim()
@@ -338,6 +349,12 @@ export function SettingsModal() {
             </>
           ) : (
             <>
+              {(preset === 'anthropic' || preset === 'gemini') && (
+                <div className="flex items-start gap-2.5 rounded-lg border border-teal-500/30 bg-teal-500/10 p-3.5 text-xs leading-relaxed text-teal-900 dark:text-teal-100">
+                  <Cpu className="mt-0.5 size-4 shrink-0" />
+                  <span>{t(preset === 'anthropic' ? 'sm.nativeAnthropicNote' : 'sm.nativeGeminiNote')}</span>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="llm-baseurl">Base URL</Label>
                 <Input

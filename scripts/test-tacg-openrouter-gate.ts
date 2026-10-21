@@ -269,10 +269,24 @@ async function partB(savedConfig: any) {
     const terminal = await Promise.race([terminalEv, sleep(120000)])
     const finalReqs = mockStats()
     const withTools = finalReqs.filter((r) => r.toolsCount >= 1).length
+    // CR-016: исполнитель идёт стримом БЕЗ tools (мок стримы не гейтит; реальный
+    // провайдер ответил бы 403 — llm.ts откатывается на полный вызов с гейт-циклом,
+    // ADR-023). Контракт гейта: все НЕстрид-вызовы после первого — с tools (кэш).
+    const nonStream = finalReqs.filter((r) => !r.stream)
+    const nonStreamNoTools = nonStream.filter((r) => r.toolsCount < 1).length
     push(
-      'B4: LLM-прогон через гейт завершается (все вызовы после первого — с tools)',
-      terminal?.status === 'completed' && withTools >= Math.max(1, finalReqs.length - 1) && !!createdRunId,
-      [`статус: ${terminal?.status}`, `запросов к моку: ${finalReqs.length}, с tools: ${withTools}`, `runId: ${createdRunId}`]
+      'B4: LLM-прогон через гейт завершается (нестрид-вызовы после первого — с tools; стрим-попытки исполнителя — без tools, ADR-023)',
+      terminal?.status === 'completed' &&
+        !!createdRunId &&
+        nonStream.length > 0 &&
+        nonStreamNoTools <= 1 &&
+        finalReqs.some((r) => r.stream),
+      [
+        `статус: ${terminal?.status}`,
+        `запросов к моку: ${finalReqs.length}, с tools: ${withTools}, стрим: ${finalReqs.filter((r) => r.stream).length}`,
+        `нестрид без tools: ${nonStreamNoTools} (допуск 1 — первичный прогрев кэша гейта)`,
+        `runId: ${createdRunId}`,
+      ]
     )
 
     // B5: provenance прогона — inkling:free

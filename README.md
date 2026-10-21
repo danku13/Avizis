@@ -57,7 +57,7 @@ A run follows a transparent loop: **plan → execute → inspect → adapt or as
 | Adaptive planning | Supervisor can add steps or decision gates as new information appears |
 | Time-travel replay | Event-sourced timeline, snapshots, graph version switching, run history |
 | Audit artifacts | Markdown export with chronology, branches, interventions, model provenance, and usage |
-| BYOK routing | Default provider plus OpenAI-compatible endpoints such as OpenAI, OpenRouter, Groq, Ollama, LM Studio, or vLLM |
+| BYOK routing | Default provider, OpenAI-compatible endpoints (OpenAI, OpenRouter, Groq, Ollama, LM Studio, vLLM), and native provider APIs — Anthropic Messages and Google Gemini generateContent (keys via x-api-key / x-goog-api-key, streaming supported) |
 
 ## Quick Start
 
@@ -129,7 +129,6 @@ TACG is a concept prototype, not a production agent orchestrator. It currently h
 
 - Shareable runs and multi-user review
 - Production persistence and authentication
-- More native model-provider adapters
 - Multi-run comparison and experiment workflows
 - Integration adapters for existing agent runtimes
 

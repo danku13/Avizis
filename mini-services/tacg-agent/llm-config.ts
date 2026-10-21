@@ -30,7 +30,13 @@ export interface LlmConfig {
 const FILE = path.join(DATA_DIR, 'llm-config.json')
 
 export const LLM_ROLES: LlmRole[] = ['planner', 'executor', 'supervisor', 'decider']
-const ADAPTERS: LlmAdapterId[] = ['zai', 'openai-compatible']
+const ADAPTERS: LlmAdapterId[] = ['zai', 'openai-compatible', 'anthropic', 'google-gemini']
+
+/** Адаптеры с ключом API в настройках (для preserve-логики сохранения ключа,
+ *  env-бутстрапа и probe-валидации; zai — сервисный SDK без пользовательского ключа) */
+export function adapterUsesApiKey(adapter: string | undefined): boolean {
+  return adapter === 'openai-compatible' || adapter === 'anthropic' || adapter === 'google-gemini'
+}
 
 /** Человекочитаемые ошибки провайдера (FR-906) */
 export function describeHttpError(status: number, body: string): string {
@@ -174,7 +180,7 @@ export function mergeSavedApiKey(incoming: LlmConfig, saved: LlmConfig): LlmConf
   if (
     incoming.default &&
     (!incoming.default.apiKey || looksLikeMask(incoming.default.apiKey)) &&
-    incoming.default.adapter === 'openai-compatible' &&
+    adapterUsesApiKey(incoming.default.adapter) &&
     saved.default?.apiKey &&
     sameProvider(incoming.default, saved.default)
   ) {
@@ -191,7 +197,7 @@ export function mergeSavedApiKey(incoming: LlmConfig, saved: LlmConfig): LlmConf
       if (
         (!entry.apiKey || looksLikeMask(entry.apiKey)) &&
         old?.apiKey &&
-        effectiveAdapter === 'openai-compatible' &&
+        adapterUsesApiKey(effectiveAdapter) &&
         sameProvider(inc, old)
       ) {
         entry = { ...entry, apiKey: old.apiKey }
@@ -219,10 +225,11 @@ let cached: LlmConfig | null = null
 function bootstrapFromEnv(): LlmConfig {
   const env = process.env
   const cfg: LlmConfig = {}
-  const wantsOpenai = env.TACG_LLM_ADAPTER === 'openai-compatible'
-  const hasEnv = wantsOpenai || env.TACG_LLM_BASE_URL || env.TACG_LLM_API_KEY || env.TACG_LLM_MODEL
+  const envAdapter = env.TACG_LLM_ADAPTER
+  const wantsKeyed = envAdapter === 'openai-compatible' || envAdapter === 'anthropic' || envAdapter === 'google-gemini'
+  const hasEnv = wantsKeyed || env.TACG_LLM_BASE_URL || env.TACG_LLM_API_KEY || env.TACG_LLM_MODEL
   if (hasEnv) {
-    const d: LlmProviderConfig = { adapter: wantsOpenai ? 'openai-compatible' : 'zai' }
+    const d: LlmProviderConfig = { adapter: wantsKeyed ? (envAdapter as LlmAdapterId) : 'zai' }
     if (env.TACG_LLM_BASE_URL) d.baseUrl = env.TACG_LLM_BASE_URL
     if (env.TACG_LLM_API_KEY) d.apiKey = env.TACG_LLM_API_KEY
     if (env.TACG_LLM_MODEL) d.model = env.TACG_LLM_MODEL

@@ -294,7 +294,8 @@ socket.on('connect', async () => {
       [JSON.stringify(rubEntry)]
     )
 
-    // C4: LLM-прогон (мок: 7 вызовов × 100/20, прайс 2.5/10) → costUsd = 0.00315
+    // C4: LLM-прогон (мок после CR-016: 4 полных вызова 100/20 + 3 стрима исполнителя 111/42,
+    //     прайс 2.5/10) → costUsd = 4×0,00045 + 3×0,0006975 = 0,0038925
     const runIdPromise = new Promise<string>((resolve) => {
       const h = (d: any) => {
         if (d?.runId) {
@@ -326,20 +327,20 @@ socket.on('connect', async () => {
     const u = snap?.usage
     const converted = u?.costUsd != null ? convertUsd(u.costUsd, 97.5) : null
     push(
-      'C4 прогон: costUsd=0,00315 → конвертация ₽0,307 (курс 97,5)',
-      u?.calls === 7 && near(u?.costUsd, 0.00315, 1e-12) && near(converted, 0.307125, 1e-9),
+      'C4 прогон: costUsd=0,0038925 → конвертация ₽0,38 (курс 97,5)',
+      u?.calls === 7 && near(u?.costUsd, 0.0038925, 1e-12) && near(converted, 0.37951875, 1e-9),
       [`calls=${u?.calls}`, `cost=${u?.costUsd}`, `₽=${converted}`]
     )
     push(
-      'C5 формат чипа: $0,00315 · ₽0,307',
-      fmtUsd(u?.costUsd) === '$0,00315' && fmtCurrency(converted, 'RUB') === '₽0,307',
+      'C5 формат чипа: $0,00389 · ₽0,38',
+      fmtUsd(u?.costUsd) === '$0,00389' && fmtCurrency(converted, 'RUB') === '₽0,38',
       [fmtUsd(u?.costUsd), fmtCurrency(converted, 'RUB')]
     )
 
     // C6: runs.json — курс не утёк как секрет и не пишется туда (конфиг — единственное место)
     await sleep(1100)
     const raw = fs.readFileSync(RUNS_FILE, 'utf-8')
-    push('C6 runs.json: ключ не утёк, costUsd сохранён', !raw.includes(TEST_KEY) && raw.includes(String(0.00315)) || near(JSON.parse(raw) && (Array.isArray(JSON.parse(raw)) ? JSON.parse(raw) : JSON.parse(raw).runs).find((r: any) => r.id === id)?.usage?.costUsd, 0.00315, 1e-12), [raw.includes(TEST_KEY) ? 'КЛЮЧ УТЕЧЁЛ' : 'ключа нет'])
+    push('C6 runs.json: ключ не утёк, costUsd сохранён', !raw.includes(TEST_KEY) && raw.includes(String(0.0038925)) || near(JSON.parse(raw) && (Array.isArray(JSON.parse(raw)) ? JSON.parse(raw) : JSON.parse(raw).runs).find((r: any) => r.id === id)?.usage?.costUsd, 0.0038925, 1e-12), [raw.includes(TEST_KEY) ? 'КЛЮЧ УТЕЧЁЛ' : 'ключа нет'])
 
     // C7: refresh по сокету — сеть до ЦБ доступна из песочницы: ok; иначе честная ошибка
     const refreshResult: any = await new Promise((resolve) => {
