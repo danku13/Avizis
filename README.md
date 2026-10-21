@@ -51,7 +51,7 @@ A run follows a transparent loop: **plan → execute → inspect → adapt or as
 
 | Capability | What TACG provides |
 |---|---|
-| Live computation graph | React Flow DAG with node states, animated edges, versions, zoom, and minimap |
+| Live computation graph | React Flow DAG with node states, animated edges, versions, zoom, and minimap; executor steps stream live — node badge and inspector show the text as the model writes it |
 | Human-in-the-loop control | Pause/resume/stop, manual or automatic decisions, mixed branch selection |
 | Node intervention | Inspect inputs and outputs, retry a node, override its result, recompute descendants |
 | Adaptive planning | Supervisor can add steps or decision gates as new information appears |
@@ -129,7 +129,6 @@ TACG is a concept prototype, not a production agent orchestrator. It currently h
 
 - Shareable runs and multi-user review
 - Production persistence and authentication
-- Streaming node outputs
 - More native model-provider adapters
 - Multi-run comparison and experiment workflows
 - Integration adapters for existing agent runtimes

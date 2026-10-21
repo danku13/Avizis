@@ -143,6 +143,23 @@ export async function chatCompletionsRequest(
 }
 
 /**
+ * POST /chat/completions в режиме стриминга (CR-016): один запрос, тело ответа
+ * НЕ читается — отдаётся Response целиком (SSE-поток читает вызывающий).
+ * Гейт agentic-harness здесь НЕ обходится: streaming + tools-повтор — отдельная
+ * сложность, при любом отказе llm.ts откатывается на обычный (нестримовый)
+ * путь с полным гейт-циклом. errorText — только для не-ok ответов.
+ */
+export async function chatCompletionsStreamRequest(
+  cfg: LlmProviderConfig,
+  body: Record<string, unknown>,
+  timeoutMs: number
+): Promise<{ res: any; errorText: string }> {
+  const baseUrl = cleanBaseUrl(cfg)
+  if (!baseUrl) throw new Error('baseUrl провайдера не задан (настройки LLM)')
+  return postOnce(cfg, { ...body, stream: true }, false, timeoutMs)
+}
+
+/**
  * Текст ответа из chat.completion: message.content, а при его отсутствии —
  * аргументы tool_calls (модель, вызвавшая submit_final_answer, вместо текста).
  * Несколько вызовов склеиваются; null — ответа нет вовсе.

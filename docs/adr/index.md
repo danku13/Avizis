@@ -27,6 +27,7 @@
 | 020 | [ADR-020-openrouter-agentic-gate.md](./ADR-020-openrouter-agentic-gate.md) | Обход гейта OpenRouter «agentic harnesses»: retry с tools, кэш per модель, NonRetryable 4xx | CR-013 |
 | 021 | [ADR-021-github-releases-autoupdate.md](./ADR-021-github-releases-autoupdate.md) | Автообновление по GitHub Releases: свой апдейтер (zip → подмена exes → перезапуск), один путь для NSIS и portable | CR-014 |
 | 022 | [ADR-022-bilingual-i18n.md](./ADR-022-bilingual-i18n.md) | Двуязычность RU/EN: язык UI (переключатель) ≠ язык прогона (из задачи), EN-зеркала демо, soft-subs видео | CR-015 |
+| 023 | [ADR-023-streaming-ephemeral-events.md](./ADR-023-streaming-ephemeral-events.md) | Стриминг выхода как эфемерные снапшоты node:stream: только socket-канал, мимо журнала/replay; троттлинг + flush | CR-016 |
 | — | [tech-stack.md](./tech-stack.md) | Сводка технологического стека | — |
 
 ## Правила ведения

@@ -3,7 +3,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, PenLine, RotateCcw, Copy, MousePointerClick, Sparkles, Clock3, Cpu, Coins, GitBranch, GitFork, Hash, CheckCircle2, Bot, User } from 'lucide-react'
+import { AlertTriangle, PenLine, RotateCcw, Copy, MousePointerClick, Sparkles, Clock3, Cpu, Coins, GitBranch, GitFork, Hash, CheckCircle2, Bot, User, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
@@ -25,30 +25,36 @@ const OPTION_STYLES: Record<string, string> = {
 
 /** Поиск состояния узла в потоке событий (учитывает курсор воспроизведения) */
 function findNode(events: RunEvent[], selectedNodeId: string, cursor: number | null): GraphNode | null {
-  if (cursor !== null) {
-    let found: GraphNode | null = null
-    for (let i = 0; i <= cursor && i < events.length; i++) {
-      const ev = events[i]
-      if (ev.type === 'node:update' && ev.node.id === selectedNodeId) found = ev.node
-      if (ev.type === 'graph:adapt') {
-        const n = ev.nodes.find((x) => x.id === selectedNodeId)
-        if (n) found = n
-      }
-      if (ev.type === 'graph:init') {
-        const n = ev.nodes.find((x) => x.id === selectedNodeId)
-        found = n ?? null
-      }
-    }
-    return found
-  }
-  for (let i = events.length - 1; i >= 0; i--) {
+  // Живой вид + инспектор (CR-016): node:stream — эфемерный снапшот выхода
+  // исполнителя; применяется к running-узлу ПОСЛЕ последнего node:update и
+  // затирается следующим node:update (в персистентной истории стримов нет —
+  // replay с курсором их не встретит, семантика неизменна)
+  const upto = cursor === null ? events.length - 1 : Math.min(cursor, events.length - 1)
+  let found: GraphNode | null = null
+  let streamingText: string | undefined
+  for (let i = 0; i <= upto; i++) {
     const ev = events[i]
-    if (ev.type === 'node:update' && ev.node.id === selectedNodeId) return ev.node
-    if ((ev.type === 'graph:adapt' || ev.type === 'graph:init') && ev.nodes.some((x) => x.id === selectedNodeId)) {
-      return ev.nodes.find((x) => x.id === selectedNodeId) ?? null
+    if (ev.type === 'node:update' && ev.node.id === selectedNodeId) {
+      found = ev.node
+      streamingText = undefined
+    } else if (ev.type === 'node:stream' && ev.nodeId === selectedNodeId) {
+      streamingText = ev.text
+    } else if (ev.type === 'graph:adapt') {
+      const n = ev.nodes.find((x) => x.id === selectedNodeId)
+      if (n) {
+        found = n
+        streamingText = undefined
+      }
+    } else if (ev.type === 'graph:init') {
+      const n = ev.nodes.find((x) => x.id === selectedNodeId)
+      found = n ?? null
+      streamingText = undefined
     }
   }
-  return null
+  if (found && streamingText !== undefined && found.status === 'running') {
+    return { ...found, streamingText }
+  }
+  return found
 }
 
 export function NodeInspectorModal() {
@@ -397,6 +403,17 @@ export function NodeInspectorModal() {
                   {node.status === 'error' ? (
                     <div className="rounded-md border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-700 dark:text-red-200">
                       {t('inspector.nodeFailed')}
+                    </div>
+                  ) : node.status === 'running' && node.streamingText ? (
+                    <div>
+                      <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-cyan-600 dark:text-cyan-300">
+                        <Loader2 className="size-3 animate-spin" />
+                        {t('inspector.streaming', { n: node.streamingText.length })}
+                      </div>
+                      <pre className="whitespace-pre-wrap break-words rounded-md border bg-zinc-100 p-3 font-mono text-xs leading-relaxed text-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-300">
+                        {node.streamingText}
+                        <span className="animate-pulse text-cyan-600 dark:text-cyan-300">▌</span>
+                      </pre>
                     </div>
                   ) : node.status === 'running' ? (
                     <div className="animate-pulse rounded-md border bg-zinc-100 p-3 font-mono text-xs text-zinc-500 dark:bg-zinc-900/70 dark:text-zinc-500">

@@ -203,7 +203,9 @@ function TacgNodeCard({ data: n, selected }: NodeProps<TacgFlowNode>) {
           ) : n.status === 'running' ? (
             <span className="flex items-center gap-1 text-cyan-600 dark:text-cyan-300">
               <Loader2 className="size-3 animate-spin" />
-              {t('graph.executing')}
+              {n.streamingText
+                ? t('graph.streamingChars', { n: n.streamingText.length })
+                : t('graph.executing')}
             </span>
           ) : n.status === 'discarded' ? (
             <span className="flex items-center gap-1">

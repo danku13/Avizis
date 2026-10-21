@@ -254,6 +254,10 @@ export interface GraphNode {
   dependsOn: string[]
   input?: string
   output?: string
+  /** Живой стрим выхода исполнителя (CR-016): накопленный снапшот, пока узел running.
+   *  Эфемерное поле: приходит только с node:stream (не пишется в историю запуска),
+   *  затирается следующим node:update (running/done/error) — в replay всегда пустое. */
+  streamingText?: string
   error?: string
   /** Причина динамического добавления */
   reason?: string
@@ -316,6 +320,9 @@ export type RunEvent =
       reasoning?: string
     }
   | { type: 'decision:mode'; ts: number; mode: DecisionMode }
+  /** Эфемерный снапшот стрима выхода исполнителя (CR-016 / ADR-023): только live-канал,
+ *  в персистентную историю запуска не пишется — в replay таких событий нет */
+  | { type: 'node:stream'; ts: number; nodeId: string; text: string }
   /** Агент переоценил «понимание задачи» (насколько узкий вектор решения) */
   | { type: 'run:certainty'; ts: number; certainty: number; note?: string }
   /** Аудит токенов и стоимости (ADR-015/016): один успешный LLM-вызов; nodeId — атрибуция узлу.

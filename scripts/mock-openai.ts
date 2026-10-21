@@ -255,6 +255,31 @@ export function start(): Promise<void> {
               res.end(JSON.stringify({ error: { message: 'Rate limit exceeded', code: 429 } }))
               return
             }
+            // Стриминг (CR-016): SSE-дельты полного ответа + финальный usage-чанк,
+            // если запрошен stream_options.include_usage; 30 мс на дельту — тест
+            // успевает увидеть несколько снапшотов и монотонный рост текста
+            if (parsed?.stream === true) {
+              const full = String(pickResponse(String(systemMsg)))
+              const wantUsage = !!parsed?.stream_options?.include_usage
+              res.writeHead(200, { 'Content-Type': 'text/event-stream' })
+              let i = 0
+              const step = 7
+              const timer = setInterval(() => {
+                if (i < full.length) {
+                  const delta = full.slice(i, i + step)
+                  i += step
+                  res.write(`data: ${JSON.stringify({ id: 'mock', choices: [{ index: 0, delta: { content: delta } }] })}\n\n`)
+                } else {
+                  const tail = wantUsage
+                    ? `data: ${JSON.stringify({ id: 'mock', choices: [], usage: { prompt_tokens: 111, completion_tokens: 42 } })}\n\n`
+                    : ''
+                  res.write(`${tail}data: [DONE]\n\n`)
+                  res.end()
+                  clearInterval(timer)
+                }
+              }, 30)
+              return
+            }
             // Гейт OpenRouter: без tools — отказ, с tools — ответ через tool_calls
             if ((mode === 'agentic-gate' || mode === 'agentic-inline') && toolsCount === 0) {
               if (mode === 'agentic-inline') {

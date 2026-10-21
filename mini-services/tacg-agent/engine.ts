@@ -18,7 +18,7 @@ import {
   detectDemoScenario,
   sleep,
 } from './demo'
-import { chatJsonDetailed, chatTextDetailed, getZai, LlmRole, LlmUsage } from './llm'
+import { chatJsonDetailed, chatTextDetailed, chatTextDetailedStream, getZai, LlmRole, LlmUsage } from './llm'
 import { loadConfig, providerInfoOf, resolveRole } from './llm-config'
 import { pricing } from './pricing'
 import { sanitizePlanData } from './plan-sanitizer'
@@ -123,6 +123,25 @@ export class AgentEngine {
 
   private emit(channel: string, payload: any) {
     this.io.emit(channel, payload)
+  }
+
+  /** Троттлинг эфемерного стрима: nodeId → время последнего эмита + последний снапшот */
+  private streamLast = new Map<string, { at: number; text: string }>()
+
+  /** Эфемерная трансляция стрима выхода исполнителя (CR-016 / ADR-023):
+ *  ТОЛЬКО socket-канал 'run:event', мимо emitEvent — событие не пишется
+ *  в events[] запуска и в runs.json (аудит-трейл и replay не меняются).
+ *  Троттлинг ~350 мс на узел; flush=true — обязательный финальный снапшот
+ *  (последние дельты не теряются даже если поток закончился до окна). */
+  private emitStream(rt: Runtime, nodeId: string, text: string, flush = false) {
+    if (!text) return
+    const prev = this.streamLast.get(nodeId)
+    if (!flush && prev && Date.now() - prev.at < 350) {
+      prev.text = text
+      return
+    }
+    this.streamLast.set(nodeId, { at: Date.now(), text })
+    this.emit('run:event', { runId: rt.snapshot.id, event: { type: 'node:stream', ts: now(), nodeId, text } })
   }
 
   /** Каждое событие: в журнал запуска (для replay) + broadcast всем клиентам */
@@ -503,12 +522,24 @@ export class AgentEngine {
     const text = isRerun ? `${L(rt.lang, '↻ Пересчёт после вмешательства пользователя.', '↻ Recomputed after user intervention.')}\n\n${base}` : base
     const duration = isRerun ? 1200 : 2300
     const deadline = now() + duration
+    // Стрим-симуляция демо (CR-016): снапшоты выхода растут пропорционально времени
+    // шага — эффект «модель пишет» виден на демо-прогонах без реального LLM
+    const pieces = Math.max(2, Math.ceil(text.length / 25))
+    let emitted = 0
+    const startAt = now()
     while (now() < deadline) {
       if (rt.stopped) throw new StoppedError()
       while (rt.paused && !rt.stopped) await sleep(150)
       if (rt.stopped) throw new StoppedError()
       await sleep(120)
+      const target = Math.min(pieces, Math.ceil(((now() - startAt) / duration) * pieces))
+      while (emitted < target) {
+        emitted++
+        this.emitStream(rt, node.id, text.slice(0, Math.ceil((text.length * emitted) / pieces)))
+      }
     }
+    this.emitStream(rt, node.id, text, true)
+    this.streamLast.delete(node.id)
     return text
   }
 
@@ -532,7 +563,16 @@ ${trunc(node.input || `Задача: ${run.task}`, 12000)}
 Выполни текущий шаг и верни его результат.`
     // provenance узла: адаптер/модель исполнителя (без ключей)
     node.llm = providerInfoOf(resolveRole('executor', loadConfig()))
-    const res = await chatTextDetailed(rt.lang === 'en' ? EXECUTOR_SYS_EN : EXECUTOR_SYS, user, 90_000, 1, 'executor')
+    const res = await chatTextDetailedStream(
+      rt.lang === 'en' ? EXECUTOR_SYS_EN : EXECUTOR_SYS,
+      user,
+      90_000,
+      'executor',
+      (text) => this.emitStream(rt, node.id, text)
+    )
+    // финальный снапшот гарантированно доходит до UI до node:update(done)
+    this.emitStream(rt, node.id, res.content, true)
+    this.streamLast.delete(node.id)
     return { output: res.content, usage: res.usage }
   }
 

@@ -20,6 +20,7 @@
 | 013 | [CR-013-openrouter-gate-launch-feedback.md](./CR-013-openrouter-gate-launch-feedback.md) | Гейт OpenRouter agentic + мгновенная обратная связь запуска | 16 |
 | 014 | [CR-014-github-releases-autoupdate.md](./CR-014-github-releases-autoupdate.md) | Автообновление по GitHub Releases + полноценный portable | 17 |
 | 015 | [CR-015-i18n-bilingual.md](./CR-015-i18n-bilingual.md) | Двуязычность RU/EN (UI ⇄ язык прогона) + демо-видео с субтитрами | 18 |
+| 016 | [CR-016-streaming-node-outputs.md](./CR-016-streaming-node-outputs.md) | Стриминг выхода исполнителя: node:stream-снапшоты (эфемерные, ADR-023), оба адаптера, демо-симуляция | 22 |
 
 ## Сводка объёма изменений
 

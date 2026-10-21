@@ -28,6 +28,13 @@ export function foldEvents(events: RunEvent[], base?: { llm?: Record<string, Llm
       case 'node:update':
         nodes.set(ev.node.id, { ...ev.node })
         break
+      case 'node:stream': {
+        // Эфемерный стрим-снапшот (CR-016): живёт до следующего node:update;
+        // в персистентной истории таких событий нет, replay его не встретит
+        const n = nodes.get(ev.nodeId)
+        if (n) nodes.set(ev.nodeId, { ...n, streamingText: ev.text })
+        break
+      }
       case 'run:status':
         status = ev.status
         progress = ev.progress

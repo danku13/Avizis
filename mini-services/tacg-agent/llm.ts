@@ -3,8 +3,8 @@
 // extractJson/repairJson/таймауты/ретраи — НАД адаптерами (провайдер-агностичны).
 import ZAI, { ChatMessage } from 'z-ai-web-dev-sdk'
 import type { LlmProviderConfig } from './llm-config'
-import { loadConfig, resolveRole } from './llm-config'
-import { chatCompletionsRequest, extractMessageContent, NonRetryableProviderError } from './openai-client'
+import { loadConfig, resolveRole, describeHttpError } from './llm-config'
+import { chatCompletionsRequest, chatCompletionsStreamRequest, extractMessageContent, NonRetryableProviderError } from './openai-client'
 
 /** Роль движка: какая точка делает вызов */
 export type LlmRole = 'planner' | 'executor' | 'supervisor' | 'decider'
@@ -123,6 +123,56 @@ const withTimeout = <T,>(promise: Promise<T>, ms: number, label: string): Promis
     new Promise<T>((_, reject) => setTimeout(() => reject(new Error(label)), ms)),
   ])
 
+// ───────────── Стриминг ответов (CR-016 / ADR-023) ─────────────
+
+/** Приёмник стрим-снапшотов: textSoFar — ВЕСЬ накопленный текст на момент вызова
+ *  (снапшот, а не дельта: клиенту не нужно копить состояние, replay-безопасно) */
+export type StreamSink = (textSoFar: string) => void
+
+/** Разбор SSE-потока chat-дельт (OpenAI-совместимый формат, включая zai/GLM):
+ *  копит content-дельты, после каждой вызывает onSnapshot с накопленным текстом,
+ *  возвращает полный текст + usage последнего чанка (если провайдер прислал). */
+async function consumeSseStream(
+  body: any,
+  onSnapshot: StreamSink
+): Promise<{ content: string; usage?: LlmUsage }> {
+  const reader = (body as ReadableStream).getReader()
+  const decoder = new TextDecoder()
+  let buf = ''
+  let content = ''
+  let usage: LlmUsage | undefined
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buf += decoder.decode(value, { stream: true })
+    let nl: number
+    while ((nl = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, nl).trim()
+      buf = buf.slice(nl + 1)
+      if (!line.startsWith('data:')) continue
+      const payload = line.slice(5).trim()
+      if (!payload || payload === '[DONE]') continue
+      let obj: any
+      try {
+        obj = JSON.parse(payload)
+      } catch {
+        continue
+      }
+      // 200-inline-error (mid-stream ошибки OpenRouter): текст от модели не пришёл,
+      // добьёмся пустым content → вызывающий откатится на полный вызов
+      if (obj?.error) continue
+      const delta = obj?.choices?.[0]?.delta?.content
+      if (typeof delta === 'string' && delta) {
+        content += delta
+        onSnapshot(content)
+      }
+      const u = extractUsage(obj)
+      if (u) usage = u
+    }
+  }
+  return { content, usage }
+}
+
 // ─────────────────────── Адаптеры провайдеров ───────────────────────
 
 /** Адаптер zai: прежнее поведение — singleton SDK, role 'assistant' = системный промпт */
@@ -143,6 +193,31 @@ async function zaiChat(system: string, user: string, timeoutMs: number): Promise
     return { content: content.trim(), adapter: 'zai', model: 'z-ai-sdk', usage: extractUsage(res) }
   }
   throw new Error('Пустой ответ модели')
+}
+
+/** Адаптер zai в режиме стриминга (CR-016): stream:true → ReadableStream SSE
+ *  (SDK отдаёт тело ответа при content-type text/event-stream|text/plain) */
+async function zaiChatStream(system: string, user: string, timeoutMs: number, sink: StreamSink): Promise<LlmChatResult> {
+  const zai = await getZai()
+  const messages: ChatMessage[] = [
+    { role: 'assistant', content: system },
+    { role: 'user', content: user },
+  ]
+  const res: any = await withTimeout(
+    zai.chat.completions.create({ messages, stream: true, thinking: { type: 'disabled' } }),
+    timeoutMs,
+    `Таймаут LLM-запроса (${Math.round(timeoutMs / 1000)} с)`
+  )
+  if (!res || typeof res.getReader !== 'function') {
+    throw new Error('Адаптер zai не вернул поток (стрим не поддержан)')
+  }
+  const { content, usage } = await withTimeout(
+    consumeSseStream(res, sink),
+    timeoutMs,
+    `Таймаут чтения стрима (${Math.round(timeoutMs / 1000)} с)`
+  )
+  if (!content.trim()) throw new Error('Пустой ответ модели')
+  return { content: content.trim(), adapter: 'zai', model: 'z-ai-sdk', usage }
 }
 
 /** Адаптер openai-compatible: POST {baseUrl}/chat/completions через общий клиент
@@ -171,6 +246,38 @@ async function openaiCompatibleChat(cfg: LlmProviderConfig, system: string, user
     model,
     usage: extractUsage(data),
   }
+}
+
+/** Адаптер openai-compatible в режиме стриминга (CR-016): stream:true + stream_options
+ *  (usage в финальном чанке у провайдеров, которые его поддерживают). Гейт agentic-harness
+ *  здесь не обходится: при 4xx/гейте/обрыве llm.ts откатывается на полный нестридовый путь. */
+async function openaiCompatibleChatStream(cfg: LlmProviderConfig, system: string, user: string, timeoutMs: number, sink: StreamSink): Promise<LlmChatResult> {
+  const model = (cfg.model || '').trim()
+  if (!model) throw new Error('Модель провайдера не задана (настройки LLM)')
+  const body: Record<string, unknown> = {
+    model,
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: user },
+    ],
+    stream_options: { include_usage: true },
+  }
+  if (typeof cfg.temperature === 'number' && Number.isFinite(cfg.temperature)) {
+    body.temperature = cfg.temperature
+  }
+  const { res, errorText } = await chatCompletionsStreamRequest(cfg, body, timeoutMs)
+  if (!res.ok) throw new NonRetryableProviderError(describeHttpError(res.status, errorText))
+  const contentType = String(res.headers?.get?.('content-type') || '')
+  if (!(contentType.includes('event-stream') || contentType.includes('text/plain'))) {
+    throw new Error('Провайдер не вернул SSE-поток для стримингового запроса')
+  }
+  const { content, usage } = await withTimeout(
+    consumeSseStream(res.body, sink),
+    timeoutMs,
+    `Таймаут чтения стрима (${Math.round(timeoutMs / 1000)} с)`
+  )
+  if (!content.trim()) throw new Error('Пустой ответ модели')
+  return { content: content.trim(), adapter: 'openai-compatible', model, usage }
 }
 
 /** Роутер: резолв конфигурации по роли → диспетчеризация в адаптер */
@@ -214,6 +321,35 @@ export async function chatTextDetailed(
 /** Один LLM-вызов (текстовый ответ); role резолвит провайдера, отсутствие — дефолт zai */
 export async function chatText(system: string, user: string, timeoutMs = 90_000, retries = 1, role?: LlmRole): Promise<string> {
   return (await chatTextDetailed(system, user, timeoutMs, retries, role)).content
+}
+
+/** Один LLM-вызов с живым стримом текста (CR-016): sink получает снапшоты накопленного
+ *  текста после каждой дельты. Любой сбой стриминга (не поддержан провайдером, гейт
+ *  agentic-harness, обрыв, пустой поток) — тихий откат на обычный полный вызов с
+ *  гейт-циклом: результат идентичен нестридовому пути, UI получает финальный текст
+ *  одним снапшотом. Стрим — транспортное UX-улучшение, не семантика запуска. */
+export async function chatTextDetailedStream(
+  system: string,
+  user: string,
+  timeoutMs = 90_000,
+  role?: LlmRole,
+  sink?: StreamSink
+): Promise<LlmTextResult> {
+  if (sink) {
+    try {
+      const cfg = resolveRole(role, loadConfig())
+      const res = cfg.adapter === 'openai-compatible'
+        ? await openaiCompatibleChatStream(cfg, system, user, timeoutMs, sink)
+        : await zaiChatStream(system, user, timeoutMs, sink)
+      sink(res.content)
+      return { content: res.content, usage: res.usage, model: res.model, adapter: res.adapter }
+    } catch (e: any) {
+      console.error('[tacg-llm] стрим не удался, откат на полный вызов:', e?.message ?? e)
+    }
+  }
+  const res = await chatTextDetailed(system, user, timeoutMs, 1, role)
+  if (sink) sink(res.content)
+  return res
 }
 
 /** Результат JSON-вызова: распарсенный объект + накопленный usage всех попыток */

@@ -153,6 +153,10 @@ export type RunEvent =
       reasoning?: string
     }
   | { type: 'decision:mode'; ts: number; mode: DecisionMode }
+  /** Эфемерный снапшот стрима выхода исполнителя (CR-016 / ADR-023): text — весь накопленный
+   *  текст на момент эмита. Живёт только в socket-канале ('run:event'), в events[] запуска
+   *  и в runs.json НЕ пишется — аудит-трейл и семантика replay не меняются. */
+  | { type: 'node:stream'; ts: number; nodeId: string; text: string }
   /** Агент переоценил «понимание задачи» (насколько узкий вектор решения) */
   | { type: 'run:certainty'; ts: number; certainty: number; note?: string }
   /** Аудит токенов и стоимости (ADR-015/016): один успешный LLM-вызов; nodeId — атрибуция узлу.
