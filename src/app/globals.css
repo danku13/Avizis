@@ -121,7 +121,7 @@
   }
 }
 
-/* ─── TACG Playground ─── */
+/* ─── Avizis Playground ─── */
 
 @keyframes node-pulse {
   0%, 100% { opacity: 0.3; }
@@ -175,7 +175,7 @@
 .react-flow__node {
   cursor: pointer;
 }
-.react-flow__node.tacg {
+.react-flow__node.avizis {
   font-family: inherit;
 }
 .react-flow__handle {

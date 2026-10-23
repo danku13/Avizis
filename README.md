@@ -1,17 +1,17 @@
-# TACG — Transparent Agent Computation Graph
+# Avizis — Transparent Agent Computation Graph
 <a href="https://youtube.com"><kbd>📺 YouTube Demo Video</kbd></a>
 
 **Interactive debugger and execution playground for AI agents.** Visualize an LLM agent's plan as a live DAG, inspect every step, pause execution, steer decision branches, override node outputs, replay runs, and export an auditable Markdown trail.
 
 > **Status:** working concept prototype for AI-agent transparency, human-in-the-loop control, and reproducible execution. Not production-ready yet.
 
-![TACG is live AI agent computation graph](./download/tacg-gifs/tacg-gif-01-launch-planning.gif)
+![Avizis is live AI agent computation graph](./download/avizis-gifs/avizis-gif-01-launch-planning.gif)
 
 
 
-## Why TACG
+## Why Avizis
 
-Most AI-agent observability tools help you inspect traces after a run. TACG explores a complementary workflow: **understand and influence an agent while it is running**.
+Most AI-agent observability tools help you inspect traces after a run. Avizis explores a complementary workflow: **understand and influence an agent while it is running**.
 
 - **See the plan** — the agent turns a task into a directed acyclic graph (DAG).
 - **Watch execution** — nodes and edges update as steps run and the plan adapts.
@@ -49,7 +49,7 @@ A run follows a transparent loop: **plan → execute → inspect → adapt or as
 
 ## Core Capabilities
 
-| Capability | What TACG provides |
+| Capability | What Avizis provides |
 |---|---|
 | Live computation graph | React Flow DAG with node states, animated edges, versions, zoom, and minimap; executor steps stream live — node badge and inspector show the text as the model writes it |
 | Human-in-the-loop control | Pause/resume/stop, manual or automatic decisions, mixed branch selection |
@@ -70,8 +70,8 @@ A run follows a transparent loop: **plan → execute → inspect → adapt or as
 ### Run locally
 
 ```bash
-git clone [https://github.com/danku13/TACG.git](https://github.com/danku13/TACG.git)
-cd TACG
+git clone [https://github.com/danku13/Avizis.git](https://github.com/danku13/Avizis.git)
+cd Avizis
 bun install
 bun run dev
 ```
@@ -79,13 +79,13 @@ bun run dev
 In a second terminal:
 
 ```bash
-cd mini-services/tacg-agent
+cd mini-services/avizis-agent
 bun --hot index.ts
 ```
 
 Open `http://localhost:3000`. The web UI runs on port `3000`; the agent engine uses Socket.IO on port `3003`.
 
-> Start with **Demo mode** to explore TACG without an LLM key.
+> Start with **Demo mode** to explore Avizis without an LLM key.
 
 ## Architecture
 
@@ -104,10 +104,10 @@ Main locations:
 
 | Area | Path |
 |---|---|
-| UI and graph components | `src/components/tacg/` |
-| Client logic and types | `src/lib/tacg/` |
-| Runtime state | `src/store/tacg-store.ts` |
-| Agent engine | `mini-services/tacg-agent/` |
+| UI and graph components | `src/components/avizis/` |
+| Client logic and types | `src/lib/avizis/` |
+| Runtime state | `src/store/avizis-store.ts` |
+| Agent engine | `mini-services/avizis-agent/` |
 | Product and architecture docs | `docs/` |
 | E2E scenarios and screenshots | `scripts/` |
 
@@ -123,7 +123,7 @@ Main locations:
 
 ## Current Limitations
 
-TACG is a concept prototype, not a production agent orchestrator. It currently has no production authentication or multi-user collaboration, stores run history in local JSON, and does not yet provide a hardened persistent database or enterprise deployment model.
+Avizis is a concept prototype, not a production agent orchestrator. It currently has no production authentication or multi-user collaboration, stores run history in local JSON, and does not yet provide a hardened persistent database or enterprise deployment model.
 
 ## Roadmap
 

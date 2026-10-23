@@ -1,4 +1,4 @@
-// TACG — мок Anthropic Messages API для тестов нативного адаптера (127.0.0.1:3098).
+// Avizis — мок Anthropic Messages API для тестов нативного адаптера (127.0.0.1:3098).
 // POST /v1/messages: system — отдельное поле body, пользователь — messages[0].content;
 // ключ — заголовок x-api-key (≠ EXPECTED_KEY → 401 authentication_error, формат Anthropic).
 // Нестрид: JSON {content:[{type:'text',text}], usage:{input_tokens,output_tokens}}.

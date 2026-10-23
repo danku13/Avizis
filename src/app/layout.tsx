@@ -14,10 +14,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TACG Playground — live agent computation graph",
+  title: "Avizis Playground — live agent computation graph",
   description:
     "Transparent Agent Computation Graph: watch an LLM agent work as a live graph, intervene (pause / override / choose decision branches) and replay any run frame by frame. Engine — z-ai-web-dev-sdk.",
-  keywords: ["TACG", "transparent AI", "explainable agents", "agent graph", "z-ai-web-dev-sdk"],
+  keywords: ["Avizis", "transparent AI", "explainable agents", "agent graph", "z-ai-web-dev-sdk"],
   icons: {
     icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
   },
@@ -32,10 +32,10 @@ export default function RootLayout({
     <html lang="ru" suppressHydrationWarning>
       <head>
         {/* Тема (CR-009): класс .dark выставляется ДО гидрации — без всплеска.
-            localStorage 'tacg-theme': 'dark' (дефолт при отсутствии) | 'light'. */}
+            localStorage 'avizis-theme': 'dark' (дефолт при отсутствии) | 'light'. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('tacg-theme');var d=t?t==='dark':true;var c=document.documentElement.classList;d?c.add('dark'):c.remove('dark')}catch(e){}})()`,
+            __html: `(function(){try{var t=localStorage.getItem('avizis-theme');var d=t?t==='dark':true;var c=document.documentElement.classList;d?c.add('dark'):c.remove('dark')}catch(e){}})()`,
           }}
         />
       </head>

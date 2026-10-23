@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Базовые разрешения главного окна TACG (JS не вызывает Tauri API — только core-дефолты)",
+  "description": "Базовые разрешения главного окна Avizis (JS не вызывает Tauri API — только core-дефолты)",
   "windows": ["main"],
   "permissions": ["core:default"]
 }

@@ -1,12 +1,12 @@
 #!/bin/bash
-# TACG Task 20 — извлечение кадров из HD GIF для VLM-проверки (2 кадра: ~30% и ~65%)
+# Avizis Task 20 — извлечение кадров из HD GIF для VLM-проверки (2 кадра: ~30% и ~65%)
 exec > /home/z/my-project/scripts/extract-frames.log 2>&1
 mkdir -p /tmp/frames-hd
 cd /home/z/my-project/download
-for f in tacg-gifs/tacg-gif-01*.gif tacg-gifs/tacg-gif-02*.gif tacg-gifs/tacg-gif-03*.gif \
-         tacg-gifs/tacg-gif-04*.gif tacg-gifs/tacg-gif-05*.gif tacg-gifs/tacg-gif-06*.gif \
-         tacg-gifs/tacg-gif-07*.gif tacg-gifs/tacg-gif-08*.gif tacg-gifs/tacg-gif-09*.gif \
-         tacg-demo-preview.gif; do
+for f in avizis-gifs/avizis-gif-01*.gif avizis-gifs/avizis-gif-02*.gif avizis-gifs/avizis-gif-03*.gif \
+         avizis-gifs/avizis-gif-04*.gif avizis-gifs/avizis-gif-05*.gif avizis-gifs/avizis-gif-06*.gif \
+         avizis-gifs/avizis-gif-07*.gif avizis-gifs/avizis-gif-08*.gif avizis-gifs/avizis-gif-09*.gif \
+         avizis-demo-preview.gif; do
   name=$(basename "$f" .gif)
   dur=$(timeout 10 ffprobe -v error -show_entries format=duration -of csv=p=0 "$f")
   t1=$(awk -v d="$dur" 'BEGIN{printf "%.2f", d*0.30}')

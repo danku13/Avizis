@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# TACG — сборка мини-сервиса движка агента в однофайловые исполняемые файлы
+# Avizis — сборка мини-сервиса движка агента в однофайловые исполняемые файлы
 # (ADR-017). Bun кросс-компилирует с любой платформы: никакого тулчейна целевой
-# ОС не нужно. Артефакты: mini-services/tacg-agent/dist/tacg-agent-<target>.
+# ОС не нужно. Артефакты: mini-services/avizis-agent/dist/avizis-agent-<target>.
 #
 #   bash scripts/build-executables.sh              # все таргеты
 #   bash scripts/build-executables.sh windows-x64  # один таргет
@@ -12,15 +12,15 @@
 # llm-config.json) — переносится копированием одного файла + при желанием data/.
 set -euo pipefail
 
-cd "$(dirname "$0")/../mini-services/tacg-agent"
+cd "$(dirname "$0")/../mini-services/avizis-agent"
 mkdir -p dist
 
 TARGETS=("${@:-windows-x64 darwin-x64 darwin-arm64 linux-x64}")
 
 for t in "${TARGETS[@]}"; do
   case "$t" in
-    windows-*) out="dist/tacg-agent-${t}.exe" ;;
-    *) out="dist/tacg-agent-${t}" ;;
+    windows-*) out="dist/avizis-agent-${t}.exe" ;;
+    *) out="dist/avizis-agent-${t}" ;;
   esac
   echo "── собираю bun-${t} → ${out}"
   bun build index.ts --compile --target="bun-${t}" --outfile "$out"

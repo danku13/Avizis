@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""TACG — опрос статуса CI/релиза через GitHub API с PAT из remote.origin.url.
+"""Avizis — опрос статуса CI/релиза через GitHub API с PAT из remote.origin.url.
 Использование: poll-release.py <run_id|tag> [--wait] [--max <мин>]"""
 import json
 import os
@@ -7,7 +7,7 @@ import sys
 import time
 import urllib.request
 
-REPO = 'danku13/TACG'
+REPO = 'danku13/Avizis'
 TOKEN = os.popen(
     "git config --get remote.origin.url | sed -E 's#.*://[^:]+:([^@]+)@.*#\\1#'"
 ).read().strip() if os.popen("git config --get remote.origin.url").read().find('@') > 0 else os.environ.get('GITHUB_TOKEN', '')

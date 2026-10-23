@@ -1,5 +1,5 @@
 #!/bin/bash
-# TACG Task 21 — чанк 05: закрыть инспектор → replay прогона 1 по таймлайну
+# Avizis Task 21 — чанк 05: закрыть инспектор → replay прогона 1 по таймлайну
 T=/tmp/rec-timeline.log
 N=$(printf '%03d' "$1")
 

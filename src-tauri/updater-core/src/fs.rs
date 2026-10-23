@@ -59,7 +59,7 @@ fn swap_file(src: &Path, dst: &Path) -> Result<(), String> {
 }
 
 /// Перемещение с фолбэком на копию: временный каталог и приложение могут
-/// быть на разных томах (C:\Users\...\Temp против D:\Apps\TACG).
+/// быть на разных томах (C:\Users\...\Temp против D:\Apps\Avizis).
 fn move_file(src: &Path, dst: &Path) -> Result<(), String> {
     if fs::rename(src, dst).is_err() {
         fs::copy(src, dst).map_err(|e| format!("не скопирован {}: {e}", dst.display()))?;
@@ -101,7 +101,7 @@ mod tests {
 
     impl Sandbox {
         fn new(tag: &str) -> Self {
-            let path = std::env::temp_dir().join(format!("tacg-updater-test-{tag}-{}", std::process::id()));
+            let path = std::env::temp_dir().join(format!("avizis-updater-test-{tag}-{}", std::process::id()));
             let _ = fs::remove_dir_all(&path);
             fs::create_dir_all(&path).expect("не создана песочница");
             Sandbox(path)
@@ -147,8 +147,8 @@ mod tests {
         let tmp = sb.dir("tmp");
 
         // «установленное» приложение: оболочка, движок и посторонний файл
-        write(&app.join("tacg.exe"), b"OLD-APP");
-        write(&app.join("tacg-engine.exe"), b"OLD-ENGINE");
+        write(&app.join("avizis.exe"), b"OLD-APP");
+        write(&app.join("avizis-engine.exe"), b"OLD-ENGINE");
         write(&app.join("unrelated.txt"), b"KEEP");
 
         // архив обновления: новые оболочка/движок + README
@@ -156,8 +156,8 @@ mod tests {
         make_zip(
             &zip_path,
             &[
-                ("tacg.exe", b"NEW-APP".as_slice()),
-                ("tacg-engine.exe", b"NEW-ENGINE".as_slice()),
+                ("avizis.exe", b"NEW-APP".as_slice()),
+                ("avizis-engine.exe", b"NEW-ENGINE".as_slice()),
                 ("portable-README.txt", b"NEW-README".as_slice()),
             ],
         );
@@ -169,22 +169,22 @@ mod tests {
         perform_swap(&plan, &tmp, &app).expect("подмена должна проходить");
 
         // новые файлы на месте, старые — в бэкапах, посторонний не тронут
-        assert_eq!(read(&app.join("tacg.exe")), "NEW-APP");
-        assert_eq!(read(&app.join("tacg-engine.exe")), "NEW-ENGINE");
+        assert_eq!(read(&app.join("avizis.exe")), "NEW-APP");
+        assert_eq!(read(&app.join("avizis-engine.exe")), "NEW-ENGINE");
         assert_eq!(read(&app.join("portable-README.txt")), "NEW-README");
-        assert_eq!(read(&app.join("tacg.exe.old")), "OLD-APP");
-        assert_eq!(read(&app.join("tacg-engine.exe.old")), "OLD-ENGINE");
+        assert_eq!(read(&app.join("avizis.exe.old")), "OLD-APP");
+        assert_eq!(read(&app.join("avizis-engine.exe.old")), "OLD-ENGINE");
         assert_eq!(read(&app.join("unrelated.txt")), "KEEP");
 
         // порядок плана: движок первым, оболочка последней
-        assert_eq!(plan.first().map(String::as_str), Some("tacg-engine.exe"));
-        assert_eq!(plan.last().map(String::as_str), Some("tacg.exe"));
+        assert_eq!(plan.first().map(String::as_str), Some("avizis-engine.exe"));
+        assert_eq!(plan.last().map(String::as_str), Some("avizis.exe"));
 
         // уборка при следующем старте: бэкапы ушли, новые файлы остались
         cleanup_backups(&app);
-        assert!(!app.join("tacg.exe.old").exists());
-        assert!(!app.join("tacg-engine.exe.old").exists());
-        assert_eq!(read(&app.join("tacg.exe")), "NEW-APP");
+        assert!(!app.join("avizis.exe.old").exists());
+        assert!(!app.join("avizis-engine.exe.old").exists());
+        assert_eq!(read(&app.join("avizis.exe")), "NEW-APP");
         assert_eq!(read(&app.join("unrelated.txt")), "KEEP");
     }
 
@@ -193,12 +193,12 @@ mod tests {
         let sb = Sandbox::new("fresh");
         let app = sb.dir("app"); // пустой каталог — как первый запуск рядом с exe
         let tmp = sb.dir("tmp");
-        write(&tmp.join("tacg-engine.exe"), b"NEW-ENGINE");
+        write(&tmp.join("avizis-engine.exe"), b"NEW-ENGINE");
 
-        perform_swap(&["tacg-engine.exe".to_string()], &tmp, &app).expect("подмена в пустой каталог");
+        perform_swap(&["avizis-engine.exe".to_string()], &tmp, &app).expect("подмена в пустой каталог");
 
-        assert_eq!(read(&app.join("tacg-engine.exe")), "NEW-ENGINE");
-        assert!(!app.join("tacg-engine.exe.old").exists(), "бэкапа быть не должно — цели не было");
+        assert_eq!(read(&app.join("avizis-engine.exe")), "NEW-ENGINE");
+        assert!(!app.join("avizis-engine.exe.old").exists(), "бэкапа быть не должно — цели не было");
     }
 
     #[test]
@@ -209,7 +209,7 @@ mod tests {
         make_zip(
             &zip_path,
             &[
-                ("tacg.exe", b"NEW-APP".as_slice()),
+                ("avizis.exe", b"NEW-APP".as_slice()),
                 ("../evil.txt", b"EVIL".as_slice()),
             ],
         );
@@ -221,7 +221,7 @@ mod tests {
         assert!(!sb.0.join("evil.txt").exists(), "файл не должен выйти за пределы песочницы");
         // план_files дополнительно страхует плоские имена на случай будущих
         // изменений поведения распаковки
-        let plan = crate::plan_files(&["tacg.exe".to_string(), "../evil.txt".to_string()]);
-        assert_eq!(plan, vec!["tacg.exe".to_string()]);
+        let plan = crate::plan_files(&["avizis.exe".to_string(), "../evil.txt".to_string()]);
+        assert_eq!(plan, vec!["avizis.exe".to_string()]);
     }
 }

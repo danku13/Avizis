@@ -1,5 +1,5 @@
 #!/bin/bash
-# TACG Task 21 — пассивный чанк: 20с записи без взаимодействий (рост графа в авто-режиме)
+# Avizis Task 21 — пассивный чанк: 20с записи без взаимодействий (рост графа в авто-режиме)
 T=/tmp/rec-timeline.log
 N=$(printf '%03d' "$1")
 agent-browser record start "/tmp/chunk2-${N}.webm" > /dev/null 2>&1

@@ -1,5 +1,5 @@
 #!/bin/bash
-# TACG Task 21 — чанк 00: интро (RU UI, задача) + запуск прогона 1 (data-сценарий, вручную)
+# Avizis Task 21 — чанк 00: интро (RU UI, задача) + запуск прогона 1 (data-сценарий, вручную)
 # Лог таймингов для субтитров: /tmp/rec-timeline.log
 T=/tmp/rec-timeline.log
 N=$(printf '%03d' "$1")
@@ -8,7 +8,7 @@ agent-browser record start "/tmp/chunk2-${N}.webm" > /dev/null 2>&1
 agent-browser set viewport 1920 1080 > /dev/null 2>&1
 sleep 3.5
 title=$(agent-browser get title 2>/dev/null | head -1)
-[ "$title" = "TACG Playground — live agent computation graph" ] || echo "WARN: title=$title"
+[ "$title" = "Avizis Playground — live agent computation graph" ] || echo "WARN: title=$title"
 # язык должен быть RU (localStorage переносится во fresh context)
 h=$(agent-browser get text @e6 2>/dev/null | head -1)
 [ "$h" = "Задача агенту" ] || { agent-browser click @e4 > /dev/null 2>&1; sleep 1; }

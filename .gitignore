@@ -52,20 +52,20 @@ prompt
 server.log
 # Skills directory
 /skills/
-# TACG BYOK: файл конфигурации LLM может содержать реальные ключи API — в репозиторий НИКОГДА
-mini-services/tacg-agent/data/llm-config.json
+# Avizis BYOK: файл конфигурации LLM может содержать реальные ключи API — в репозиторий НИКОГДА
+mini-services/avizis-agent/data/llm-config.json
 
 # Служебные контексты агентов разработки (не артефакты репозитория)
 /agent-ctx/
 
 # Служебные артефакты инструментальных вызовов
 /tool-results/
-# TACG: дисковый кэш динамического прайсинга (генерируется в рантайме)
-mini-services/tacg-agent/data/pricing-cache.json
-# TACG: собранные исполняемые файлы (bun build --compile)
-mini-services/tacg-agent/dist/
+# Avizis: дисковый кэш динамического прайсинга (генерируется в рантайме)
+mini-services/avizis-agent/data/pricing-cache.json
+# Avizis: собранные исполняемые файлы (bun build --compile)
+mini-services/avizis-agent/dist/
 scripts/tg-send.py
-mini-services/tacg-agent/data/currency-cache.json
+mini-services/avizis-agent/data/currency-cache.json
 scripts/tg-send-gifs-hd*.sh
 scripts/build-hd.sh
 scripts/hd-stash/

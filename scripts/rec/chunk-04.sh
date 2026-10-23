@@ -1,5 +1,5 @@
 #!/bin/bash
-# TACG Task 21 — чанк 04: replay прогона 1 — кнопка Play истории, покадровая перемотка
+# Avizis Task 21 — чанк 04: replay прогона 1 — кнопка Play истории, покадровая перемотка
 T=/tmp/rec-timeline.log
 N=$(printf '%03d' "$1")
 

@@ -1,4 +1,4 @@
-# ADR — Архитектурные решения сессии (TACG Playground)
+# ADR — Архитектурные решения сессии (Avizis Playground)
 
 > Формат: контекст → решение → альтернативы → последствия.
 > Нумерация в хронологическом порядке сессии. Статусы: принято.
@@ -17,7 +17,7 @@
 **Альтернативы.** Сырые вызовы SDK без обёртки — быстро ломаются на кривом JSON;
 стриминговый парсинг — избыточен для прототипа.
 
-**Последствия.** LLM-режим устойчив (тест `test-tacg-llm` пройден); любую новую роль
+**Последствия.** LLM-режим устойчив (тест `test-avizis-llm` пройден); любую новую роль
 (decider в ADR-007) добавляем через системный промпт без изменения инфраструктуры.
 
 ---
@@ -28,7 +28,7 @@
 пауза/резюм, ожидание решений пользователя, поток событий. HTTP-запросы плохо подходят
 для живого потока и долгоживущих состояний.
 
-**Решение.** `mini-services/tacg-agent/` — отдельный bun-процесс с socket.io.
+**Решение.** `mini-services/avizis-agent/` — отдельный bun-процесс с socket.io.
 API: `run:start`, `run:control`, `run:load/delete`, `node:override/retry`,
 `history:list`, `decision:resolve`, `decision:mode`. События: `graph:init`, `graph:adapt`,
 `node:update`, `run:status`, `log`, `run:summary`, `decision:offer/resolved/mode`.
@@ -38,7 +38,7 @@ API: `run:start`, `run:control`, `run:load/delete`, `node:override/retry`,
 WebRTC/gRPC — избыточно.
 
 **Последствия.** Движок живёт независимо от hot-reload фронтенда; клиент — тонкий
-сокет-клиент в `src/lib/tacg/socket.ts`. Цена: отдельный процесс для мониторинга.
+сокет-клиент в `src/lib/avizis/socket.ts`. Цена: отдельный процесс для мониторинга.
 
 ---
 
@@ -68,7 +68,7 @@ playback «видит» ветки до/после решения бесплат
 самопись становилась узким местом.
 
 **Решение.** Переписан `graph-canvas.tsx` на React Flow v12 (совместим с React 19):
-кастомный узел-карточка `tacg` (статусная полоса, бейджи v2/изм., пульсация running,
+кастомный узел-карточка `avizis` (статусная полоса, бейджи v2/изм., пульсация running,
 dashed для динамических), рёбра smoothstep с цветовой кодировкой, Controls, MiniMap
 (fuchsia для развилок), Background Dots. Позиции считаются тем же слоевым layout-ом,
 авто-fitView при изменении сигнатуры узлов. `nodesDraggable/nodesConnectable=false`,
@@ -159,7 +159,7 @@ HITL-точек (аппрувы, лимиты бюджета). Модалка в
 ids/зависимости/ветки, executor/supervisor/decider — роли через системные промпты.
 
 **Последствия.** UI-сценарии тестируются без затрат и флаков; интеграция SDK
-подтверждается тестом `test-tacg-llm.ts`. LLM-JSON от планировщика проходит
+подтверждается тестом `test-avizis-llm.ts`. LLM-JSON от планировщика проходит
 тот же repair-конвейер (ADR-001).
 
 ---
@@ -173,7 +173,7 @@ ids/зависимости/ветки, executor/supervisor/decider — роли 
 | Фронтенд | Next.js (App Router), React 19, Tailwind, shadcn/ui, Radix |
 | Граф | @xyflow/react v12 (React Flow), кастомные узлы/рёбра |
 | Состояние | zustand + детерминированный fold событий (event-sourcing) |
-| Тесты | scripts/test-tacg-{client,llm,decision}.ts + E2E agent-browser |
+| Тесты | scripts/test-avizis-{client,llm,decision}.ts + E2E agent-browser |
 
 ---
 

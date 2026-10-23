@@ -1,7 +1,7 @@
 #!/bin/bash
-# TACG — GIF всех основных функций (16:9, БЕЗ субтитров) + превью для README.
+# Avizis — GIF всех основных функций (16:9, БЕЗ субтитров) + превью для README.
 #
-# Источник — пересобранное download/tacg-demo.mp4 (1920×1080, чистая картинка,
+# Источник — пересобранное download/avizis-demo.mp4 (1920×1080, чистая картинка,
 # soft-subs не рендерятся в кадр). Окна нарезок проверены VLM-картой контента.
 #
 # Каждая функция = отдельный GIF 800×450, 12fps, палитровое кодирование
@@ -28,8 +28,8 @@
 #   233.9-245.9 финал: скраб, тост завершения, история с зелёной записью
 set -e
 
-SRC=/home/z/my-project/download/tacg-demo.mp4
-OUT=/home/z/my-project/download/tacg-gifs
+SRC=/home/z/my-project/download/avizis-demo.mp4
+OUT=/home/z/my-project/download/avizis-gifs
 W=800   # 16:9 → 800×450
 FPS=12
 DITHER=sierra2_4a
@@ -57,21 +57,21 @@ make_gif() {
 }
 
 # --- 9 GIF основных функций (без субтитров) ---
-make_gif tacg-gif-01-launch-planning   1.25  12.5 32.0
-make_gif tacg-gif-02-decision-branch   1.20  32.2 51.8
-make_gif tacg-gif-03-plan-growth       1.30  127.9 142.2
-make_gif tacg-gif-04-node-inspector    1.05  202 215
-make_gif tacg-gif-05-timeline-replay   1.15  227 242
-make_gif tacg-gif-06-auto-mode         1.25  108.5 127.9
-make_gif tacg-gif-07-error-retry       1.30  145 151.5 170.5 180.5 184.5 187.5
-make_gif tacg-gif-08-run-history       1.15  116 127 233.8 245.5
-make_gif tacg-gif-09-completion-audit  1.05  76.5 86.9
+make_gif avizis-gif-01-launch-planning   1.25  12.5 32.0
+make_gif avizis-gif-02-decision-branch   1.20  32.2 51.8
+make_gif avizis-gif-03-plan-growth       1.30  127.9 142.2
+make_gif avizis-gif-04-node-inspector    1.05  202 215
+make_gif avizis-gif-05-timeline-replay   1.15  227 242
+make_gif avizis-gif-06-auto-mode         1.25  108.5 127.9
+make_gif avizis-gif-07-error-retry       1.30  145 151.5 170.5 180.5 184.5 187.5
+make_gif avizis-gif-08-run-history       1.15  116 127 233.8 245.5
+make_gif avizis-gif-09-completion-audit  1.05  76.5 86.9
 
 # --- превью для README (640×360, «рост графа супервайзером», ADR-022) ---
 W=640
-make_gif tacg-demo-preview             1.15  127.9 141.6
-mv "$OUT/tacg-demo-preview.gif" /home/z/my-project/download/tacg-demo-preview.gif
-echo "превью → download/tacg-demo-preview.gif"
+make_gif avizis-demo-preview             1.15  127.9 141.6
+mv "$OUT/avizis-demo-preview.gif" /home/z/my-project/download/avizis-demo-preview.gif
+echo "превью → download/avizis-demo-preview.gif"
 
 echo "=== итог ==="
-ls -la "$OUT" /home/z/my-project/download/tacg-demo-preview.gif
+ls -la "$OUT" /home/z/my-project/download/avizis-demo-preview.gif

@@ -1,4 +1,4 @@
-# Документация TACG Playground
+# Документация Avizis Playground
 
 > Корневой индекс документации. Структура оптимизирована для агентной разработки:
 > каждый тип документа — своя папка, каждый документ — отдельный файл, в каждой папке — индекс.
@@ -40,10 +40,10 @@
 
 ## Реализация
 
-- Движок: `mini-services/tacg-agent/` (bun + socket.io :3003, z-ai-web-dev-sdk, режимы demo/llm).
-- Фронтенд: `src/components/tacg/` (React Flow граф, модалки инспектора/выбора, тулбар, timeline),
-  `src/lib/tacg/` (типы, сокет-клиент, fold), `src/store/tacg-store.ts`.
-- Тесты: `scripts/test-tacg-{client,llm,decision,clarity,byok,truncation,usage,pricing,currency,openrouter-gate}.ts`; E2E-скриншоты: `scripts/tacg-*.png`, `scripts/e2e-gate-*.png`.
+- Движок: `mini-services/avizis-agent/` (bun + socket.io :3003, z-ai-web-dev-sdk, режимы demo/llm).
+- Фронтенд: `src/components/avizis/` (React Flow граф, модалки инспектора/выбора, тулбар, timeline),
+  `src/lib/avizis/` (типы, сокет-клиент, fold), `src/store/avizis-store.ts`.
+- Тесты: `scripts/test-avizis-{client,llm,decision,clarity,byok,truncation,usage,pricing,currency,openrouter-gate}.ts`; E2E-скриншоты: `scripts/avizis-*.png`, `scripts/e2e-gate-*.png`.
 - Сборка exe движка: `bash scripts/build-executables.sh` (bun compile, 4 таргета, ADR-017).
 - Десктоп: `src-tauri/` (Tauri v2, ADR-018); CI `.github/workflows/desktop.yml` — артефакты на push, релиз по тегу `v*` (доставка workflow-файла при PAT без scope workflow — `scripts/push-workflow-via-git-api.py`).
 - Рабочий журнал агентов: `/home/z/my-project/worklog.md` (вне репозитория — локальный артефакт сессии).
@@ -80,7 +80,7 @@
 - **Десктоп-приложение Tauri (единый exe с UI)**: статический Next.js вшит в бинарник, движок —
   sidecar-процесс на свободном порту 127.0.0.1 (гасится при выходе), данные — в каталоге
   приложения ОС; CI GitHub Actions (windows-latest): артефакты на каждый push,
-  NSIS-установщик `TACG_0.10.0_x64-setup.exe` + portable zip в релиз по тегу v* —
+  NSIS-установщик `AVIZIS_0.10.0_x64-setup.exe` + portable zip в релиз по тегу v* —
   `adr/ADR-018`, `cr/CR-012`.
 - **Конвертация валюты стоимости**: курсы ЦБ РФ (официальный XML + JSON-зеркало) с фолбэком на
   open.er-api и ручным override, кэш (TTL 6 ч); базис аудита — USD, конвертация на отображении:

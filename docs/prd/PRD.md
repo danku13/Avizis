@@ -1,4 +1,4 @@
-# PRD — TACG Playground (Transparent Agent Computation Graph)
+# PRD — Avizis Playground (Transparent Agent Computation Graph)
 
 > Тип: PRD · Версия: 0.4 · Статус: реализовано (прототип для тестирования концепции) · Язык интерфейса: русский
 >
@@ -12,7 +12,7 @@
 
 ## 2. Продукт
 
-**TACG Playground** — интерактивный стенд, где агент (на `z-ai-web-dev-sdk`) выполняет задачу,
+**Avizis Playground** — интерактивный стенд, где агент (на `z-ai-web-dev-sdk`) выполняет задачу,
 а пользователь наблюдает вычисления в виде **живого графа**:
 
 - агент **планирует** шаги → план становится DAG-графом;
@@ -96,5 +96,5 @@
 - Функциональные требования: [`fr/index.md`](../fr/index.md)
 - Архитектурные решения: [`adr/index.md`](../adr/index.md)
 - Журнал изменений: [`cr/index.md`](../cr/index.md)
-- Реализация: `mini-services/tacg-agent/` (движок), `src/components/tacg/` (UI),
-  `src/lib/tacg/`, `src/store/tacg-store.ts`, скриншоты `scripts/tacg-*.png`
+- Реализация: `mini-services/avizis-agent/` (движок), `src/components/avizis/` (UI),
+  `src/lib/avizis/`, `src/store/avizis-store.ts`, скриншоты `scripts/avizis-*.png`

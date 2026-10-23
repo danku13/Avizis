@@ -39,12 +39,12 @@
 ### 2. Светлая тема (FR-706)
 
 - `layout.tsx`: bootstrap-скрипт в `<head>` выставляет класс `.dark` до гидрации
-  (localStorage `tacg-theme`, отсутствие записи → тёмная); статический класс с `<html>` снят —
+  (localStorage `avizis-theme`, отсутствие записи → тёмная); статический класс с `<html>` снят —
   нет всплеска и рассинхрона гидрации.
-- `src/lib/tacg/theme.ts` (новый): `useIsDark` (useSyncExternalStore, SSR-снимок — тёмная),
+- `src/lib/avizis/theme.ts` (новый): `useIsDark` (useSyncExternalStore, SSR-снимок — тёмная),
   `toggleTheme` (класс + localStorage + уведомление подписчиков).
 - `theme-toggle.tsx` (новый): Sun/Moon в шапке.
-- Все TACG-компоненты (page, graph-canvas, node-inspector, run-toolbar, decision-modal,
+- Все Avizis-компоненты (page, graph-canvas, node-inspector, run-toolbar, decision-modal,
   settings-modal, event-log, history-panel, timeline, status-badge): light-варианты через
   `dark:`-префиксы (фоны/тексты/бордеры/акценты 600↔300).
 - `globals.css`: React Flow Controls/MiniMap/атрибуция и скроллбары — светлая база +
@@ -73,20 +73,20 @@
 
 ## Результат (верифицировано)
 
-- `test-tacg-usage` (новый): **13/13** — unit-fold (totals/byRole/атрибуция/replay-до-курсора/
+- `test-avizis-usage` (новый): **13/13** — unit-fold (totals/byRole/атрибуция/replay-до-курсора/
   пустой поток) + интеграция с моком (7 вызовов = ↑700/↓140; по ролям 1/3/2/1; события в потоке;
   узлы n1/dec1/ba1/nfin по ↑100/↓20, гаснут ветки без usage; журнал; summary; fold=снапшот;
   runs.json с usage; ключ не утёк; provenance-регрессия).
-- Регрессии: `test-tacg-byok` 13/13, `test-tacg-truncation` 31/31, `test-tacg-decision` — все
-  сценарии, `test-tacg-clarity` 17/17; `tsc` — 25 ошибок (= базовый уровень, новых нет);
+- Регрессии: `test-avizis-byok` 13/13, `test-avizis-truncation` 31/31, `test-avizis-decision` — все
+  сценарии, `test-avizis-clarity` 17/17; `tsc` — 25 ошибок (= базовый уровень, новых нет);
   `bun run lint` — чисто.
 - E2E (agent-browser, :81): чип «↑ 700 · ↓ 140 · 7 вызов.» в live; после загрузки из истории —
   тот же итог; 8 шагов назад по таймлайну — «↑ 500 · ↓ 100 · 5 вызов.» (replay-счётчики);
   журнал «токены: ↑700 / ↓140 (7 вызов. LLM)»; инспектор «Токены: ↑ 100 · ↓ 20»; MD-отчёт:
   «## Использование токенов» + «Итого | 7 | ↑ 700 | ↓ 140» + колонка узлов; тема: класс `.dark`
-  снят/возвращён, `localStorage tacg-theme` = light/dark, переживает reload, рёбра переключаются;
+  снят/возвращён, `localStorage avizis-theme` = light/dark, переживает reload, рёбра переключаются;
   DOM: развилка amber + динамика violet, fuchsia-рёбер больше нет; мобильная 390×844 без
-  горизонтального скролла; консоль чистая. Скриншоты: `scripts/tacg-{usage-dark,usage-inspector,
-  colors-dark,light-graph,light-persist,light-mobile}.png`, отчёт `scripts/tacg-usage-report.md`.
+  горизонтального скролла; консоль чистая. Скриншоты: `scripts/avizis-{usage-dark,usage-inspector,
+  colors-dark,light-graph,light-persist,light-mobile}.png`, отчёт `scripts/avizis-usage-report.md`.
 - После E2E дефолты восстановлены: `llm-config.json = {"default":{"adapter":"zai"}}`, тема —
   тёмная, мок-провайдер остановлен.

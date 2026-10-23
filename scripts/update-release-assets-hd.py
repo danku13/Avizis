@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""TACG Task 20 — замена GIF-ассетов релиза v0.12.0 на полное разрешение 1920×1080.
+"""Avizis Task 20 — замена GIF-ассетов релиза v0.12.0 на полное разрешение 1920×1080.
 Удаляет старые 800×450 GIF (9 функциональных + превью), заливает HD-версии.
-tacg-demo.mp4 НЕ трогаем (он уже 1920×1080). PAT — из remote.origin.url (запуск из /home/z/my-project)."""
+avizis-demo.mp4 НЕ трогаем (он уже 1920×1080). PAT — из remote.origin.url (запуск из /home/z/my-project)."""
 import json
 import os
 import sys
 import urllib.request
 
-REPO = 'danku13/TACG'
+REPO = 'danku13/Avizis'
 TAG = 'v0.12.0'
 TOKEN = os.popen(
     "git config --get remote.origin.url | sed -E 's#.*://[^:]+:([^@]+)@.*#\\1#'"
@@ -16,19 +16,19 @@ if not TOKEN or '@' not in os.popen("git config --get remote.origin.url").read()
     TOKEN = os.environ.get('GITHUB_TOKEN', '')
 
 DL = '/home/z/my-project/download'
-GIF_DIR = f'{DL}/tacg-gifs'
+GIF_DIR = f'{DL}/avizis-gifs'
 
 ASSETS = [  # (путь, content-type)
-    (f'{GIF_DIR}/tacg-gif-01-launch-planning.gif', 'image/gif'),
-    (f'{GIF_DIR}/tacg-gif-02-decision-branch.gif', 'image/gif'),
-    (f'{GIF_DIR}/tacg-gif-03-plan-growth.gif', 'image/gif'),
-    (f'{GIF_DIR}/tacg-gif-04-node-inspector.gif', 'image/gif'),
-    (f'{GIF_DIR}/tacg-gif-05-timeline-replay.gif', 'image/gif'),
-    (f'{GIF_DIR}/tacg-gif-06-auto-mode.gif', 'image/gif'),
-    (f'{GIF_DIR}/tacg-gif-07-error-retry.gif', 'image/gif'),
-    (f'{GIF_DIR}/tacg-gif-08-run-history.gif', 'image/gif'),
-    (f'{GIF_DIR}/tacg-gif-09-completion-audit.gif', 'image/gif'),
-    (f'{DL}/tacg-demo-preview.gif', 'image/gif'),
+    (f'{GIF_DIR}/avizis-gif-01-launch-planning.gif', 'image/gif'),
+    (f'{GIF_DIR}/avizis-gif-02-decision-branch.gif', 'image/gif'),
+    (f'{GIF_DIR}/avizis-gif-03-plan-growth.gif', 'image/gif'),
+    (f'{GIF_DIR}/avizis-gif-04-node-inspector.gif', 'image/gif'),
+    (f'{GIF_DIR}/avizis-gif-05-timeline-replay.gif', 'image/gif'),
+    (f'{GIF_DIR}/avizis-gif-06-auto-mode.gif', 'image/gif'),
+    (f'{GIF_DIR}/avizis-gif-07-error-retry.gif', 'image/gif'),
+    (f'{GIF_DIR}/avizis-gif-08-run-history.gif', 'image/gif'),
+    (f'{GIF_DIR}/avizis-gif-09-completion-audit.gif', 'image/gif'),
+    (f'{DL}/avizis-demo-preview.gif', 'image/gif'),
 ]
 
 
@@ -39,7 +39,7 @@ def api(method, path, body=None, accept='application/vnd.github+json'):
         headers={
             'Authorization': f'token {TOKEN}',
             'Accept': accept,
-            'User-Agent': 'tacg-release-update',
+            'User-Agent': 'avizis-release-update',
         },
         method=method,
     )
@@ -63,7 +63,7 @@ def upload(release_id, path, ctype):
         'Authorization': f'token {TOKEN}',
         'Content-Type': ctype,
         'Content-Length': str(size),
-        'User-Agent': 'tacg-release-update',
+        'User-Agent': 'avizis-release-update',
     }, method='POST')
     with urllib.request.urlopen(req, timeout=600) as r:
         resp = json.load(r)

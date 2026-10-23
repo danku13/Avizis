@@ -7,7 +7,7 @@
     "build": "next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
     "start": "NODE_ENV=production bun .next/standalone/server.js 2>&1 | tee server.log",
     "build:static": "next build",
-    "compile:engine:win": "bun build mini-services/tacg-agent/index.ts --compile --target=bun-windows-x64 --outfile src-tauri/binaries/tacg-engine-x86_64-pc-windows-msvc.exe",
+    "compile:engine:win": "bun build mini-services/avizis-agent/index.ts --compile --target=bun-windows-x64 --outfile src-tauri/binaries/avizis-engine-x86_64-pc-windows-msvc.exe",
     "lint": "eslint .",
     "db:push": "prisma db push --accept-data-loss",
     "db:generate": "prisma generate",

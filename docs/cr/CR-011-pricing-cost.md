@@ -13,11 +13,11 @@
 
 ## Что сделано
 
-**1. Динамический прайсинг (`mini-services/tacg-agent/pricing.ts` — новый модуль).** Цены не
+**1. Динамический прайсинг (`mini-services/avizis-agent/pricing.ts` — новый модуль).** Цены не
 захардкожены: подтягиваются в рантайме с OpenRouter (`/api/v1/models`, 432 модели на момент
 прогона) и из открытого каталога LiteLLM (3134 модели), кэшируются на диске
-(`data/pricing-cache.json`), TTL 24 ч (`TACG_PRICING_TTL_HOURS`), офлайн-устойчиво,
-`TACG_PRICING_DISABLED=1` — только ручные цены. Ручной override — секция `pricing.models`
+(`data/pricing-cache.json`), TTL 24 ч (`AVIZIS_PRICING_TTL_HOURS`), офлайн-устойчиво,
+`AVIZIS_PRICING_DISABLED=1` — только ручные цены. Ручной override — секция `pricing.models`
 в `llm-config.json` (приоритет выше каталогов; для z-ai SDK/Ollama/своих тарифов). Разрешение
 модели: точное совпадение → суффикс `:free` → базовый id → уникальный вендор OpenRouter;
 неоднозначность → честное «нет цены».
@@ -47,7 +47,7 @@ out/1e6 × priceOut) и расширяет событие `llm:usage` полям
 
 ## Результат (верифицировано)
 
-- `scripts/test-tacg-pricing.ts` (новый) — **26/26 ✅**: unit (парсинг OpenRouter/LiteLLM,
+- `scripts/test-avizis-pricing.ts` (новый) — **26/26 ✅**: unit (парсинг OpenRouter/LiteLLM,
   приоритет manual, нормализация `:free`/базовый id, неоднозначность → null, арифметика,
   `fmtUsd`, офлайн — кэш жив, сброс памяти → подъём с диска) + fold (costUsd по ролям/узлам,
   unpricedCalls, старый формат событий) + интеграция с моком (7 вызовов → `costUsd=0.00315`,
@@ -55,7 +55,7 @@ out/1e6 × priceOut) и расширяет событие `llm:usage` полям
   n1/dec1/ba1/nfin по $0,00045; журнал `· ≈$0,00045` и итог `≈$0,00315`; summary; fold=движок;
   runs.json без ключа; `pricing:refresh` по сокету).
 - Регрессии: usage 13/13, byok 13/13, truncation 31/31, clarity 17/17, decision — все сценарии;
-  tsc = база (3 новых — того же класса, что в test-tacg-usage); lint чист.
+  tsc = база (3 новых — того же класса, что в test-avizis-usage); lint чист.
 - E2E agent-browser: прогон через UI с ценой 2.5/10 за 1M → чип `≈$0,00315`; журнал;
   инспектор `↑ 100 · ↓ 20 · ≈$0,00045`; MD (перехват Blob): «Стоимость LLM: ≈ $0,00315
   (динамический прайсинг)», «Итого | 7 | ↑ 700 | ↓ 140 | ≈ $0,00315», колонка «Стоимость»
@@ -63,15 +63,15 @@ out/1e6 × priceOut) и расширяет событие `llm:usage` полям
   блок источников с датами, «Обновить прайсы» → тост «Прайсы моделей обновлены», префилл
   полей цены 2.5/10; консоль 0 ошибок; мобильная 390×844 без hscroll; VLM-проверка скриншотов —
   дефектов нет. Дефолты восстановлены (zai, файл конфига чистый, мок остановлен).
-- Сборка: 4 бинарника в `mini-services/tacg-agent/dist/` (gitignored), linux-вариант запущен —
+- Сборка: 4 бинарника в `mini-services/avizis-agent/dist/` (gitignored), linux-вариант запущен —
   socket.io отвечает, история из `dist/data`, кэш прайсов рядом с exe.
 
 ## Артефакты
 
-`mini-services/tacg-agent/{pricing.ts (новый), data-dir.ts (новый), llm-config.ts, engine.ts,
-index.ts, types.ts, store.ts}` · `src/lib/tacg/{types.ts, fold.ts}` ·
-`src/components/tacg/{run-toolbar, node-inspector, settings-modal}.tsx` ·
-`src/store/tacg-store.ts` · `src/app/page.tsx` · `scripts/{test-tacg-pricing.ts (новый),
-build-executables.sh (новый), vlm-check-pricing.ts, e2e-pricing-*.png→tacg-pricing-*.png,
-tacg-pricing-report.md}` · `docs/{adr/ADR-016, adr/ADR-017, cr/CR-011 (новые), fr/FR-900
+`mini-services/avizis-agent/{pricing.ts (новый), data-dir.ts (новый), llm-config.ts, engine.ts,
+index.ts, types.ts, store.ts}` · `src/lib/avizis/{types.ts, fold.ts}` ·
+`src/components/avizis/{run-toolbar, node-inspector, settings-modal}.tsx` ·
+`src/store/avizis-store.ts` · `src/app/page.tsx` · `scripts/{test-avizis-pricing.ts (новый),
+build-executables.sh (новый), vlm-check-pricing.ts, e2e-pricing-*.png→avizis-pricing-*.png,
+avizis-pricing-report.md}` · `docs/{adr/ADR-016, adr/ADR-017, cr/CR-011 (новые), fr/FR-900
 (FR-908), индексы, README v0.9}`

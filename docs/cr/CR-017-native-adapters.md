@@ -39,7 +39,7 @@
 4. **Конфиг (`llm-config.ts` + `index.ts`)**: whitelist адаптеров расширен;
    сохранение ключа при пустом поле (маска-плейсхолдер UI) — теперь для всех
    ключевых адаптеров (`adapterUsesApiKey`: openai-compatible/anthropic/google-gemini),
-   переход на zai сбрасывает ключ; env-бутстрап `TACG_LLM_ADAPTER` принимает
+   переход на zai сбрасывает ключ; env-бутстрап `AVIZIS_LLM_ADAPTER` принимает
    новые идентификаторы; save/test валидируются probe — `validateAdapter`
    диспетчеризует по протоколу (zai — без пробы, как раньше).
 5. **UI настроек**: пресеты «Anthropic» (`https://api.anthropic.com`, подсказка
@@ -57,7 +57,7 @@
 
 ## Тесты
 
-- `scripts/test-tacg-native.ts` — 30/30: (A) юнит — экстракция content/parts,
+- `scripts/test-avizis-native.ts` — 30/30: (A) юнит — экстракция content/parts,
   SSE-аккумуляторы (снапшоты, usage), sanitize/merge/adapterUsesApiKey;
   (B) живые прогоны через движок против обоих моков: probe-валидация с latency,
   маска ключа в llm:config, полный LLM-прогон (7 узлов), стриминг исполнителя
@@ -82,7 +82,7 @@
   «Model: claude-3-5-sonnet-mock · anthropic»; пресет Gemini — та же цепочка
   («connection works · 3 ms», прогон «LLM via google-gemini · gemini-2.5-flash-mock»);
   dark-тема, 390px scrollWidth 390, 0 ошибок страницы. Скриншоты
-  `download/tacg-native-01…11`.
+  `download/avizis-native-01…11`.
 
 ## Результат
 

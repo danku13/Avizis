@@ -11,11 +11,11 @@ Work Log:
 - Сборка: x264 veryfast crf20 30fps High/4.0/timescale 15360 (контент статичный — кодирование 11 сегментов за ~45с), concat, нарезки (чанк4 →10с, чанк9 →8с), soft-subs mov_text rus(default)+eng, faststart
 - Субтитры: 22 реплики RU+EN; тайминги из /tmp/rec-timeline.log (реалтайм-метки всех кликов); учтён систематический сдвиг (CHUNK START логируется через 3.5с после старта записи); VLM-верификация синхронности: инспектор 53.6с ✓, закрытие модалки после «Авто» ~124-126с ✓, прогон 1 в истории 169.9с ✓
 - VLM-карта 22 кадров (2/чанк): пропорции норм везде, содержимое соответствует сценарию, вжатых сабов нет
-- Итог: download/tacg-demo2.mp4 — 1920×1080, 30fps, SAR 1:1, 3:03, 15.6 МБ, дорожки сабов rus(default)+eng; + tacg-demo2-{ru,en}.srt
+- Итог: download/avizis-demo2.mp4 — 1920×1080, 30fps, SAR 1:1, 3:03, 15.6 МБ, дорожки сабов rus(default)+eng; + avizis-demo2-{ru,en}.srt
 - Telegram: текст + видео (sendVideo, streaming) + точная копия mp4 документом (байт-в-байт — Telegram-плеер не показывает soft-subs, файл для VLC) + 2 srt-файла
 - Сервисы записи остановлены, история движка восстановлена из бэкапа
 
 Stage Summary:
 - Новое FullHD-демо с двумя прогонами записано и доставлено: разрешение верифицировано ДО записи и в каждом чанке (все 1920×1080, сплющивания нет)
 - Субтитры по требованию: переключаемые rus/eng + внешние srt, синхронность подтверждена VLM
-- Артефакты: download/tacg-demo2.mp4 + tacg-demo2-{ru,en}.srt; scripts/rec/{chunk-00..10, chunk-passive, assemble-demo2.sh, vlm-map-chunks.ts, vlm-sync-check.ts, extract-frames2.sh, loadcheck.sh, tacg-demo2-*.srt}; служебное: scripts/{start-services-hd.sh, Caddyfile-hd, build-hd.sh}, логи scripts/rec/*.log
+- Артефакты: download/avizis-demo2.mp4 + avizis-demo2-{ru,en}.srt; scripts/rec/{chunk-00..10, chunk-passive, assemble-demo2.sh, vlm-map-chunks.ts, vlm-sync-check.ts, extract-frames2.sh, loadcheck.sh, avizis-demo2-*.srt}; служебное: scripts/{start-services-hd.sh, Caddyfile-hd, build-hd.sh}, логи scripts/rec/*.log

@@ -14,8 +14,8 @@
 ### Оборванная сессия (коммит 48f6880, доведено этой сессией)
 
 1. **Словари и переключатель**: `i18n-ru.ts`/`i18n-en.ts` (~430 ключей), стор с RU-пререндером
-   и персистом `tacg-locale`, кнопка RU ⇄ EN в шапке, `<html lang>` синхронизируется; переведены
-   все TACG-компоненты (тулбар, история, инспектор, модалки настроек/развилки, журнал, бейдж
+   и персистом `avizis-locale`, кнопка RU ⇄ EN в шапке, `<html lang>` синхронизируется; переведены
+   все Avizis-компоненты (тулбар, история, инспектор, модалки настроек/развилки, журнал, бейдж
    обновления, отчёт MD).
 2. **Системные промпты EN** для 4 ролей + `promptLangSuffix` («Respond in English only…»);
    язык прогона = `detectLang(задача)`.
@@ -36,8 +36,8 @@
    `engine.start(..., uiLang)`.
 7. **Поле задачи следует за языком UI** (userTask=null → локализованный пример при рендере,
    без эффекта под ESL-правило setState-in-effect); было: EN-интерфейс + русское поле.
-8. **Видео финализировано**: `tacg-demo.mp4` = видео + soft-subs `eng` (default) + `rus`
-   (mov_text, language-теги); `.srt` остаются рядом; `tacg-demo-preview.gif` (12с, 640px,
+8. **Видео финализировано**: `avizis-demo.mp4` = видео + soft-subs `eng` (default) + `rus`
+   (mov_text, language-теги); `.srt` остаются рядом; `avizis-demo-preview.gif` (12с, 640px,
    палитровый) для README.
 9. **Тест-инфраструктура**: гейт-тест OpenRouter восстанавливает конфиг движка через
    `llm:config:save` (раньше — прямой файл-запись, и кэш движка оставался с мок-адресом →
@@ -56,6 +56,6 @@
   граф, журнал («⎇ Decision made (by the user): … — branch activated», «✓ Task completed in
   27.1 s»), модалка развилки — EN; переключение RU → UI+задача+граф RU; локаль переживает
   reload; мобильная 390px без hscroll; консоль 0 ошибок/0 сообщений.
-- Видео: `ffprobe tacg-demo.mp4` → h264 + mov_text(eng, default) + mov_text(rus), 245.9с;
-  GIF 12.0с / 472КБ. Скриншоты: `scripts/tacg-e2e-{ru-default,en-fixed}.png`,
-  `tacg-i18n-{en-final,mobile}.png`.
+- Видео: `ffprobe avizis-demo.mp4` → h264 + mov_text(eng, default) + mov_text(rus), 245.9с;
+  GIF 12.0с / 472КБ. Скриншоты: `scripts/avizis-e2e-{ru-default,en-fixed}.png`,
+  `avizis-i18n-{en-final,mobile}.png`.

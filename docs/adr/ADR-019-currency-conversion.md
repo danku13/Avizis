@@ -42,8 +42,8 @@ api (точно данные можно получать в ЦБ, возможн
 
 Валюты — куррируемый список из 15 (USD/EUR/RUB/KZT/CNY/GBP/TRY/AED/INR/BYN/UAH/GEL/JPY/CHF/KRW):
 все есть у ЦБ (кроме RUB-базы и USD) и у er-api. Кэш — `data/currency-cache.json`, TTL 6 ч
-(источники обновляются раз в день; `TACG_CURRENCY_TTL_HOURS`), `TACG_CURRENCY_DISABLED=1` —
-только ручной курс, `TACG_CURRENCY_URL_*` — подмена URL для тестов. Всё best-effort: офлайн →
+(источники обновляются раз в день; `AVIZIS_CURRENCY_TTL_HOURS`), `AVIZIS_CURRENCY_DISABLED=1` —
+только ручной курс, `AVIZIS_CURRENCY_URL_*` — подмена URL для тестов. Всё best-effort: офлайн →
 конвертации нет, стоимость в USD, прогон не страдает.
 
 **Паттерны наследованы от прайсинга (ADR-016)**: инъекция fetcher'а в тесты, per-key merge
@@ -55,7 +55,7 @@ api (точно данные можно получать в ЦБ, возможн
 `fmtCurrency`, 3 значащих цифры — согласовано с `fmtUsd`): чип тулбара («· ≈$0,0027 · ₽0,263»),
 тултип по ролям, строка узла в инспекторе, MD-отчёт (колонки ролей/графа + блок «Курс
 конвертации» с источником и датой котировки). Валюта выбирается в настройках (дефолт ₽),
-выбор живёт в `localStorage 'tacg-currency'`.
+выбор живёт в `localStorage 'avizis-currency'`.
 
 ## Альтернативы
 

@@ -1,5 +1,5 @@
 #!/bin/bash
-# TACG Task 21 — чанк 10: история — переключение прогонов (ref на родителе generic)
+# Avizis Task 21 — чанк 10: история — переключение прогонов (ref на родителе generic)
 T=/tmp/rec-timeline.log
 N=$(printf '%03d' "$1")
 

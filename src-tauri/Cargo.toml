@@ -1,7 +1,7 @@
 [package]
-name = "tacg"
+name = "avizis"
 version = "0.12.0"
-description = "TACG — прозрачный граф вычислений агента (десктоп-оболочка Tauri)"
+description = "Avizis — прозрачный граф вычислений агента (десктоп-оболочка Tauri)"
 edition = "2021"
 rust-version = "1.77.2"
 

@@ -7,7 +7,7 @@
 
 Запрос пользователя (CR-011): «как минимальными усилиями обернуть сервис в windows / macos
 executable для запуска "одним файлом" без развёртывания инфраструктуры». Стенд состоит из двух
-частей: мини-сервис движка (bun + socket.io, `mini-services/tacg-agent`) и фронтенд Next.js
+частей: мини-сервис движка (bun + socket.io, `mini-services/avizis-agent`) и фронтенд Next.js
 (`next dev`/`standalone` + Caddy-прокси на :81). Для «продуктового» запуска нужна связка без
 Node-инструментария, без `bun install`, без Caddy — Ideally один файл на каждую ОС.
 
@@ -22,7 +22,7 @@ Node-инструментария, без `bun install`, без Caddy — Ideall
 собирает 4 таргета (windows-x64, darwin-x64, darwin-arm64, linux-x64; при желании + arm64-варианты):
 
 ```bash
-bash scripts/build-executables.sh          # → mini-services/tacg-agent/dist/tacg-agent-*
+bash scripts/build-executables.sh          # → mini-services/avizis-agent/dist/avizis-agent-*
 ```
 
 Проверено: бинарник (62–95 МБ: рантайм Bun + socket.io + адаптеры LLM вшиты внутрь) стартует,
@@ -45,7 +45,7 @@ bash scripts/build-executables.sh          # → mini-services/tacg-agent/dist/t
 (1) `next.config.ts` → `output: 'export'` (проверить, что нет `next/image` без лоадера и
 динамических SSR-маршрутов); (2) socket-клиент: при same-origin не добавлять `XTransformPort`,
 ходить в свой origin; (3) входная точка-сервер ~40 строк (Bun.serve + существующий io). Тогда
-`tacg-app.exe` = один файл: открыл браузер на `http://localhost:3003` — всё работает.
+`avizis-app.exe` = один файл: открыл браузер на `http://localhost:3003` — всё работает.
 
 ### Уровень 3 — «настольное приложение» (опционально, по запросу рынка)
 

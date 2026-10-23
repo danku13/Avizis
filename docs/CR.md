@@ -1,23 +1,23 @@
-# CR — Журнал изменений сессии (TACG Playground)
+# CR — Журнал изменений сессии (Avizis Playground)
 
 > Change Requests по ходу сессии: мотивация → содержание → результат.
 > Хронологический порядок, соответствует Task ID из worklog.
 
 ---
 
-## CR-001 (Task 1) — Старт: прототип TACG на z-ai-web-dev-sdk
+## CR-001 (Task 1) — Старт: прототип Avizis на z-ai-web-dev-sdk
 
 **Мотивация.** «спланируй концепцию прототипа с использованием z-ai-web-dev-sdk
 для тестирования и начинай реализацию» — проверить концепцию прозрачного графа
 вычислений агента из `upload/agent_graph.md`.
 
 **Изменения.**
-- Создан mini-service `mini-services/tacg-agent/` (types, llm, demo, engine, store, index):
+- Создан mini-service `mini-services/avizis-agent/` (types, llm, demo, engine, store, index):
   планировщик → пошаговое выполнение → супервайзер-адаптация; пауза/стоп/резюм;
   override с пересчётом потомков; retry; история прогонов.
 - Фронтенд: SVG-DAG канва, инспектор узла (правая колонка), тулбар, event-log,
   history-panel, timeline, zustand-стор, socket-клиент, fold событий.
-- Тесты: `test-tacg-client.ts` (демо), `test-tacg-llm.ts` (реальный SDK).
+- Тесты: `test-avizis-client.ts` (демо), `test-avizis-llm.ts` (реальный SDK).
 
 **Результат.** Работающий стенд: живой граф + вмешательство + воспроизведение.
 Исправлены при этом: graph:init не заполнял run.nodes; LLM-«reasoning» внутри массива
@@ -78,7 +78,7 @@ nodes (repair-JSON + ретраи); пауза не эмитила статус;
 **Результат.** Развилки видны как ветки графа; в «ручном» агент ждёт пользователя,
 в «авто» решает сам и показывает рассуждение; выбор мгновенно меняет набор дальнейших
 шагов (гашение веток + пересчёт пути к итогу); playback показывает ветки до и после
-решения. Тест `test-tacg-decision.ts` — 3 сценария пройдены; E2E без ошибок консоли.
+решения. Тест `test-avizis-decision.ts` — 3 сценария пройдены; E2E без ошибок консоли.
 
 ---
 
@@ -86,9 +86,9 @@ nodes (repair-JSON + ретраи); пауза не эмитила статус;
 
 | CR | Файлы (осн.) | Тесты |
 |---|---|---|
-| CR-001 | mini-services/tacg-agent/*, src/{lib,store,components}/tacg/*, src/app/page.tsx | test-tacg-client, test-tacg-llm |
+| CR-001 | mini-services/avizis-agent/*, src/{lib,store,components}/avizis/*, src/app/page.tsx | test-avizis-client, test-avizis-llm |
 | CR-002 | graph-canvas.tsx (React Flow), node-inspector.tsx (модалка), page.tsx, globals.css | E2E agent-browser (desktop+mobile) |
-| CR-003 | types.ts ×2, demo.ts, engine.ts, index.ts, fold.ts, store, graph-canvas, decision-modal.tsx (new), run-toolbar, node-inspector, history-panel, event-log, status-badge, page.tsx | test-tacg-decision, E2E agent-browser |
+| CR-003 | types.ts ×2, demo.ts, engine.ts, index.ts, fold.ts, store, graph-canvas, decision-modal.tsx (new), run-toolbar, node-inspector, history-panel, event-log, status-badge, page.tsx | test-avizis-decision, E2E agent-browser |
 
 ---
 
@@ -131,7 +131,7 @@ nodes (repair-JSON + ретраи); пауза не эмитила статус;
   - node-inspector: домен уточнения, выбранные варианты «в составе», «смешанное решение «a + b»».
   - fold: `run:certainty` → RunView.certainty; совместимость со старыми прогонами (chosen-строка
     нормализуется в массив).
-- Тесты: `test-tacg-decision` переведён на массивы (4/4); новый `test-tacg-clarity` — 17/17
+- Тесты: `test-avizis-decision` переведён на массивы (4/4); новый `test-avizis-clarity` — 17/17
   (эмерджентные вопросы, смешанный выбор пользователя и агента, single-guard, certainty-цепочка);
   LLM-тест пройден (планировщик сам строит развилку «Формат обзора»).
 - E2E: авто-открытие модалок вопросов, смешанный выбор 2 блоков, метр 20→95% «Узкий вектор»,

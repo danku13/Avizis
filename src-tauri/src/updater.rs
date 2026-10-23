@@ -1,10 +1,10 @@
-//! Автообновление TACG по GitHub Releases (ADR-021) — Tauri-слой.
+//! Автообновление Avizis по GitHub Releases (ADR-021) — Tauri-слой.
 //!
 //! Механизм: `releases/latest` (GitHub API) → сравнение версий → скачивание
 //! портативного zip с прогрессом → распаковка и подмена файлов рядом с exe
 //! (ядро `updater-core::fs`: движок → прочее → оболочка последней) → запуск
 //! нового exe → выход. Один код-путь для установленной (NSIS) и портативной
-//! версии: приложение в обоих случаях — `tacg.exe` + `tacg-engine.exe` в
+//! версии: приложение в обоих случаях — `avizis.exe` + `avizis-engine.exe` в
 //! одном каталоге, а данные (история, ключи LLM) живут в каталоге ОС и
 //! обновлением не трогаются.
 //!
@@ -30,7 +30,7 @@ use crate::EngineHandle;
 pub use updater_core::fs::cleanup_backups;
 
 /// User-Agent обязателен для GitHub API; содержит версию оболочки
-const USER_AGENT: &str = concat!("TACG-Desktop-Updater/", env!("CARGO_PKG_VERSION"));
+const USER_AGENT: &str = concat!("Avizis-Desktop-Updater/", env!("CARGO_PKG_VERSION"));
 /// Квант прогресса скачивания в байтах: частые события захламляют IPC
 const PROGRESS_EVERY: u64 = 512 * 1024;
 /// Защита от повторного параллельного применения обновления
@@ -142,7 +142,7 @@ async fn install_update(app: &AppHandle) -> Result<(), String> {
     }
 
     // 2. Скачивание портативного zip во временный каталог с прогрессом
-    let tmp_dir = std::env::temp_dir().join("tacg-update");
+    let tmp_dir = std::env::temp_dir().join("avizis-update");
     let _ = fs::remove_dir_all(&tmp_dir);
     fs::create_dir_all(&tmp_dir).map_err(|e| format!("не создан временный каталог: {e}"))?;
     let zip_path = tmp_dir.join("update.zip");
@@ -188,8 +188,8 @@ async fn install_update(app: &AppHandle) -> Result<(), String> {
     let names = updater_core::fs::extract_flat(&zip_path, &tmp_dir)?;
     let plan = updater_core::plan_files(&names);
     let present = |want: &str| plan.iter().any(|f| f.eq_ignore_ascii_case(want));
-    if !present("tacg.exe") || !present("tacg-engine.exe") {
-        return Err("в архиве обновления нет tacg.exe / tacg-engine.exe".into());
+    if !present("avizis.exe") || !present("avizis-engine.exe") {
+        return Err("в архиве обновления нет avizis.exe / avizis-engine.exe".into());
     }
 
     emit(app, "install", received, total)?;

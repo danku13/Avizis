@@ -1,5 +1,5 @@
 #!/bin/bash
-# TACG Task 21 — извлечение кадров из чанков для VLM-карты контента
+# Avizis Task 21 — извлечение кадров из чанков для VLM-карты контента
 exec > /home/z/my-project/scripts/rec/frames.log 2>&1
 mkdir -p /tmp/frames2
 for i in 000 001 002 003 004 005 006 007 008 009 010; do

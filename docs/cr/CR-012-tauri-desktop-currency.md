@@ -15,20 +15,20 @@
 
 ## Что сделано
 
-**1. Движок и UI готовы к десктопу (контракт sidecar).** Движок: `TACG_PORT`/`TACG_BIND`
-(десктоп — только 127.0.0.1, не виден в LAN), `TACG_CORS_ORIGINS` (в десктопе — точные
+**1. Движок и UI готовы к десктопу (контракт sidecar).** Движок: `AVIZIS_PORT`/`AVIZIS_BIND`
+(десктоп — только 127.0.0.1, не виден в LAN), `AVIZIS_CORS_ORIGINS` (в десктопе — точные
 origin'ы webview вместо `*`: защита от drive-by подключений к локальному движку из браузера),
-`TACG_DATA_DIR` (данные в каталоге приложения ОС, переживают переустановку; портативный
+`AVIZIS_DATA_DIR` (данные в каталоге приложения ОС, переживают переустановку; портативный
 exe-режим ADR-017 сохранён). UI: `socket.ts` — три режима подключения (инъекцированный
 Tauri-порт → `?port=` для браузерной проверки → Caddy-шлюз web). Статический экспорт:
-`TACG_STATIC=1` → `next build` c `output: 'export'` → `out/` 1,7 МБ; убран неиспользуемый
+`AVIZIS_STATIC=1` → `next build` c `output: 'export'` → `out/` 1,7 МБ; убран неиспользуемый
 `/api`-роут (несовместим с экспортом).
 
 **2. Tauri-оболочка (единый exe, `src-tauri/`).** Rust ~130 строк (`main.rs`): свободный порт →
-spawn сайдкара `tacg-engine` (bun `--compile`, 94 МБ, кросс-таргет из любого окружения) с env
+spawn сайдкара `avizis-engine` (bun `--compile`, 94 МБ, кросс-таргет из любого окружения) с env
 движка; порт инъекцируется в страницу **initialization-скриптом** до её загрузки (надёжнее
 query-параметра на кастомном протоколе); окно 1360×860; движок гасится на `RunEvent::Exit`
-(без процессов-сирот); stdout/stderr движка → `app_log_dir()/tacg-engine.log`.
+(без процессов-сирот); stdout/stderr движка → `app_log_dir()/avizis-engine.log`.
 `tauri.conf.json` валиден по официальной JSON-схеме v2 (`frontendDist: ../out`, `externalBin`,
 NSIS-бандл, WebView2 downloadBootstrapper); иконки сгенерированы PIL'ом (граф-мотив:
 фиолетовый план / янтарная развилка / бирюзовая динамика); Rust API сверен по исходникам
@@ -37,15 +37,15 @@ CommandEvent/sidecar — сигнатуры проверены по исходн
 
 **3. GitHub Actions (`.github/workflows/desktop.yml`).** windows-latest: `bun install` →
 `compile:engine:win` (сайдкар) → `build:static` (UI) → Rust → `tauri build` → артефакты
-`TACG_0.10.0_x64-setup.exe` (NSIS, всё внутри) + `tacg-portable-windows-x64.zip` на каждый
+`AVIZIS_0.10.0_x64-setup.exe` (NSIS, всё внутри) + `avizis-portable-windows-x64.zip` на каждый
 push в main; по тегу `v*` — автоматический GitHub Release с release-notes.md. cargo-кэш
 (swatinem/rust-cache), релиз — softprops/action-gh-release (явные шаги вместо tauri-action).
 
-**4. Конвертация валюты (`mini-services/tacg-agent/currency.ts` — новый модуль).** Курсы НЕ
+**4. Конвертация валюты (`mini-services/avizis-agent/currency.ts` — новый модуль).** Курсы НЕ
 захардкожены: цепочка источников по каждой валюте — ручной `currency.rates` в конфиге →
 официальный XML ЦБ РФ (windows-1251, кросс-курсы через рубль с учётом Nominal, `asOf` = дата
 реестра) → JSON-зеркало cbr-xml-daily → open.er-api. 15 куррируемых валют; кэш на диске
-(TTL 6 ч, `TACG_CURRENCY_URL_*` для тестов, `TACG_CURRENCY_DISABLED=1`); сокеты
+(TTL 6 ч, `AVIZIS_CURRENCY_URL_*` для тестов, `AVIZIS_CURRENCY_DISABLED=1`); сокеты
 `currency:status`/`get`/`refresh` + broadcast. **Базис аудита — USD без изменений** (события/
 снапшоты/runs.json не зависят от курса) — конвертация только на отображении: чип
 «· ≈$0,0027 · ₽0,263», тултип по ролям, инспектор узла, MD-отчёт (колонки + блок «Курс
@@ -54,7 +54,7 @@ push в main; по тегу `v*` — автоматический GitHub Release
 
 ## Результат (верифицировано независимо)
 
-- **Тесты**: `test-tacg-currency` — новый, **26/26**: разбор XML ЦБ (cp1251, номиналы 100
+- **Тесты**: `test-avizis-currency` — новый, **26/26**: разбор XML ЦБ (cp1251, номиналы 100
   KZT/JPY), кросс-курсы, приоритет manual > ЦБ > зеркало > er-api, кэш/офлайн/init, санитайз,
   publicConfig, fmtCurrency/convertUsd, интеграция по сокету (статус, ручной курс, прогон
   costUsd $0,00315 → ₽0,307, ключ не утёк, refresh, кэш-файл). Регрессии: byok 13/13,
@@ -68,7 +68,7 @@ push в main; по тегу `v*` — автоматический GitHub Release
   валют · котировка 2026-10-13», «ЦБ РФ (JSON-зеркало)», «open.er-api.com: 15 валют» — все три
   источника живые (реальные котировки ЦБ); переключение ₽→€ работает (кросс-курс ЦБ), выбор
   переживает reload (localStorage); консоль 0 ошибок. Скриншоты:
-  `scripts/tacg-currency-{chip,settings}.png`.
+  `scripts/avizis-currency-{chip,settings}.png`.
 - **Сборка сайдкара локально**: `bun run compile:engine:win` → PE32+ x86-64 (94 МБ) — команда
   CI воспроизведена.
 - **VLM-проверка скриншотов недоступна** в этой сессии: VLM-эндпоинт платформы стал

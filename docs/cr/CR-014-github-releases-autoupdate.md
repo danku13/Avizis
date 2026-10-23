@@ -14,7 +14,7 @@
 1. **Ядро обновления `src-tauri/updater-core/`** (чистый Rust, без Tauri): сравнение версий
    (`is_newer` — покомпонентно, «0.11» == «0.11.0»), разбор `releases/latest` (`extract_release`:
    черновики/пререлизы/отсутствующий/пустой ассет → человекочитаемые ошибки), план подмены
-   (`plan_files`: `tacg-engine.exe` первым → прочие файлы → `tacg.exe` последней; только плоские
+   (`plan_files`: `avizis-engine.exe` первым → прочие файлы → `avizis.exe` последней; только плоские
    имена, отсечка zip-slip и `update.zip`), файловые операции (`extract_flat` на крейте zip,
    `perform_swap` с бэкапами `*.old` и фолбэком copy+remove между томами, `cleanup_backups`).
 2. **Tauri-слой `updater.rs`**: команды `check_updates` (reqwest/rustls — без системного OpenSSL;
@@ -22,7 +22,7 @@
    (стриминговое скачивание с квантом прогресса 512 КБ, сверка фактического размера с метаданными
    релиза, гашение движка-сайдкара, подмена из ядра, `spawn` нового exe + `app.exit(0)`,
    `AtomicBool` от параллельных запусков); API-сигнатуры сверены с фактическими версиями крейтов.
-3. **UI**: `src/lib/tacg/updater.ts` (invoke/listen через `@tauri-apps/api`, isTauri-гвард,
+3. **UI**: `src/lib/avizis/updater.ts` (invoke/listen через `@tauri-apps/api`, isTauri-гвард,
    контракт-мок `?update-mock=1`) + `UpdateBadge` в футере: тихая авто-проверка при старте → тост
    «Доступна версия vX.Y.Z» с кнопкой «Обновить»; бейдж-состояния ready/applying%/error;
    ручная проверка по иконке (RefreshCw) с полным откликом; прогресс тостом
@@ -43,13 +43,13 @@
   cleanup), подмена в пустой каталог (без бэкапа), zip-slip-архив отвергается крейтом целиком.
 - Живой GitHub API: `curl releases/latest` → `extract_release` → версия/тег/ассет/размер/notes
   корректны, `is_newer(0.10.1)=false` на текущем релизе (пример `examples/live-check.rs`).
-- `scripts/test-tacg-updater.ts` — **5/5**: мок-чек (версии/размер), прогресс download→install→
+- `scripts/test-avizis-updater.ts` — **5/5**: мок-чек (версии/размер), прогресс download→install→
   relaunch с монотонными процентами до 100%, отписка, web-режим (null + отказ с понятной ошибкой).
 - E2E agent-browser (статика :8200 + движок :3901 + `?update-mock=1`): авто-тост «Доступна версия
   v0.11.1» с кнопкой; бейдж «обновить до v0.11.1»; клик → «Скачивание обновления 23.8 из 47.7 МБ ·
   50%» → «Обновление установлено — перезапускаем приложение…»; финальный бейдж «обновление…»;
   ручная проверка → тост с notes; web-режим без мока — бейджа нет; мобильная 390×844 — hscroll
-  false; консоль 0/0. Скриншоты: `scripts/tacg-update-{toast,progress,relaunch,mobile}.png`.
+  false; консоль 0/0. Скриншоты: `scripts/avizis-update-{toast,progress,relaunch,mobile}.png`.
 - Регрессии: byok 13/13 · usage 13/13 · currency 26/26 · cargo test updater-core 11/11;
   tsc новых 0 (база без изменений), lint чист.
 - Кросс-проверка компиляции Windows-таргета локально упирается в ring (cc) и windres — закрыто

@@ -1,6 +1,6 @@
 //! Проверка разбора живого ответа GitHub Releases:
 //!   cargo run -p updater-core --example live-check -- <путь к json>
-//! JSON: curl -sS https://api.github.com/repos/danku13/TACG/releases/latest
+//! JSON: curl -sS https://api.github.com/repos/danku13/Avizis/releases/latest
 fn main() {
     let path = std::env::args().nth(1).expect("аргумент: путь к json-файлу");
     let json = std::fs::read_to_string(&path).expect("не прочитан файл");

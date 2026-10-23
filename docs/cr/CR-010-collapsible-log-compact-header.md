@@ -24,7 +24,7 @@
 - Вся строка заголовка — кнопка-переключатель (зона клика 44px = a11y-таргет):
   `aria-expanded`/`aria-controls`, `title`-подсказки «Развернуть/Свернуть — освободить место
   под граф», chevron с поворотом −90°.
-- Состояние — во внешнем хранилище `localStorage 'tacg-log-collapsed'` через
+- Состояние — во внешнем хранилище `localStorage 'avizis-log-collapsed'` через
   `useSyncExternalStore` (как тема в `theme.ts`): SSR-снимок false согласован с серверным HTML,
   после гидратации синхронизируется без setState-в-эффекте (react-hooks/set-state-in-effect
   ловится линтером); дефолт — развёрнут, выбор переживает перезагрузку.
@@ -55,15 +55,15 @@
 - Журнал: свёрнут — **44px**; канва на стенде 1440×900 при загруженном 9-узловом прогоне
   **241 → 457px** (+216 = 260−44, ровно); разворачивание возвращает 260px; счётчик записей
   (15) и превью `[решение] Режим «ручной выбор»…` видны в свёрнутом виде.
-- Персистентность: `localStorage tacg-log-collapsed` = 1/0, переживает reload; после reload
+- Персистентность: `localStorage avizis-log-collapsed` = 1/0, переживает reload; после reload
   с сохранённым «свёрнут» — консоль чистая (нет предупреждений гидратации).
 - Консоль чистая на всех шагах (0 ошибок/0 предупреждений), включая сворачивание/разворачивание
   и resize канвы — React Flow warning 004 («parent container needs a width and a height»)
   при сворачивании не возникает (канва только растёт).
 - Мобильная 390×844: без горизонтального скролла, шапка 45px помещается, свёрнутый журнал 44px,
   клик-таргет работает; VLM-проверка скриншотов — дефектов вёрстки нет.
-- Регрессии: `test-tacg-clarity` 17/17, `test-tacg-decision` — все сценарии, `test-tacg-byok`
-  13/13, `test-tacg-usage` 13/13; `bun run lint` — чисто; `tsc` — 30 ошибок = базовый уровень
+- Регрессии: `test-avizis-clarity` 17/17, `test-avizis-decision` — все сценарии, `test-avizis-byok`
+  13/13, `test-avizis-usage` 13/13; `bun run lint` — чисто; `tsc` — 30 ошибок = базовый уровень
   (проверено stash-сравнением: до правок 30 / после 30, все — преждесуществующие в
   graph-canvas/скриптах/скиллах).
-- Скриншоты: `scripts/tacg-{dark-collapsed,dark-expanded,light-collapsed,collapse-mobile}.png`.
+- Скриншоты: `scripts/avizis-{dark-collapsed,dark-expanded,light-collapsed,collapse-mobile}.png`.

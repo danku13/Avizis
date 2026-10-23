@@ -6,7 +6,7 @@
 пауза/резюм, ожидание решений пользователя, поток событий. HTTP-запросы плохо подходят
 для живого потока и долгоживущих состояний.
 
-**Решение.** `mini-services/tacg-agent/` — отдельный bun-процесс с socket.io.
+**Решение.** `mini-services/avizis-agent/` — отдельный bun-процесс с socket.io.
 API: `run:start`, `run:control`, `run:load/delete`, `node:override/retry`,
 `history:list`, `decision:resolve`, `decision:mode`. События: `graph:init`, `graph:adapt`,
 `node:update`, `run:status`, `log`, `run:summary`, `decision:offer/resolved/mode`.
@@ -16,4 +16,4 @@ API: `run:start`, `run:control`, `run:load/delete`, `node:override/retry`,
 WebRTC/gRPC — избыточно.
 
 **Последствия.** Движок живёт независимо от hot-reload фронтенда; клиент — тонкий
-сокет-клиент в `src/lib/tacg/socket.ts`. Цена: отдельный процесс для мониторинга.
+сокет-клиент в `src/lib/avizis/socket.ts`. Цена: отдельный процесс для мониторинга.

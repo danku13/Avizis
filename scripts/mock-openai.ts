@@ -1,4 +1,4 @@
-// TACG — мок OpenAI-compatible-провайдера для тестов BYOK (127.0.0.1:3099).
+// Avizis — мок OpenAI-compatible-провайдера для тестов BYOK (127.0.0.1:3099).
 // Отвечает в формате POST {baseUrl}/chat/completions, выбирая ответ по system-промпту:
 // планировщик → валидный JSON плана, супервайзер → no_changes, решатель → выбор первого
 // варианта, иначе → текст шага. Запоминает Authorization/model/tools каждого запроса (/__stats).

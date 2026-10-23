@@ -3,8 +3,8 @@ import ZAI from 'z-ai-web-dev-sdk'
 import fs from 'node:fs'
 
 const files = [
-  '/home/z/tacg/download/tacg-stream-01-node-badge.png',
-  '/home/z/tacg/download/tacg-stream-02-inspector-live.png',
+  '/home/z/avizis/download/avizis-stream-01-node-badge.png',
+  '/home/z/avizis/download/avizis-stream-02-inspector-live.png',
 ]
 
 async function main() {

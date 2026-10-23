@@ -1,5 +1,5 @@
 #!/bin/bash
-# TACG Task 21 — чанк 01: развилка 1 — выбор «B Глубокое расследование» + подтверждение
+# Avizis Task 21 — чанк 01: развилка 1 — выбор «B Глубокое расследование» + подтверждение
 T=/tmp/rec-timeline.log
 N=$(printf '%03d' "$1")
 P=/home/z/my-project/scripts/rec

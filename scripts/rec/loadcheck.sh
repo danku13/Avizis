@@ -1,5 +1,5 @@
 #!/bin/bash
-# TACG Task 21 — замер длительности загрузки страницы в начале чанков.
+# Avizis Task 21 — замер длительности загрузки страницы в начале чанков.
 # Эвристика: почти пустой кадр → маленький PNG; отрисованный UI → большой.
 exec > /home/z/my-project/scripts/rec/loadcheck.log 2>&1
 mkdir -p /tmp/loadcheck

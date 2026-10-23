@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""TACG — обновление видео-ассетов релиза v0.12.0 (фикс вертикального сплющивания):
-удаляет старые tacg-demo.mp4 + tacg-demo-preview.gif, заливает исправленные
+"""Avizis — обновление видео-ассетов релиза v0.12.0 (фикс вертикального сплющивания):
+удаляет старые avizis-demo.mp4 + avizis-demo-preview.gif, заливает исправленные
 + 9 функциональных GIF. PAT берётся из remote.origin.url (как poll-release.py)."""
 import json
 import os
 import sys
 import urllib.request
 
-REPO = 'danku13/TACG'
+REPO = 'danku13/Avizis'
 TAG = 'v0.12.0'
 TOKEN = os.popen(
     "git config --get remote.origin.url | sed -E 's#.*://[^:]+:([^@]+)@.*#\\1#'"
@@ -16,23 +16,23 @@ if not TOKEN or '@' not in os.popen("git config --get remote.origin.url").read()
     TOKEN = os.environ.get('GITHUB_TOKEN', '')
 
 DL = '/home/z/my-project/download'
-GIF_DIR = f'{DL}/tacg-gifs'
+GIF_DIR = f'{DL}/avizis-gifs'
 
 REPLACE = [  # (путь, content-type)
-    (f'{DL}/tacg-demo.mp4', 'video/mp4'),
-    (f'{DL}/tacg-demo-preview.gif', 'image/gif'),
+    (f'{DL}/avizis-demo.mp4', 'video/mp4'),
+    (f'{DL}/avizis-demo-preview.gif', 'image/gif'),
 ]
 ADD = [
     (f'{GIF_DIR}/{n}', 'image/gif') for n in [
-        'tacg-gif-01-launch-planning.gif',
-        'tacg-gif-02-decision-branch.gif',
-        'tacg-gif-03-plan-growth.gif',
-        'tacg-gif-04-node-inspector.gif',
-        'tacg-gif-05-timeline-replay.gif',
-        'tacg-gif-06-auto-mode.gif',
-        'tacg-gif-07-error-retry.gif',
-        'tacg-gif-08-run-history.gif',
-        'tacg-gif-09-completion-audit.gif',
+        'avizis-gif-01-launch-planning.gif',
+        'avizis-gif-02-decision-branch.gif',
+        'avizis-gif-03-plan-growth.gif',
+        'avizis-gif-04-node-inspector.gif',
+        'avizis-gif-05-timeline-replay.gif',
+        'avizis-gif-06-auto-mode.gif',
+        'avizis-gif-07-error-retry.gif',
+        'avizis-gif-08-run-history.gif',
+        'avizis-gif-09-completion-audit.gif',
     ]
 ]
 
@@ -44,7 +44,7 @@ def api(method, path, body=None, accept='application/vnd.github+json'):
         headers={
             'Authorization': f'token {TOKEN}',
             'Accept': accept,
-            'User-Agent': 'tacg-release-update',
+            'User-Agent': 'avizis-release-update',
         },
         method=method,
     )
@@ -68,7 +68,7 @@ def upload(release_id, path, ctype):
         'Authorization': f'token {TOKEN}',
         'Content-Type': ctype,
         'Content-Length': str(size),
-        'User-Agent': 'tacg-release-update',
+        'User-Agent': 'avizis-release-update',
     }, method='POST')
     with urllib.request.urlopen(req, timeout=300) as r:
         resp = json.load(r)

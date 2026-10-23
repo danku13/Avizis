@@ -7,13 +7,13 @@
 провайдер-абстракции и учёта ключей нет, прогоны не фиксируют модель.
 
 **Изменения (план, спека для агента-исполнителя).**
-- `mini-services/tacg-agent/llm.ts` — слой роутера: типы `LlmRole`
+- `mini-services/avizis-agent/llm.ts` — слой роутера: типы `LlmRole`
   (planner/executor/supervisor/decider), интерфейс `LlmAdapter`, адаптеры `zai` (дефолт,
   прежнее поведение) и `openai-compatible` (fetch `POST {baseUrl}/chat/completions`, Bearer);
   `chatText`/`chatJson` получают параметр роли (обратная совместимость — дефолт);
   extractJson/repairJson/таймауты/ретраи остаются над адаптерами.
-- `mini-services/tacg-agent/llm-config.ts` (новый) — загрузка/сохранение
-  `data/llm-config.json` (chmod 600), маскирование ключей, бутстрап из env `TACG_LLM_*`,
+- `mini-services/avizis-agent/llm-config.ts` (новый) — загрузка/сохранение
+  `data/llm-config.json` (chmod 600), маскирование ключей, бутстрап из env `AVIZIS_LLM_*`,
   резолв конфигурации по цепочке «роль → дефолт → zai», пробная валидация ключа.
 - `engine.ts` — роль на 4 точках вызова (планировщик :221, исполнитель :488, супервайзер :568,
   решатель :866); `RunSnapshot.llm` provenance при старте; `node.llm = {adapter, model}` при
@@ -26,21 +26,21 @@
   `run-toolbar`, бейдж модели в `node-inspector`, секция моделей в MD-отчёте, стор.
 - `scripts/mock-openai.ts` (новый) — мок openai-compatible-провайдера (:3099): детерминированные
   ответы по роли (план/супервайзер/решатель/исполнитель), учёт полученного Authorization,
-  режим oversized-plan для тестов усечений; `scripts/test-tacg-byok.ts` (новый) — сценарий
+  режим oversized-plan для тестов усечений; `scripts/test-avizis-byok.ts` (новый) — сценарий
   BYOK-прогона через мок + проверки безопасности ключей.
 - Инварианты безопасности: ключи только в `data/llm-config.json`; маска при любом чтении;
   запрет ключей в runs.json/снапшотах/событиях/логах/экспортах (проверка тестом).
 
-**Результат (верифицировано независимо, задача 11).** `test-tacg-byok` — **13/13**: конфиг
+**Результат (верифицировано независимо, задача 11).** `test-avizis-byok` — **13/13**: конфиг
 сохраняется и читается маской, файл `data/llm-config.json` с правами 600, полный LLM-прогон
 через мок (7 узлов), `snapshot.llm` — 4 роли `openai-compatible · mock-model`, `node.llm` у
 выполненных узлов, мок получил 9 запросов с `Bearer`-ключом, **строка ключа отсутствует в
-`data/runs.json` и снапшоте**, дефолт zai восстановлен. Регресс: `test-tacg-decision` — 3/3,
-`test-tacg-clarity` — 17/17, `test-tacg-llm-auto` (реальный z-ai) — полный прогон, `bun run lint`
+`data/runs.json` и снапшоте**, дефолт zai восстановлен. Регресс: `test-avizis-decision` — 3/3,
+`test-avizis-clarity` — 17/17, `test-avizis-llm-auto` (реальный z-ai) — полный прогон, `bun run lint`
 чист, новых ошибок tsc нет. E2E agent-browser (:81): чистая загрузка 0/0 в консоли, модалка
 настроек (6 пресетов, «Проверить подключение» → «работает · 3 мс»), чип «LLM:
 openai-compatible · mock-model» в тулбаре, бейдж «Модель: mock-model · openai-compatible» в
 инспекторе, секция «Модели (BYOK)» в MD-отчёте (без ключа), мобильная 390px без горизонтального
-скролла; скриншоты `scripts/tacg-byok-*.png`. Файл ключей добавлен в `.gitignore`. Честное
+скролла; скриншоты `scripts/avizis-byok-*.png`. Файл ключей добавлен в `.gitignore`. Честное
 ограничение: реальные облачные провайдеры (OpenAI/DeepSeek/…) в песочнице не проверялись — нет
 живых ключей; покрыто моком + человекочитаемыми ошибками по HTTP-кодам (401/404/сеть).

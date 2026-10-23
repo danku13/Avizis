@@ -1,4 +1,4 @@
-// TACG — мок Google Gemini generateContent API для тестов нативного адаптера
+// Avizis — мок Google Gemini generateContent API для тестов нативного адаптера
 // (127.0.0.1:3097). POST /v1beta/models/{model}:generateContent (стриминг —
 // :streamGenerateContent?alt=sse); ключ — заголовок x-goog-api-key
 // (≠ EXPECTED_KEY → 401 {error:{code:401,message:'API key not valid'}}).

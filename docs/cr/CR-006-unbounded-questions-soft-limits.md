@@ -24,8 +24,8 @@
   зафиксирован в [ADR-011](../adr/ADR-011-unbounded-questions-soft-volumes.md).
 
 **Результат.** `tsc --noEmit` мини-сервиса — чисто (единственное — Bun-специфичный `import.meta.dir`);
-`test-tacg-decision` — все сценарии зелёные; `test-tacg-clarity` — 17/17; новый скрипт
-`scripts/test-tacg-llm-auto.ts` (LLM + decisionMode=auto): полный прогон за 28.7 с, 2 развилки
+`test-avizis-decision` — все сценарии зелёные; `test-avizis-clarity` — 17/17; новый скрипт
+`scripts/test-avizis-llm-auto.ts` (LLM + decisionMode=auto): полный прогон за 28.7 с, 2 развилки
 закрыты агентом с обоснованиями, выходы узлов до 1314 симв. — прежний кап 800 снят.
 Ошибки tsc в `src/` (8 шт., graph-canvas.tsx, типизация React Flow) — преждесуществующие,
 проверено на коде до правок (git stash): те же 8.

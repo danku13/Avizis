@@ -7,7 +7,7 @@
 самопись становилась узким местом.
 
 **Решение.** Переписан `graph-canvas.tsx` на React Flow v12 (совместим с React 19):
-кастомный узел-карточка `tacg` (статусная полоса, бейджи v2/изм., пульсация running,
+кастомный узел-карточка `avizis` (статусная полоса, бейджи v2/изм., пульсация running,
 dashed для динамических), рёбра smoothstep с цветовой кодировкой, Controls, MiniMap
 (fuchsia для развилок), Background Dots. Позиции считаются тем же слоевым layout-ом,
 авто-fitView при изменении сигнатуры узлов. `nodesDraggable/nodesConnectable=false`,

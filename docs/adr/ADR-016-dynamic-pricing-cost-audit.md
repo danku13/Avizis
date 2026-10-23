@@ -40,9 +40,9 @@
 случайная цифра). Всё best-effort: офлайн → прайсов нет, стоимость «н/д», прогон не страдает.
 
 **Инфраструктура кэша.** Кэш в памяти (поиск синхронный — `addUsage` не становится async) +
-`data/pricing-cache.json` (переживает рестарты). TTL по умолчанию 24 ч (`TACG_PRICING_TTL_HOURS`);
+`data/pricing-cache.json` (переживает рестарты). TTL по умолчанию 24 ч (`AVIZIS_PRICING_TTL_HOURS`);
 `pricing.init()` при старте поднимает кэш с диска и фоном обновляет устаревшее;
-`pricing:refresh` по сокету — принудительное обновление. `TACG_PRICING_DISABLED=1` выключает
+`pricing:refresh` по сокету — принудительное обновление. `AVIZIS_PRICING_DISABLED=1` выключает
 сетевые источники (air-gapped; остаётся manual). Таймаут фетча 12 с.
 
 **Конвейер стоимости.** `addUsage` резолвит live-провайдера роли (`resolveRole` →

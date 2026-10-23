@@ -1,5 +1,5 @@
 #!/bin/bash
-# TACG — монтаж демо-видео из чанков записи (ADR-022/CR-015):
+# Avizis — монтаж демо-видео из чанков записи (ADR-022/CR-015):
 # сегменты (файл, локальные сек, скорость) → h264 → склейка → субтитры → mp4 + gif.
 # Исходники: /tmp/chunk-*.webm (VP8 1920x1080 30fps, ~20с каждый).
 set -e
@@ -48,6 +48,6 @@ for spec in "${SEGS[@]}"; do
   i=$((i+1))
 done
 
-ffmpeg -hide_banner -loglevel error -y -f concat -safe 0 -i concat.txt -c copy tacg-demo-nosubs.mp4
-DUR=$(ffprobe -v error -show_entries format=duration -of csv=p=0 tacg-demo-nosubs.mp4)
-echo "склеено: tacg-demo-nosubs.mp4, длительность $DUR"
+ffmpeg -hide_banner -loglevel error -y -f concat -safe 0 -i concat.txt -c copy avizis-demo-nosubs.mp4
+DUR=$(ffprobe -v error -show_entries format=duration -of csv=p=0 avizis-demo-nosubs.mp4)
+echo "склеено: avizis-demo-nosubs.mp4, длительность $DUR"

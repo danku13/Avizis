@@ -34,9 +34,9 @@
 Конвейер (`.github/workflows/desktop.yml`, windows-latest):
 
 ```
-bun install → bun build --compile (движок → tacg-engine-x86_64-pc-windows-msvc.exe)
-→ TACG_STATIC=1 next build (UI → out/, 1,7 МБ) → tauri build (Rust + NSIS-установщик)
-→ артефакты: TACG_0.10.0_x64-setup.exe + tacg-portable-windows-x64.zip
+bun install → bun build --compile (движок → avizis-engine-x86_64-pc-windows-msvc.exe)
+→ AVIZIS_STATIC=1 next build (UI → out/, 1,7 МБ) → tauri build (Rust + NSIS-установщик)
+→ артефакты: AVIZIS_0.10.0_x64-setup.exe + avizis-portable-windows-x64.zip
 → push тега v* → GitHub Release с release-notes.md
 ```
 
@@ -44,12 +44,12 @@ bun install → bun build --compile (движок → tacg-engine-x86_64-pc-wind
 
 | Компонент | Файл | Ответственность |
 |---|---|---|
-| Rust-оболочка (~130 строк) | `src-tauri/src/main.rs` | свободный порт; spawn sidecar с `TACG_PORT`/`TACG_BIND=127.0.0.1`/`TACG_DATA_DIR`/`TACG_CORS_ORIGINS`; initialization-скрипт `window.__TACG_ENGINE_PORT__` до загрузки страницы; окно 1360×860 (мин. 1024×640); kill движка на `RunEvent::Exit` (без процессов-сирот); сток stdout/stderr в `app_log_dir()/tacg-engine.log` |
-| Сайдкар | `src-tauri/binaries/tacg-engine-x86_64-pc-windows-msvc.exe` | `bun build --compile` — весь движок одним файлом (~94 МБ), см. ADR-017 |
+| Rust-оболочка (~130 строк) | `src-tauri/src/main.rs` | свободный порт; spawn sidecar с `AVIZIS_PORT`/`AVIZIS_BIND=127.0.0.1`/`AVIZIS_DATA_DIR`/`AVIZIS_CORS_ORIGINS`; initialization-скрипт `window.__AVIZIS_ENGINE_PORT__` до загрузки страницы; окно 1360×860 (мин. 1024×640); kill движка на `RunEvent::Exit` (без процессов-сирот); сток stdout/stderr в `app_log_dir()/avizis-engine.log` |
+| Сайдкар | `src-tauri/binaries/avizis-engine-x86_64-pc-windows-msvc.exe` | `bun build --compile` — весь движок одним файлом (~94 МБ), см. ADR-017 |
 | Конфиг Tauri | `src-tauri/tauri.conf.json` | `frontendDist: ../out`, `externalBin`, NSIS-бандл, WebView2 `downloadBootstrapper`; валиден по официальной схеме v2 |
-| Движок | `mini-services/tacg-agent/index.ts` | `TACG_PORT`/`TACG_BIND`/`TACG_CORS_ORIGINS` env — bind только localhost + точные origin'ы webview в десктопе (защита от drive-by подключений из браузера) |
-| Данные | `data-dir.ts` | `TACG_DATA_DIR` от оболочки → `%APPDATA%\ru.tacg.desktop` (переживает переустановку, не требует записи в Program Files); портативный exe-режим без оболочки — данные рядом с exe, как в ADR-017 |
-| UI | `src/lib/tacg/socket.ts` | три режима подключения: инъекцированный порт (Tauri) → `?port=` (браузерная проверка контракта) → Caddy-шлюз (web) |
+| Движок | `mini-services/avizis-agent/index.ts` | `AVIZIS_PORT`/`AVIZIS_BIND`/`AVIZIS_CORS_ORIGINS` env — bind только localhost + точные origin'ы webview в десктопе (защита от drive-by подключений из браузера) |
+| Данные | `data-dir.ts` | `AVIZIS_DATA_DIR` от оболочки → `%APPDATA%\ru.avizis.desktop` (переживает переустановку, не требует записи в Program Files); портативный exe-режим без оболочки — данные рядом с exe, как в ADR-017 |
+| UI | `src/lib/avizis/socket.ts` | три режима подключения: инъекцированный порт (Tauri) → `?port=` (браузерная проверка контракта) → Caddy-шлюз (web) |
 
 **Почему initialization-скрипт, а не query-параметр**: `WebviewUrl::App("index.html?port=N")`
 полагается на то, как кастомный протокол резолвит query — поведение не документировано контрактом;
@@ -76,9 +76,9 @@ tauri-plugin-shell (CommandChild/CommandEvent/sidecar-разрешение), к�
 
 ## Последствия
 
-- **Один установщик**: NSIS `TACG_0.10.0_x64-setup.exe` содержит всё (UI, движок, иконки,
+- **Один установщик**: NSIS `AVIZIS_0.10.0_x64-setup.exe` содержит всё (UI, движок, иконки,
   WebView2-бутстраппер при отсутствии рантайма) — требования пользователя выполнены;
-  `tacg-portable-windows-x64.zip` (оболочка + сайдкар) — для запуска без установки.
+  `avizis-portable-windows-x64.zip` (оболочка + сайдкар) — для запуска без установки.
 - **Подписи нет**: SmartScreen предупредит при первом запуске (честно указано в release-notes);
   апдейтер требует подписи и ключей — осознанно отложено.
 - **NSIS ставит per-user** (`%LOCALAPPDATA%\Programs`), данные — в `%APPDATA%`: переустановка
@@ -89,5 +89,5 @@ tauri-plugin-shell (CommandChild/CommandEvent/sidecar-разрешение), к�
   релизов).
 - **Каждое окно = свой движок**: параллельные инстансы не мешают (разные порты, общий каталог
   данных с файловым замком от store). Ограничение зафиксировано в release-notes.
-- **Статический экспорт наложил дисциплину**: убран мёртвый `/api`-роут; `TACG_STATIC=1` —
+- **Статический экспорт наложил дисциплину**: убран мёртвый `/api`-роут; `AVIZIS_STATIC=1` —
   отдельный конфиг-режим next, web/dev-режим не изменился.

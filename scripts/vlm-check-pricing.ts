@@ -3,9 +3,9 @@ import ZAI from 'z-ai-web-dev-sdk'
 import fs from 'node:fs'
 
 const SHOTS = [
-  ['scripts/tacg-pricing-toolbar.png', 'тулбар с чипом «↑ 700 · ↓ 140 · 7 вызов. · ≈$0,00315» и графом'],
-  ['scripts/tacg-pricing-inspector.png', 'инспектор узла со строкой «Токены: ↑ 100 · ↓ 20 · ≈$0,00045»'],
-  ['scripts/tacg-pricing-settings.png', 'модалка настроек с блоком «Прайсинг моделей (динамический)» и полями цены'],
+  ['scripts/avizis-pricing-toolbar.png', 'тулбар с чипом «↑ 700 · ↓ 140 · 7 вызов. · ≈$0,00315» и графом'],
+  ['scripts/avizis-pricing-inspector.png', 'инспектор узла со строкой «Токены: ↑ 100 · ↓ 20 · ≈$0,00045»'],
+  ['scripts/avizis-pricing-settings.png', 'модалка настроек с блоком «Прайсинг моделей (динамический)» и полями цены'],
 ]
 
 async function main() {
@@ -17,7 +17,7 @@ async function main() {
         {
           role: 'user',
           content: [
-            { type: 'text', text: `Скриншот TACG Playground (${what}). Ответь строго JSON: {"defects": "<описание дефектов вёрстки: наложения, обрезанный текст, нечитаемое — или 'нет'>", "costVisible": true|false}` },
+            { type: 'text', text: `Скриншот Avizis Playground (${what}). Ответь строго JSON: {"defects": "<описание дефектов вёрстки: наложения, обрезанный текст, нечитаемое — или 'нет'>", "costVisible": true|false}` },
             { type: 'image_url', image_url: { url: `data:image/png;base64,${b64}` } },
           ],
         },

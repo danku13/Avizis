@@ -3,19 +3,19 @@ import ZAI from 'z-ai-web-dev-sdk'
 import fs from 'node:fs'
 
 const NAMES = [
-  'tacg-gif-01-launch-planning',
-  'tacg-gif-02-decision-branch',
-  'tacg-gif-03-plan-growth',
-  'tacg-gif-04-node-inspector',
-  'tacg-gif-05-timeline-replay',
-  'tacg-gif-06-auto-mode',
-  'tacg-gif-07-error-retry',
-  'tacg-gif-08-run-history',
-  'tacg-gif-09-completion-audit',
-  'tacg-demo-preview',
+  'avizis-gif-01-launch-planning',
+  'avizis-gif-02-decision-branch',
+  'avizis-gif-03-plan-growth',
+  'avizis-gif-04-node-inspector',
+  'avizis-gif-05-timeline-replay',
+  'avizis-gif-06-auto-mode',
+  'avizis-gif-07-error-retry',
+  'avizis-gif-08-run-history',
+  'avizis-gif-09-completion-audit',
+  'avizis-demo-preview',
 ]
 
-const ASK = `Два кадра (начало и середина) из GIF-анимации приложения TACG. Ответь строго JSON одной строкой:
+const ASK = `Два кадра (начало и середина) из GIF-анимации приложения Avizis. Ответь строго JSON одной строкой:
 {"squashed": true|false, "subtitles": true|false, "note": "<до 15 слов: что видно>"}
 squashed = UI заметно сплюснут по вертикали (текст/кнопки широкие и низкие);
 subtitles = в нижней части кадра есть белая текстовая подпись-субтитр (не элементы UI).`

@@ -1,4 +1,4 @@
-# Технологический стек TACG Playground
+# Технологический стек Avizis Playground
 
 > Тип: справочник (сводка по ADR-001…010) · Статус: актуален
 
@@ -9,4 +9,4 @@
 | Фронтенд | Next.js (App Router), React 19, Tailwind, shadcn/ui, Radix | — |
 | Граф | @xyflow/react v12 (React Flow), кастомные узлы/рёбра | [ADR-004](./ADR-004-react-flow.md) |
 | Состояние | zustand + детерминированный fold событий (event-sourcing) | [ADR-003](./ADR-003-event-sourcing-fold.md) |
-| Тесты | scripts/test-tacg-{client,llm,decision,clarity}.ts + E2E agent-browser | — |
+| Тесты | scripts/test-avizis-{client,llm,decision,clarity}.ts + E2E agent-browser | — |

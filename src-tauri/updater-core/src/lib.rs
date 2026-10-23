@@ -1,4 +1,4 @@
-//! updater-core — чистая логика автообновления TACG по GitHub Releases (ADR-021).
+//! updater-core — чистая логика автообновления Avizis по GitHub Releases (ADR-021).
 //!
 //! Модуль не зависит от Tauri: сравнение версий, разбор ответа
 //! `GET /repos/{owner}/{repo}/releases/latest`, порядок подмены файлов и
@@ -12,12 +12,12 @@ use serde::Deserialize;
 
 /// Публичный API-эндпоинт последнего релиза. GitHub сам исключает черновики
 /// и пререлизы из `releases/latest` — это и есть «стабильный канал» обновлений.
-pub const RELEASES_LATEST_URL: &str = "https://api.github.com/repos/danku13/TACG/releases/latest";
+pub const RELEASES_LATEST_URL: &str = "https://api.github.com/repos/danku13/Avizis/releases/latest";
 
 /// Имя портативного ассета релиза — источник файлов для автообновления.
 /// Один код-путь для установленной (NSIS) и портативной версии: и там и там
-/// приложение — это `tacg.exe` + `tacg-engine.exe` в одном каталоге (ADR-021).
-pub const PORTABLE_ASSET_NAME: &str = "tacg-portable-windows-x64.zip";
+/// приложение — это `avizis.exe` + `avizis-engine.exe` в одном каталоге (ADR-021).
+pub const PORTABLE_ASSET_NAME: &str = "avizis-portable-windows-x64.zip";
 
 /// Подмножество ответа GitHub, нужное апдейтеру
 #[derive(Debug, Clone, Deserialize)]
@@ -125,9 +125,9 @@ pub fn extract_release(json: &str) -> Result<ReleaseInfo, String> {
 }
 
 /// Порядок подмены файлов обновления в каталоге приложения:
-///   1) `tacg-engine.exe` — сайдкар движка (уже погашен, файл свободен);
+///   1) `avizis-engine.exe` — сайдкар движка (уже погашен, файл свободен);
 ///   2) прочие файлы архива;
-///   3) `tacg.exe` — оболочка, которая сейчас выполняется (rename живого
+///   3) `avizis.exe` — оболочка, которая сейчас выполняется (rename живого
 ///      exe на Windows разрешён, подмена последней минимизирует окно
 ///      «полуобновлённого» состояния).
 ///
@@ -146,8 +146,8 @@ pub fn plan_files(names: &[String]) -> Vec<String> {
         })
         .collect();
     files.sort_by_key(|name| match name.to_ascii_lowercase().as_str() {
-        "tacg-engine.exe" => 0,
-        "tacg.exe" => 2,
+        "avizis-engine.exe" => 0,
+        "avizis.exe" => 2,
         _ => 1,
     });
     files.dedup();
@@ -168,7 +168,7 @@ mod tests {
             })
             .collect();
         format!(
-            r#"{{"tag_name":"{tag}","html_url":"https://github.com/danku13/TACG/releases/tag/{tag}","body":"notes {tag}",{opts}"assets":[{}]}}"#,
+            r#"{{"tag_name":"{tag}","html_url":"https://github.com/danku13/Avizis/releases/tag/{tag}","body":"notes {tag}",{opts}"assets":[{}]}}"#,
             assets.join(",")
         )
     }
@@ -218,7 +218,7 @@ mod tests {
         let rel = extract_release(&json).expect("релиз должен разбираться");
         assert_eq!(rel.version, "0.11.0");
         assert_eq!(rel.tag, "v0.11.0");
-        assert_eq!(rel.html_url.as_deref(), Some("https://github.com/danku13/TACG/releases/tag/v0.11.0"));
+        assert_eq!(rel.html_url.as_deref(), Some("https://github.com/danku13/Avizis/releases/tag/v0.11.0"));
         assert_eq!(rel.notes.as_deref(), Some("notes v0.11.0"));
         assert_eq!(rel.asset_url, format!("https://host/{PORTABLE_ASSET_NAME}"));
         assert_eq!(rel.asset_size, Some(49_973_144));
@@ -247,11 +247,11 @@ mod tests {
     #[test]
     fn plan_files_engine_first_shell_last() {
         let names = vec![
-            "tacg.exe".to_string(),
+            "avizis.exe".to_string(),
             "portable-README.txt".to_string(),
-            "tacg-engine.exe".to_string(),
+            "avizis-engine.exe".to_string(),
         ];
-        assert_eq!(plan_files(&names), vec!["tacg-engine.exe", "portable-README.txt", "tacg.exe"]);
+        assert_eq!(plan_files(&names), vec!["avizis-engine.exe", "portable-README.txt", "avizis.exe"]);
     }
 
     #[test]
@@ -262,8 +262,8 @@ mod tests {
             "../evil.exe".to_string(),
             "dir/payload.exe".to_string(),
             "win\\path.exe".to_string(),
-            "  tacg-engine.exe  ".to_string(),
+            "  avizis-engine.exe  ".to_string(),
         ];
-        assert_eq!(plan_files(&names), vec!["tacg-engine.exe"]);
+        assert_eq!(plan_files(&names), vec!["avizis-engine.exe"]);
     }
 }

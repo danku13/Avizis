@@ -1,5 +1,5 @@
 #!/bin/bash
-# TACG v2 — пересборка демо-видео с корректными пропорциями 16:9 (1920×1080).
+# Avizis v2 — пересборка демо-видео с корректными пропорциями 16:9 (1920×1080).
 #
 # ПРИЧИНА БАГА v1: первый чанк записи (chunk-000, интро) был снят в окне 1280×578,
 # остальные — 1920×1080. При concat контейнер взял размер ПЕРВОГО сегмента →
@@ -14,7 +14,7 @@
 #  - seg-01..18 уже 1920×1080 — склеиваются без перекодирования (stream copy);
 #  - параметры seg-00-1080 подогнаны под остальные сегменты
 #    (High/4.0/yuv420p/30fps/timescale 15360) для чистого concat;
-#  - тайминг всех сегментов сохранён (245.9с) → субтитры tacg-demo-{en,ru}.srt
+#  - тайминг всех сегментов сохранён (245.9с) → субтитры avizis-demo-{en,ru}.srt
 #    остаются в синхроне;
 #  - вжатых сабов нет: только soft-subs mov_text eng (default) + rus.
 #
@@ -34,18 +34,18 @@ ffmpeg -hide_banner -loglevel error -y -ss 8 -to 20 -i /tmp/chunk-000.webm \
 rm -f concat1080.txt
 echo "file 'seg-00-1080.mp4'" > concat1080.txt
 for i in $(seq 1 18); do printf "file 'seg-%02d.mp4'\n" "$i" >> concat1080.txt; done
-ffmpeg -hide_banner -loglevel error -y -f concat -safe 0 -i concat1080.txt -c copy tacg-demo-1080-nosubs.mp4
+ffmpeg -hide_banner -loglevel error -y -f concat -safe 0 -i concat1080.txt -c copy avizis-demo-1080-nosubs.mp4
 
 # 3) soft-subs: eng (default) + rus, видео не трогаем
-ffmpeg -hide_banner -loglevel error -y -i tacg-demo-1080-nosubs.mp4 \
-  -i "$OUT/tacg-demo-en.srt" -i "$OUT/tacg-demo-ru.srt" \
+ffmpeg -hide_banner -loglevel error -y -i avizis-demo-1080-nosubs.mp4 \
+  -i "$OUT/avizis-demo-en.srt" -i "$OUT/avizis-demo-ru.srt" \
   -map 0:v -map 1:0 -map 2:0 -c:v copy -c:s mov_text \
   -metadata:s:s:0 language=eng -metadata:s:s:1 language=rus \
   -disposition:s:0 default -disposition:s:1 0 \
-  -movflags +faststart "$OUT/tacg-demo.mp4"
+  -movflags +faststart "$OUT/avizis-demo.mp4"
 
 # 4) контроль
 echo "=== потоки ==="
-ffprobe -v error -show_entries stream=index,codec_type,codec_name,width,height:stream_tags=language -of default=noprint_wrappers=1 "$OUT/tacg-demo.mp4"
+ffprobe -v error -show_entries stream=index,codec_type,codec_name,width,height:stream_tags=language -of default=noprint_wrappers=1 "$OUT/avizis-demo.mp4"
 echo "=== длительность ==="
-ffprobe -v error -show_entries format=duration,size -of default=noprint_wrappers=1 "$OUT/tacg-demo.mp4"
+ffprobe -v error -show_entries format=duration,size -of default=noprint_wrappers=1 "$OUT/avizis-demo.mp4"

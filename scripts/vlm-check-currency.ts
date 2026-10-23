@@ -3,8 +3,8 @@ import ZAI from 'z-ai-web-dev-sdk'
 import fs from 'node:fs'
 
 const SHOTS = [
-  ['scripts/tacg-currency-chip.png', 'тулбар с чипом «↑ 600 · ↓ 120 · 6 вызов. · ≈ $0,0027 · €0,00241» и граф'],
-  ['scripts/tacg-currency-settings.png', 'модалка настроек с блоком «Валюта стоимости» (селектор, ручной курс, источники ЦБ РФ/er-api)'],
+  ['scripts/avizis-currency-chip.png', 'тулбар с чипом «↑ 600 · ↓ 120 · 6 вызов. · ≈ $0,0027 · €0,00241» и граф'],
+  ['scripts/avizis-currency-settings.png', 'модалка настроек с блоком «Валюта стоимости» (селектор, ручной курс, источники ЦБ РФ/er-api)'],
 ]
 
 async function main() {
@@ -16,7 +16,7 @@ async function main() {
         {
           role: 'user',
           content: [
-            { type: 'text', text: `Скриншот TACG Playground (${what}). Ответь строго JSON: {"defects": "<описание дефектов вёрстки: наложения, обрезанный текст, нечитаемое — или 'нет'>", "currencyVisible": true|false}` },
+            { type: 'text', text: `Скриншот Avizis Playground (${what}). Ответь строго JSON: {"defects": "<описание дефектов вёрстки: наложения, обрезанный текст, нечитаемое — или 'нет'>", "currencyVisible": true|false}` },
             { type: 'image_url', image_url: { url: `data:image/png;base64,${b64}` } },
           ],
         },

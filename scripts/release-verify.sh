@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# TACG — верификация первого релиза (этап 5, CR-012): статус workflow-прогона,
+# Avizis — верификация первого релиза (этап 5, CR-012): статус workflow-прогона,
 # артефакты и ассеты GitHub Release. Запуск: bash scripts/release-verify.sh [тег]
 set -euo pipefail
 
 TAG="${1:-v0.10.0}"
-REPO="danku13/TACG"
+REPO="danku13/Avizis"
 TOKEN="$(git config --get remote.origin.url | sed -E 's#.*://[^:]+:([^@]+)@.*#\1#')"
 AUTH="Authorization: token $TOKEN"
 
